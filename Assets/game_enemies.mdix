@@ -1,0 +1,34 @@
+@CONFIG(
+  version -> "1.0.0"
+)
+
+@ENUMS(
+  AIType { PASSIVE, NEUTRAL, AGGRESSIVE, BOSS }
+  Rarity { COMMON, UNCOMMON, RARE, LEGENDARY }
+)
+
+@QUICKFUNCS(
+  ~createEnemy<object>(name, health, damage, ai<enum>, rarity<enum>) {
+    return {
+      name      = name
+      health    = health
+      damage    = damage
+      armor     = health / 10
+      xp        = health / 2
+      ai_type   = ai
+      rarity    = rarity
+      spawn_rate = ai == AIType.BOSS ? 0.01f : 0.3f
+    }
+  }
+)
+
+@DATA(
+  spawn_cap   = 12
+  respawn_delay = 5000
+
+  enemies::
+    createEnemy("Goblin",  50,   10,  AIType.AGGRESSIVE, Rarity.COMMON),
+    createEnemy("Orc",     100,  20,  AIType.AGGRESSIVE, Rarity.UNCOMMON),
+    createEnemy("Troll",   250,  45,  AIType.AGGRESSIVE, Rarity.RARE),
+    createEnemy("Dragon",  1000, 150, AIType.BOSS,       Rarity.LEGENDARY)
+)

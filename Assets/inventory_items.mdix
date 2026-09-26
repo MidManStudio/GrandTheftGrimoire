@@ -1,0 +1,31 @@
+@CONFIG(
+  version -> "1.0.0"
+)
+
+@ENUMS(
+  ItemType  { WEAPON, ARMOR, CONSUMABLE, QUEST }
+  Rarity    { COMMON, UNCOMMON, RARE, EPIC, LEGENDARY }
+)
+
+@QUICKFUNCS(
+  ~createItem<object>(id, name, type<enum>, rarity<enum>, value) {
+    return {
+      id       = id
+      name     = name
+      type     = type
+      rarity   = rarity
+      value    = value
+      weight   = value / 100
+      stackable = type == ItemType.CONSUMABLE ? true : false
+    }
+  }
+)
+
+@DATA(
+  max_stack_size = 99
+
+  items::
+    createItem(1, "Iron Sword",    ItemType.WEAPON,     Rarity.COMMON,    50),
+    createItem(2, "Health Potion", ItemType.CONSUMABLE, Rarity.COMMON,    25),
+    createItem(3, "Dragon Scale",  ItemType.ARMOR,      Rarity.LEGENDARY, 5000)
+)
