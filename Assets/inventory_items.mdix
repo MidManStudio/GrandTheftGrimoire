@@ -23,6 +23,14 @@
 
 @DATA(
   max_stack_size = 99
+  keepSake = `"_comment": "Not a full manifest.json — merge these entries into the \"dependencies\" object of your existing Packages/manifest.json. Versions below are known-good for Unity 2022.3 LTS as of when this was written; before committing to them, open Package Manager (Window > Package Manager > + > Add package by name) and check whether a newer 1.x has landed since, since these move fairly often.",
+  "com.unity.entities": "1.2.0",
+  "com.unity.netcode": "1.2.0",
+  "com.unity.physics": "1.2.0",
+  "com.unity.inputsystem": "1.7.0",
+  "_optional_comment": "Only add this one if/when entities start rendering directly instead of through a Companion GameObject (see GTG_REPO_CONVENTIONS.md §5) — not needed for Phase 0:",
+
+  "com.unity.entities.graphics": "1.2.0",`
 
   items::
     createItem(1, "Iron Sword",    ItemType.WEAPON,     Rarity.COMMON,    50),
