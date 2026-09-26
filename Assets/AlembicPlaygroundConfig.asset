@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87c4712f3ca3e4de18d7fd3f8be607b6, type: 3}
+  m_Name: AlembicPlaygroundConfig
+  m_EditorClassIdentifier: 
+  TemperatureK: 300
+  Seed: 42
+  CutoffAngstrom: 10
+  DtFemtoseconds: 1
+  StepsPerFrame: 4
+  RunOnStart: 1
+  ExplicitAtoms: []
+  CloudElementPool: 010000000100000008000000
+  CloudAtomCount: 40
+  CloudRadius: 6
+  CustomElements: []
+  QuickSpawnElements: 010000000600000007000000080000001a0000004f000000
+  QuickSpawnDistance: 5

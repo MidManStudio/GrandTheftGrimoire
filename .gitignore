@@ -1,0 +1,29 @@
+# ── Rust ──────────────────────────────────────────────────────────────────────
+rust_lib/**/target/
+
+# ── Unity Generated / Caches ──────────────────────────────────────────────────
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Ll]ogs/
+**/[Uu]serSettings/
+**/[Oo]bj/
+**/.vs/
+
+# Crash reports and memory dumps
+**/MemoryCaptures/
+**/Logs/
+
+# ── Build Outputs (Scoped to avoid breaking Packages) 
+# If your project has sub-projects, explicitly target their build outputs:
+# PackageSandbox/[Bb]uild/ 
+
+# ── Keep compiled native libs ─────────────────────────────────────────────────
+!packages/**/Plugins/Native/**/*.dll
+!packages/**/Plugins/Native/**/*.dylib
+!packages/**/Plugins/Native/**/*.so
+!packages/**/Plugins/Native/**/*.a
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+*.swp
