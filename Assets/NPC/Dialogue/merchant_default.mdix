@@ -1,12 +1,10 @@
 // Brought to u by MidManStudio
-
 @CONFIG(
   version -> "1.0.0"
-  author -> "MidManStudio"
   features -> "data"
-  debug_mode -> "off"
 )
-
 @DATA(
-  target_root = "."
+  id = "merchant_default"
+  greeting = "Welcome, traveler."
+  farewell = "Safe travels."
 )

@@ -1,0 +1,12 @@
+// Brought to u by MidManStudio
+@CONFIG(
+  version -> "1.0.0"
+  features -> "data"
+)
+@DATA(
+  id = "town_guard"
+  role = "guard"
+  decision_backend = "utility"
+  can_move = true
+  learning_mode = "fixed_weights"
+)

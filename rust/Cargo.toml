@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "npc/crates/npc-core",
+    "npc/crates/npc-behavior",
+    "npc/crates/npc-ml",
+    "npc/crates/npc-ffi",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
