@@ -1,0 +1,12 @@
+// Brought to u by MidManStudio
+@CONFIG(
+  version -> "1.0.0"
+  features -> "data"
+)
+@DATA(
+  id = "boss_prototype"
+  role = "boss"
+  decision_backend = "hybrid_ml"
+  can_move = true
+  learning_mode = "online_updates"
+)

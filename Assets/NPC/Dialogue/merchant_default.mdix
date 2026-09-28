@@ -1,0 +1,10 @@
+// Brought to u by MidManStudio
+@CONFIG(
+  version -> "1.0.0"
+  features -> "data"
+)
+@DATA(
+  id = "merchant_default"
+  greeting = "Welcome, traveler."
+  farewell = "Safe travels."
+)
