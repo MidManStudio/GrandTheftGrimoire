@@ -1,0 +1,24 @@
+name: NPC Rust CI
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'rust/**'
+      - '.github/workflows/npc-rust-ci.yml'
+  pull_request:
+    paths:
+      - 'rust/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo test --workspace
+      - run: cargo clippy --workspace --all-targets -- -D warnings
