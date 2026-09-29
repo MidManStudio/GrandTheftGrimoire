@@ -1,12 +1,17 @@
 // Brought to u by MidManStudio
 @CONFIG(
   version -> "1.0.0"
-  features -> "data"
+  features -> "data,enums"
+)
+@ENUMS(
+  NpcRole { MERCHANT = 0, CIVILIAN = 1, GUARD = 2, ENEMY = 3, BOSS = 4 }
+  DecisionBackend { STATE_MACHINE = 0, UTILITY = 1, HYBRID_ML = 2 }
+  LearningMode { DISABLED = 0, FIXED_WEIGHTS = 1, ONLINE_UPDATES = 2 }
 )
 @DATA(
   id = "town_guard"
-  role = "guard"
-  decision_backend = "utility"
+  role<enum> = NpcRole.GUARD
+  decision_backend<enum> = DecisionBackend.UTILITY
   can_move = true
-  learning_mode = "fixed_weights"
+  learning_mode<enum> = LearningMode.FIXED_WEIGHTS
 )
