@@ -1,10 +1,26 @@
 //! Shared decision contract. Keep the C ABI representation in npc-ffi.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NpcRole { Merchant, Civilian, Guard, Enemy, Boss }
+pub enum NpcRole {
+    Merchant,
+    Civilian,
+    Guard,
+    Enemy,
+    Boss,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DecisionBackend { StateMachine, Utility, HybridMl }
+pub enum DecisionBackend {
+    StateMachine,
+    Utility,
+    HybridMl,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NpcAction { Idle, Trade, Patrol, Attack, Retreat }
+pub enum NpcAction {
+    Idle,
+    Trade,
+    Patrol,
+    Attack,
+    Retreat,
+}
 #[derive(Clone, Copy, Debug)]
 pub struct Observation {
     pub npc_id: u64,
@@ -15,4 +31,7 @@ pub struct Observation {
     pub can_move: bool,
 }
 #[derive(Clone, Copy, Debug)]
-pub struct Decision { pub npc_id: u64, pub action: NpcAction }
+pub struct Decision {
+    pub npc_id: u64,
+    pub action: NpcAction,
+}
