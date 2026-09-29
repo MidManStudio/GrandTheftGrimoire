@@ -1,6 +1,8 @@
 # .github/workflows/npc-rust-ci.yml
-# Correctness gate for the NPC system: enum sync across MDIX/C#/Rust, formatting, tests, Clippy. Runs on every push/PR
-# touching rust/**. Benchmarks live in npc-rust-ffi-bench.yml (dispatch-only).
+# Correctness gate for the NPC system. Job `test`: enum sync across MDIX/C#/Rust, formatting, tests, Clippy.
+# Job `csharp-abi`: the Unity-side native layer (C# structs, P/Invoke, managed fallback) run against the real
+# Rust library with plain .NET, no Unity. Runs on every push/PR touching the NPC paths.
+# Benchmarks live in npc-rust-ffi-bench.yml (dispatch-only).
 
 name: NPC Rust CI
 
@@ -31,7 +33,7 @@ jobs:
         shell: bash # implies -eo pipefail
         working-directory: rust
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -66,5 +68,41 @@ jobs:
             echo '### Test results'
             echo '```text'
             grep -E '^(test result:|test .* FAILED|failures:|error)' ci-out/test.txt 2>/dev/null | head -c 20000 || echo '(no test output captured)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  csharp-abi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build native library
+        working-directory: rust
+        run: cargo build -p gtg-npc-ffi
+
+      - name: C# native layer against the real library
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/debug
+        run: |
+          set -o pipefail
+          mkdir -p ci-out
+          dotnet run --project rust/npc/csharp-abi-test -c Release 2>&1 | tee ci-out/csharp-abi.txt
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          {
+            echo '## GTG NPC C# ABI test'
+            echo
+            echo 'Unity-side native layer compiled with plain .NET and run against the real `gtg_npc_ffi` library. No Unity is involved.'
+            echo '```text'
+            head -c 20000 ci-out/csharp-abi.txt 2>/dev/null || echo '(no output captured)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

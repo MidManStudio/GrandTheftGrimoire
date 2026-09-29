@@ -8,7 +8,10 @@
 #
 # platforms: `ubuntu-only` (default, fast) or `all` (adds ubuntu-24.04-arm and macos-latest).
 # The ARM runner is the closest hosted proxy for the Galaxy A13's aarch64 codegen; it is NOT the
-# phone. macOS/ARM legs are unverified as of writing — treat a failure there as information.
+# phone. All three legs ran successfully in run #4 (macos-latest was an Apple M1 virtual machine).
+# The x86 leg is pinned to ubuntu-24.04, not ubuntu-latest: GitHub moves `ubuntu-latest` to Ubuntu 26
+# on 2026-10-19, and a moving image would change compiler, libc and CPU pool between two runs you want
+# to compare. Bump it deliberately and note it in the results log.
 
 name: NPC Rust and C FFI benchmarks
 
@@ -31,6 +34,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # Cargo colours output when it sees a TTY-like environment; the escape codes end up in the step summary
+  # and the raw artifact. Plain text only.
+  CARGO_TERM_COLOR: never
+  NO_COLOR: '1'
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -42,9 +51,9 @@ jobs:
           PLATFORMS: ${{ inputs.platforms }}
         run: |
           if [ "$PLATFORMS" = "all" ]; then
-            echo 'os=["ubuntu-latest","ubuntu-24.04-arm","macos-latest"]' >> "$GITHUB_OUTPUT"
+            echo 'os=["ubuntu-24.04","ubuntu-24.04-arm","macos-latest"]' >> "$GITHUB_OUTPUT"
           else
-            echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+            echo 'os=["ubuntu-24.04"]' >> "$GITHUB_OUTPUT"
           fi
 
   bench:
@@ -60,7 +69,7 @@ jobs:
         shell: bash # implies -eo pipefail; steps that pipe to tee also set it explicitly
         working-directory: rust
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -178,7 +187,7 @@ jobs:
             echo '_Empty block = no warnings, panics or failures matched._'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: gtg-npc-bench-${{ matrix.os }}-${{ github.run_number }}
