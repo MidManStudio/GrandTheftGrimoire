@@ -17,5 +17,10 @@ Only ordinary repo-relative files are in the payload tarball. Keep `replacements
 ## Status (2026-09-29)
 
 - **Verified in CI (Rust and C only):** the Rust workspace passes format, tests and Clippy; the real C ABI smoke test passes; ABI v2 struct sizes and offsets match. Hosted `ubuntu-latest` batch results were about 5 ns/NPC at batch sizes 10, 100, 500 and 1000, with identical input for every NPC (best case).
-- **Not verified:** the Unity ECS loop (observation gathering, batch call, applying decisions), the C# struct layout against ABI v2, Android/macOS native builds, and any device timing.
-- **Next:** confirm the Unity side against ABI v2, add a mixed-role benchmark workload, then NPC memory and decision scheduling.
+- **Verified by reading, not by running:** the C# native struct sizes and field offsets match ABI v2 in `npc-ffi`. The changed C# compiles under Mono `mcs` against Unity stubs.
+- **Not verified:** a real Unity build, the Unity ECS loop (observation gathering, batch call, applying decisions), Android/macOS native builds, and any device timing.
+- **Next:** open the project in Unity and confirm it compiles and the ECS loop runs, add a mixed-role benchmark workload, then NPC memory and decision scheduling.
+
+## Enum use in C# (2026-09-29)
+
+`NPCIdentity`, `NPCDecision` and `NPCAuthoring` now use `NpcRole`, `DecisionBackend`, `LearningMode` and `NpcAction` from `Components/NPCEnums.cs` instead of raw integers. The native structs keep raw integers. `NPCDecisionSystem` converts at that boundary and its managed fallback uses the enums. Behavior is intended to be unchanged.

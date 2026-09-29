@@ -19,6 +19,7 @@ namespace MidManStudio.Gtg.NPC.Systems
         private int cursor;
         private const int BatchSize = 256;
         private const double IntervalSeconds = 0.1;
+        private const int MaxAction = (int)NpcAction.Retreat;
 
         protected override void OnCreate()
         {
@@ -49,8 +50,8 @@ namespace MidManStudio.Gtg.NPC.Systems
                 {
                     // Stable for this entity's lifetime; persisted NPC IDs should replace this later.
                     NpcId = identity.Id != 0 ? identity.Id : ((ulong)(uint)entity.Version << 32) | (uint)entity.Index,
-                    Role = identity.Role,
-                    Backend = identity.Backend,
+                    Role = (uint)identity.Role,
+                    Backend = (uint)identity.Backend,
                     ThreatVisible = observation.ThreatVisible != 0 ? 1u : 0u,
                     HealthFraction = float.IsNaN(observation.HealthFraction) ? 1f : Math.Min(1f, Math.Max(0f, observation.HealthFraction)),
                     CanMove = identity.CanMove != 0 ? 1u : 0u,
@@ -64,24 +65,26 @@ namespace MidManStudio.Gtg.NPC.Systems
             for (int i = 0; i < count; i++)
             {
                 // Guard against a native result accidentally being assigned to the wrong entity.
-                if (decisions[i].NpcId != observations[i].NpcId || decisions[i].Action < 0 || decisions[i].Action > 4) continue;
-                EntityManager.SetComponentData(entities[i], new NPCDecision { Action = decisions[i].Action });
+                if (decisions[i].NpcId != observations[i].NpcId || decisions[i].Action < 0 || decisions[i].Action > MaxAction) continue;
+                EntityManager.SetComponentData(entities[i], new NPCDecision { Action = (NpcAction)decisions[i].Action });
             }
         }
 
+        // Mirrors the deterministic Rust decision logic; used only when the native library is unavailable.
         private static NPCNativeDecision ManagedFallback(NPCNativeObservation o)
         {
-            int action;
+            NpcAction action;
+            var role = (NpcRole)o.Role;
             bool threat = o.ThreatVisible != 0;
             bool mobile = o.CanMove != 0;
             float health = o.HealthFraction;
-            if (o.Role == 0) action = threat ? 0 : 1;
-            else if (o.Role == 1) action = threat && mobile ? 4 : mobile && !threat ? 2 : 0;
-            else if (!threat) action = mobile ? 2 : 0;
-            else if (health < 0.2f && mobile) action = 4;
-            else if (o.Backend == 0) action = 3;
-            else action = mobile && 1f - health > 0.6f + 0.4f * health ? 4 : 3;
-            return new NPCNativeDecision { NpcId = o.NpcId, Action = action };
+            if (role == NpcRole.Merchant) action = threat ? NpcAction.Idle : NpcAction.Trade;
+            else if (role == NpcRole.Civilian) action = threat && mobile ? NpcAction.Retreat : mobile && !threat ? NpcAction.Patrol : NpcAction.Idle;
+            else if (!threat) action = mobile ? NpcAction.Patrol : NpcAction.Idle;
+            else if (health < 0.2f && mobile) action = NpcAction.Retreat;
+            else if ((DecisionBackend)o.Backend == DecisionBackend.StateMachine) action = NpcAction.Attack;
+            else action = mobile && 1f - health > 0.6f + 0.4f * health ? NpcAction.Retreat : NpcAction.Attack;
+            return new NPCNativeDecision { NpcId = o.NpcId, Action = (int)action };
         }
     }
 }

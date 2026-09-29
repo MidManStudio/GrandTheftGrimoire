@@ -264,7 +264,7 @@ How this repo applies the standard above. Update this section whenever a workflo
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `npc-rust-ci.yml` | push/PR on `rust/**`, manual | Correctness gate: `cargo fmt --all --check`, `cargo test --workspace`, Clippy `-D warnings`. Publishes a short test-result summary. |
+| `npc-rust-ci.yml` | push/PR on `rust/**`, `Assets/NPC/**`, `Assets/MidManStudio/Gtg/NPC/**`, manual | Correctness gate: enum sync check (MDIX/C#/Rust), `cargo fmt --all --check`, `cargo test --workspace`, Clippy `-D warnings`. Publishes a short test-result summary. |
 | `npc-rust-ffi-bench.yml` | **manual only** (`workflow_dispatch`) | Rust direct-call vs real C-to-Rust FFI benchmark of `gtg_npc_decide_batch`, plus the C ABI smoke test. |
 
 Formatting, tests and Clippy used to be inside the bench workflow, which also ran on every push. That broke the

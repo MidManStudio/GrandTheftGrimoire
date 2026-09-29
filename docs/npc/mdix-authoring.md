@@ -1,6 +1,6 @@
 # NPC authoring data (MDIX)
 
-Status (2026-09-29): **authored and statically checked only.** Nothing in Unity reads these files yet, and the file has not been run through `mdix validate` (DixScript-Rust needs Rust 1.80+, which the authoring environment lacks).
+Status (2026-09-29): **authored and statically checked only.** Nothing in Unity reads these files yet, and the file has not been run through `mdix validate` (DixScript-Rust needs Rust 1.80+, which the authoring environment lacks). The enum values are now guarded by `scripts/check_npc_enum_sync.py` in CI (see below).
 
 ## Files
 
@@ -35,13 +35,26 @@ To add an archetype, add one `createArchetype(...)` line to the group array. Add
 
 `@IMPORTS` is proven in DixScript-Rust's own chemistry database and import tests, so the mechanism works for files loaded from disk. Unity's `MdixAsset.Load()` calls `Dix.LoadStr(rawSource)`, which maps to `mdix_load_str`. Reading the source, that path compiles the text under the name `<string_input>` with no file location, so a relative import has no reliable base directory. This was checked by reading the code, not by running it. Until the Unity loader is shown to resolve imports, each Unity-loaded `.mdix` file must stand alone.
 
-## Not changed, needs a decision
+## Enums in C# and the sync check
 
-- **`town_guard` pairs `UTILITY` with `FIXED_WEIGHTS`.** Only `HYBRID_ML` has any model path, and the architecture plan says ordinary combatants use no ML. Values were carried over unchanged. Likely `DISABLED`.
-- **Two different `Rarity` enums.** `game_enemies.mdix` has four values and `inventory_items.mdix` has five (with `EPIC`). Auto-numbering makes `LEGENDARY` 3 in one and 4 in the other. Harmless while nothing compares the raw integers.
+`Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs` defines `NpcRole`, `DecisionBackend`, `LearningMode` (all `byte`) and `NpcAction` (`int`) with the same numbers as the MDIX enums and the Rust ABI. `NPCAuthoring`, `NPCIdentity`, `NPCDecision` and `NPCDecisionSystem` use them in place of raw integers, so the Inspector shows dropdowns. Unity stores enums as integers, so existing scene and prefab values are kept.
+
+The native structs in `NPCNativeTypes.cs` stay raw `uint`/`int` on purpose: they mirror the C ABI byte for byte, and the decision system converts explicitly at that boundary. Their sizes and offsets were read against `npc-ffi` (32 and 16 bytes; offsets 0/8/12/16/20/24/28 and 0/8/12) and match. `NPCNativeLib` also checks the sizes at runtime.
+
+`scripts/check_npc_enum_sync.py` runs first in `npc-rust-ci.yml`. It compares names and values of the four enums across MDIX, C# and Rust (`parse()`, `action_code()` and the `LearningMode` declaration order in `npc-ml`) and fails on any difference, an unparsable source, or a missing file. It is CI tooling, not part of the game or the ML pipeline. Names are compared case-insensitively with underscores removed (`STATE_MACHINE` equals `StateMachine`). It does not check `AIType` or anything outside these four enums.
+
+## Changes in this pass
+
+- `town_guard` now uses `LearningMode.DISABLED` (was `FIXED_WEIGHTS`). Only `HYBRID_ML` has a model path, and the architecture plan gives ordinary combatants no ML. `archetypes.mdix` is version 1.1.1.
+- C# uses the enums above.
+
+## Still open
+
+- **Two different `Rarity` enums.** `game_enemies.mdix` has four values and `inventory_items.mdix` has five (with `EPIC`). Auto-numbering makes `LEGENDARY` 3 in one and 4 in the other. Harmless while nothing compares the raw integers. Needs a decision on the intended set before either file changes.
 - **Style drift in the two older files.** They lack the signature comment and use unprefixed QuickFunc parameters. `@CONFIG` has no `features` key; the source's default is `"advanced"`, so this should compile, but it was not run.
-- **C# authoring still uses magic integers.** `NPCAuthoring` has `int Role`, `Backend` and `LearningMode` with comments, and `NPCIdentity` stores bytes. C# enums with the same values would give Inspector dropdowns and remove the comments. Not changed because Unity compilation cannot be checked here.
 - **Candidate enums, not added.** A `Race` or faction enum fits the design docs, but the full race list is still open there. `dialogue_ref` stays a string because dialogue ids are open-ended content, not a fixed set.
+- **`LearningMode` on `NPCIdentity` is stored but not read by any system.** It carries authoring intent until an ML path exists.
+- **How C# was checked.** The changed C# was compiled with Mono's `mcs` against hand-written stubs of the Unity types, with a negative control (the old system file fails against the new components). That checks types and casts only. It is not a Unity build; Burst, source generators and the real ECS API were not exercised.
 
 ## Validate locally
 

@@ -6,4 +6,4 @@ This is a scaffold, not a production-ready NPC implementation. Follow-up: benchm
 
 ## Authoring data (MDIX)
 
-NPC archetypes are authored in `Assets/NPC/Archetypes/archetypes.mdix`: one file holding the shared enums, one `createArchetype` QuickFunc and an `archetypes::` group array. The numeric enum values are the Rust ABI v2 values. The file is **not yet read by the Unity authoring loader** and is only statically checked. See `mdix-authoring.md` for the design, the reasons it is a single self-contained file, and open findings.
+NPC archetypes are authored in `Assets/NPC/Archetypes/archetypes.mdix`: one file holding the shared enums, one `createArchetype` QuickFunc and an `archetypes::` group array. The numeric enum values are the Rust ABI v2 values. The file is **not yet read by the Unity authoring loader** and is only statically checked. C# mirrors the enums in `Components/NPCEnums.cs`, and `scripts/check_npc_enum_sync.py` (first step of `npc-rust-ci.yml`) fails CI if MDIX, C# and Rust disagree. See `mdix-authoring.md` for the design, the reasons it is a single self-contained file, and open findings.

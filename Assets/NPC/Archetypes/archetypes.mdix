@@ -1,7 +1,7 @@
 // Brought to u by MidManStudio
 
 @CONFIG(
-  version  -> "1.1.0"
+  version  -> "1.1.1"
   author   -> "MidManStudio"
   features -> "quickfuncs,enums,data"
 )
@@ -40,6 +40,6 @@
 
   archetypes::
     createArchetype("merchant_stationary", NpcRole.MERCHANT, DecisionBackend.STATE_MACHINE, false, LearningMode.DISABLED, "merchant_default")
-    createArchetype("town_guard",          NpcRole.GUARD,    DecisionBackend.UTILITY,       true,  LearningMode.FIXED_WEIGHTS)
+    createArchetype("town_guard",          NpcRole.GUARD,    DecisionBackend.UTILITY,       true,  LearningMode.DISABLED)
     createArchetype("boss_prototype",      NpcRole.BOSS,     DecisionBackend.HYBRID_ML,     true,  LearningMode.ONLINE_UPDATES)
 )
