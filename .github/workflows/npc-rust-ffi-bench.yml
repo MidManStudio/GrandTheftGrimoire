@@ -1,67 +1,187 @@
+# .github/workflows/npc-rust-ffi-bench.yml
+# GTG NPC: Rust direct-call benchmark vs a real C caller crossing the C ABI (gtg_npc_decide_batch).
+# Follows docs/npc/benching-standards.md (ported from mid-engine): dispatch-only, pipefail,
+# diagnostics block, parsed summary, size-capped raw embed, untouched raw artifact.
+#
+# Formatting/tests/Clippy are NOT here — they run on every push in npc-rust-ci.yml.
+# DO NOT add push/pull_request triggers: benchmarks take real time and should be deliberate.
+#
+# platforms: `ubuntu-only` (default, fast) or `all` (adds ubuntu-24.04-arm and macos-latest).
+# The ARM runner is the closest hosted proxy for the Galaxy A13's aarch64 codegen; it is NOT the
+# phone. macOS/ARM legs are unverified as of writing — treat a failure there as information.
+
 name: NPC Rust and C FFI benchmarks
+
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'rust/npc/**'
-      - '.github/workflows/npc-rust-ffi-bench.yml'
+    inputs:
+      baseline_note:
+        description: 'Context for this run (shown in the summary)'
+        required: false
+        default: 'NPC FFI benchmark'
+      platforms:
+        description: 'Runner set'
+        required: true
+        type: choice
+        default: ubuntu-only
+        options:
+          - ubuntu-only
+          - all
+
 permissions:
   contents: read
+
 jobs:
-  rust-and-ffi:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.pick.outputs.os }}
+    steps:
+      - id: pick
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          if [ "$PLATFORMS" = "all" ]; then
+            echo 'os=["ubuntu-latest","ubuntu-24.04-arm","macos-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  bench:
+    needs: plan
+    name: bench (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.plan.outputs.os) }}
     defaults:
       run:
+        shell: bash # implies -eo pipefail; steps that pipe to tee also set it explicitly
         working-directory: rust
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+
+      - name: Capture toolchain and runner info
+        id: info
+        run: |
+          set -o pipefail
+          mkdir -p bench-out
+          echo "ver=$(rustc --version)" >> "$GITHUB_OUTPUT"
+          {
+            echo "os=${{ matrix.os }}"
+            echo "arch=$(uname -m)"
+            if command -v lscpu >/dev/null 2>&1; then
+              lscpu | grep -E 'Model name|^CPU\(s\)|Architecture' || true
+            else
+              echo "cpu=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo unknown)"
+            fi
+          } | tee bench-out/runner.txt
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - name: Rust formatting and tests
-        run: |
-          cargo fmt --all --check
-          cargo test --workspace
-          cargo clippy --workspace --all-targets -- -D warnings
+          key: bench-${{ matrix.os }}
+
       - name: Build release native library and Rust benchmark
-        run: cargo build -p gtg-npc-ffi --release --examples --lib
+        run: |
+          set -o pipefail
+          cargo build -p gtg-npc-ffi --release --examples --lib 2>&1 | tee bench-out/build.txt
+
       - name: Real C ABI smoke test
         run: |
-          gcc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -o target/release/gtg-npc-c-test npc/ffi-smoke-test/test.c -Inpc/ffi-smoke-test -Ltarget/release -lgtg_npc_ffi -Wl,-rpath,"$PWD/target/release" -lm
-          target/release/gtg-npc-c-test | tee ffi-smoke.txt
+          set -o pipefail
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -o target/release/gtg-npc-c-test npc/ffi-smoke-test/test.c \
+            -Inpc/ffi-smoke-test -Ltarget/release -lgtg_npc_ffi \
+            -Wl,-rpath,"$PWD/target/release" -lm
+          target/release/gtg-npc-c-test 2>&1 | tee bench-out/ffi-smoke.txt
+
       - name: Rust direct-call benchmark
-        run: cargo run -p gtg-npc-ffi --release --example decision_throughput | tee rust-bench.txt
+        run: |
+          set -o pipefail
+          cargo run -p gtg-npc-ffi --release --example decision_throughput 2>&1 | tee bench-out/rust-bench.txt
+
       - name: Real C to Rust FFI benchmark
         run: |
-          gcc -std=c11 -O3 -Wall -Wextra -Werror -pedantic -o target/release/gtg-npc-c-bench npc/ffi-smoke-test/bench.c -Inpc/ffi-smoke-test -Ltarget/release -lgtg_npc_ffi -Wl,-rpath,"$PWD/target/release"
-          target/release/gtg-npc-c-bench | tee ffi-bench.csv
+          set -o pipefail
+          gcc -std=c11 -O3 -Wall -Wextra -Werror -pedantic \
+            -o target/release/gtg-npc-c-bench npc/ffi-smoke-test/bench.c \
+            -Inpc/ffi-smoke-test -Ltarget/release -lgtg_npc_ffi \
+            -Wl,-rpath,"$PWD/target/release"
+          target/release/gtg-npc-c-bench 2>&1 | tee bench-out/ffi-bench.csv
+
       - name: Publish run summary
+        if: always()
+        env:
+          BASELINE_NOTE: ${{ inputs.baseline_note }}
+        run: |
+          # Strip cargo build noise (everything before the Finished marker) before embedding raw text,
+          # then cap it: GitHub drops the WHOLE step summary above 1024 KiB. Raw files go to the artifact
+          # untouched. If the marker is missing (real build failure) keep the full log, capped.
+          embed() {
+            [ -f "$1" ] || { echo '(missing)'; return; }
+            if grep -q 'Finished `' "$1"; then
+              awk '/Finished `/{f=1} f' "$1" | head -c 200000
+            else
+              head -c 200000 "$1"
+            fi
+          }
+          {
+            echo "## GTG NPC Rust and C FFI benchmarks — ${{ matrix.os }}"
+            echo
+            echo "**Run:** #${{ github.run_number }} &nbsp; **Rust:** \`${{ steps.info.outputs.ver }}\`"
+            echo "**Note:** $BASELINE_NOTE"
+            echo
+            echo '> Release mode on a hosted runner. Regression signal only — not MacBook Pro or Galaxy A13 numbers.'
+            echo
+            echo '<details><summary>Runner</summary>'
+            echo
+            echo '```text'
+            cat bench-out/runner.txt 2>/dev/null || true
+            echo '```'
+            echo '</details>'
+            echo
+            python3 ../scripts/bench_npc_ffi.py bench-out/rust-bench.txt bench-out/ffi-bench.csv \
+              || echo '_Summary parser failed; see raw output below._'
+            echo
+            echo '### C ABI smoke test'
+            echo '```text'
+            embed bench-out/ffi-smoke.txt
+            echo '```'
+            echo '<details><summary>Raw Rust direct-call output</summary>'
+            echo
+            echo '```text'
+            embed bench-out/rust-bench.txt
+            echo '```'
+            echo '</details>'
+            echo '<details><summary>Raw C FFI CSV</summary>'
+            echo
+            echo '```csv'
+            embed bench-out/ffi-bench.csv
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnostics
         if: always()
         run: |
           {
-            echo '## GTG NPC Rust and C FFI benchmarks'
-            echo 'Release mode on hosted Ubuntu; results are not device-specific.'
-            echo '### Rust direct calls'
+            echo "### Diagnostics (${{ matrix.os }})"
             echo '```text'
-            cat rust-bench.txt 2>/dev/null || true
+            grep -nE 'panicked|error(\[|:)|warning:|FAIL|Segmentation|Aborted|Unable to' \
+              bench-out/build.txt bench-out/ffi-smoke.txt bench-out/rust-bench.txt bench-out/ffi-bench.csv \
+              2>/dev/null | head -c 20000 || true
             echo '```'
-            echo '### Native C FFI (CSV)'
-            echo '```csv'
-            cat ffi-bench.csv 2>/dev/null || true
-            echo '```'
-            echo '### C ABI smoke test'
-            cat ffi-smoke.txt 2>/dev/null || true
+            echo '_Empty block = no warnings, panics or failures matched._'
           } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gtg-npc-rust-ffi-bench-${{ github.run_number }}
-          path: |
-            rust/rust-bench.txt
-            rust/ffi-bench.csv
-            rust/ffi-smoke.txt
+          name: gtg-npc-bench-${{ matrix.os }}-${{ github.run_number }}
+          path: rust/bench-out/
           if-no-files-found: warn
           retention-days: 30

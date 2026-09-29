@@ -1,4 +1,9 @@
+# .github/workflows/npc-rust-ci.yml
+# Correctness gate for the NPC Rust workspace: formatting, tests, Clippy. Runs on every push/PR
+# touching rust/**. Benchmarks live in npc-rust-ffi-bench.yml (dispatch-only).
+
 name: NPC Rust CI
+
 on:
   workflow_dispatch:
   push:
@@ -8,17 +13,48 @@ on:
   pull_request:
     paths:
       - 'rust/**'
+
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     defaults:
       run:
+        shell: bash # implies -eo pipefail
         working-directory: rust
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - run: cargo test --workspace
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      - name: Tests
+        run: |
+          set -o pipefail
+          mkdir -p ci-out
+          cargo test --workspace 2>&1 | tee ci-out/test.txt
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          {
+            echo '## GTG NPC Rust CI'
+            echo
+            echo "**Rust:** \`$(rustc --version)\`"
+            echo
+            echo '### Test results'
+            echo '```text'
+            grep -E '^(test result:|test .* FAILED|failures:|error)' ci-out/test.txt 2>/dev/null | head -c 20000 || echo '(no test output captured)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
