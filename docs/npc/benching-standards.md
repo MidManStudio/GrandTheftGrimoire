@@ -264,7 +264,7 @@ How this repo applies the standard above. Update this section whenever a workflo
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `npc-rust-ci.yml` | push/PR on `rust/**`, `Assets/NPC/**`, `Assets/MidManStudio/Gtg/NPC/**`, manual | Correctness gate: enum sync check (MDIX/C#/Rust), `cargo fmt --all --check`, `cargo test --workspace`, Clippy `-D warnings`. Publishes a short test-result summary. |
+| `npc-rust-ci.yml` | push/PR on `rust/**`, `Assets/NPC/**`, `Assets/MidManStudio/Gtg/NPC/**`, manual | Job `test`: enum sync check (MDIX/C#/Rust), `cargo fmt --all --check`, `cargo test --workspace`, Clippy `-D warnings`. Job `csharp-abi`: the Unity-side native layer run against the real library with plain .NET 8. Both publish a summary. |
 | `npc-rust-ffi-bench.yml` | **manual only** (`workflow_dispatch`) | Rust direct-call vs real C-to-Rust FFI benchmark of `gtg_npc_decide_batch`, plus the C ABI smoke test. |
 
 Formatting, tests and Clippy used to be inside the bench workflow, which also ran on every push. That broke the
@@ -280,7 +280,7 @@ failure. They are now separated.
 | Cache | `Swatinem/rust-cache`, keyed per runner OS |
 | `set -o pipefail` | Set in `defaults.run.shell: bash` **and** explicitly in every step that pipes to `tee` |
 | Diagnostics step | `if: always()`; greps build/smoke/bench logs for `panicked`, `error`, `warning:`, `FAIL`, `Segmentation`, `Aborted` |
-| Parsed summary | `scripts/bench_npc_ffi.py` builds the ratio table; raw text only inside `<details>` |
+| Parsed summary | `scripts/bench_npc_ffi.py` builds one ratio table per scenario (`uniform`, `mixed`) and cross-checks the Rust and C mixed workloads; raw text only inside `<details>` |
 | Size cap | Everything before cargo's `Finished` marker is stripped and each embed is capped at 200 KB |
 | Raw artifact | `if: always()`, 30 days, untouched files in `rust/bench-out/` |
 
@@ -296,12 +296,15 @@ The ISA-tier SIMD matrix from the standard does **not** apply: the NPC decision 
 backends, and its cost is branch and memory bound. The cross-OS/arch axis does apply, because the Galaxy A13 is
 aarch64 and the MacBook Pro is a separate x86-64 target.
 
-- `platforms = ubuntu-only` (default): `ubuntu-latest` (x86-64).
-- `platforms = all`: adds `ubuntu-24.04-arm` (closest hosted proxy for A13 aarch64 codegen) and `macos-latest`.
+- `platforms = ubuntu-only` (default): `ubuntu-24.04` (x86-64). Pinned, not `ubuntu-latest`, because GitHub moves
+  `ubuntu-latest` to Ubuntu 26 on 2026-10-19 and results before and after would not be comparable.
+- `platforms = all`: adds `ubuntu-24.04-arm` (closest hosted proxy for the A13's aarch64 codegen) and `macos-latest`
+  (an Apple M1 virtual machine in run #4, so ARM, not the x86 MacBook Pro).
 
-Status: only the `ubuntu-latest` leg has run. The ARM and macOS legs are **unverified**. macOS compiles the C
-callers with clang under `-Werror -pedantic` and loads a `.dylib`, so a failure there may be a flag issue rather
-than a real regression. None of these runners substitutes for measuring the phone and the MacBook directly.
+Status: **all three legs passed in run #4** (ubuntu x86-64, Linux ARM64, macOS ARM64), including GCC/clang
+`-Werror -pedantic` builds of both C programs and the C ABI smoke test. That run used the earlier single-window
+benchmark, so its numbers are noisy (see the results log). None of these runners substitutes for measuring the
+phone and the MacBook directly. The 2010 MacBook Pro is Intel and old enough that no hosted runner resembles it.
 
 ## Why the earlier summary was missing or poor
 
@@ -317,20 +320,48 @@ I could not open the run page or job logs from the authoring environment (unauth
 so I cannot say what the summary tab actually showed for runs #2 and #3. If the new workflow still shows no summary,
 check the run's **Summary** tab rather than the job log, and look for a `GITHUB_STEP_SUMMARY upload aborted` line.
 
+## Scenarios
+
+The Rust example and the C caller each run the same two scenarios at batch sizes 10, 100, 500 and 1000:
+
+- **`uniform`**: every NPC has identical input (an enemy, health 0.8, threat visible). Best case for branch prediction and caches. Kept so earlier results stay comparable.
+- **`mixed`**: a deterministic town-like population of 16384 NPCs: 15% merchants, 45% civilians, 15% guards, 20% enemies and 5% bosses. About 25% see a threat, health is pseudo-random, about 10% of non-merchants cannot move, and backends vary by role. The batch window slides across the pool on every call (step 977), so consecutive calls see different data and the branch predictor cannot memorize one batch.
+
+**Repetitions.** Each point is warmed up, then timed 9 times with about 4 million NPC decisions per repetition
+(roughly 25 to 60 ms each on a hosted x86 runner). The table reports the median, and the spread column is the slowest
+repetition divided by the fastest. Above 1.5x the point is marked unstable and its ratio should not be trusted. The
+earlier version timed one window of about 1 million decisions (5 to 10 ms), which is short enough for one scheduler
+hiccup on a shared runner to move a result by tens of percent. That was visible in run #4: the Rust-direct column
+jumped between 6.5 and 11.5 ns/NPC while the C column stayed within 6.4 to 6.7. A median cannot fix sustained
+interference, only isolated spikes, so a marked-unstable row means "rerun", not "regression". Repetition also
+raises the runtime of each program to roughly 3 seconds on x86 and will be several times that on a phone.
+
+A ratio below 0.8x is labelled "C faster" rather than parity. The Rust example calls the same exported function
+directly and the compiler may inline it, so the ratio is not guaranteed to be at least 1, but a large gap in
+that direction is more likely noise or a harness difference than a genuine FFI advantage.
+
+The generator (a splitmix64-style hash of the index) is duplicated in `decision_throughput.rs`, `ffi-smoke-test/bench.c` and the C# ABI test. Each also runs one untimed pass over the whole pool and prints a `# mixed_actions` line with the action histogram and an FNV-1a hash of every decision. The summary compares the Rust and C lines: equal means both saw the same data and the native library gave the same answers. Both programs also fail if any of the five actions never occurs, so the workload cannot silently degenerate. The pool (16384 x 32 bytes = 512 KiB) is larger than a typical L1 cache, so the mixed scenario also exercises some cache traffic that the uniform one does not.
+
 ## Known limits of the current benchmark
 
-- Every NPC in a batch has identical input (an enemy, health 0.8, threat visible). Branch prediction and cache
-  behavior are best-case, so ~5 ns/NPC is a floor, not an expectation. A mixed-role, mixed-state workload should be
-  added before any performance claim about a real town or battle.
-- The Rust-direct and C-FFI numbers use separate harnesses. Differences include caller and compiler effects and are
-  not a clean isolation of FFI overhead.
-- Nothing here measures Unity marshalling, ECS observation gathering, or action execution. Those are more likely
-  bottlenecks than the decision function.
-- No memory or allocation measurement yet. The standard's "measure" list from the project handover
-  (memory usage, large-battle performance, ML inference overhead) is still open.
+- The benchmark measures hosted-runner CPU time for the decision call only. Runner CPU models vary between runs of the same label, so compare runs on the same runner label and note when the image changes (the `ubuntu-latest` to Ubuntu 26 move on 2026-10-19 is the next known one).
+- `mixed` is one synthetic distribution. It has no correlation between neighbouring NPCs, no bursts (a battle where most NPCs suddenly see a threat) and no stationary-heavy market square. Treat it as closer to real data than `uniform`, not as a real town.
+- The Rust-direct and C-FFI numbers use separate harnesses. Differences include caller and compiler effects and are not a clean isolation of FFI overhead.
+- Nothing here measures Unity marshalling, ECS observation gathering, or action execution. Those are more likely bottlenecks than the decision function. `docs/npc/unity-integration.md` lists what is not yet measured.
+- No memory or allocation measurement yet. The standard's "measure" list from the project handover (memory usage, large-battle performance, ML inference overhead) is still open.
 
 ## Results log
 
-| Date | Run | Runner | Batch 10 / 100 / 500 / 1000 (C to FFI, ns/NPC) | Notes |
+C-to-FFI ns/NPC unless stated. `uniform` input only until the first run of the `mixed` scenario.
+
+| Date | Run | Runner | Batch 10 / 100 / 500 / 1000 | Notes |
 |---|---|---|---|---|
-| 2026-09-29 | Bench #3 | `ubuntu-latest` | 5.15 / 5.00 / 4.98 / 5.00 | All checks green after the rustfmt fix. Rust direct: 5.2 / 5.0 / 5.0 / 5.0. Uniform input. |
+| 2026-09-29 | Bench #3 | `ubuntu-latest` | 5.15 / 5.00 / 4.98 / 5.00 | After the rustfmt fix. Rust direct: 5.2 / 5.0 / 5.0 / 5.0. Uniform input, single window of about 1M decisions. |
+| 2026-09-29 | Bench #4 | `ubuntu-latest` (rustc 1.98.1) | 6.72 / 6.47 / 6.37 / 6.68 | Rust direct 11.5 / 11.0 / 9.0 / 6.5. All three runners passed. Single window; Rust-direct spread between batch sizes shows noise, not FFI cost. |
+| 2026-09-29 | Bench #4 | `ubuntu-24.04-arm` | 7.26 / 6.89 / 6.79 / 6.75 | Rust direct 7.2 / 6.8 / 6.8 / 6.7. Ratios 1.00 to 1.01. Steadiest of the three legs. |
+| 2026-09-29 | Bench #4 | `macos-latest` (Apple M1 virtual, arm64) | 5.73 / 9.88 / 7.70 / 5.78 | Rust direct 5.5 / 12.3 / 10.1 / 13.7. Ratios 0.42 to 1.04, so the run is too noisy to read a ratio from. |
+| pending | first run with `mixed` and repetitions | `ubuntu-24.04` | not run yet | Add uniform and mixed rows from the run summary, including the spread column. Runs before this one used `ubuntu-latest`. Sandbox numbers are not recorded here. |
+
+Reading run #4: the C-through-FFI figures sit in a narrow band of about 5.7 to 9.9 ns/NPC across all three runners,
+which is consistent with a cheap decision function. Nothing in it shows an FFI penalty. The Rust-direct column is
+less stable than the C column, so comparisons between the two columns from this run are not meaningful.

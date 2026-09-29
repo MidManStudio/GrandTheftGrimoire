@@ -16,11 +16,14 @@ Only ordinary repo-relative files are in the payload tarball. Keep `replacements
 
 ## Status (2026-09-29)
 
-- **Verified in CI (Rust and C only):** the Rust workspace passes format, tests and Clippy; the real C ABI smoke test passes; ABI v2 struct sizes and offsets match. Hosted `ubuntu-latest` batch results were about 5 ns/NPC at batch sizes 10, 100, 500 and 1000, with identical input for every NPC (best case).
-- **Verified by reading, not by running:** the C# native struct sizes and field offsets match ABI v2 in `npc-ffi`. The changed C# compiles under Mono `mcs` against Unity stubs.
-- **Not verified:** a real Unity build, the Unity ECS loop (observation gathering, batch call, applying decisions), Android/macOS native builds, and any device timing.
-- **Next:** open the project in Unity and confirm it compiles and the ECS loop runs, add a mixed-role benchmark workload, then NPC memory and decision scheduling.
+- **Verified in CI (Rust and C):** format, tests and Clippy; the real C ABI smoke test; ABI v2 struct sizes and offsets. Hosted `ubuntu-latest` batch results were about 5 ns/NPC at batch sizes 10 to 1000 with identical input for every NPC (best case).
+- **Bench run #4 (2026-09-29):** all three legs passed (`ubuntu-latest` x86-64, `ubuntu-24.04-arm`, `macos-latest` Apple M1 virtual), each with the C smoke test. C-through-FFI cost was about 5.7 to 9.9 ns/NPC on every runner. That run used the earlier single-window benchmark; details and caveats are in `benching-standards.md`.
+- **Added, awaiting its first CI run:** a `mixed` benchmark scenario with warm-up and median-of-9 timing in the Rust and C benchmarks, and the `csharp-abi` job that runs the Unity-side C# native layer against the real library. Both were run in the authoring sandbox (Rust 1.85, .NET 8) and passed, including negative controls; they have not run on GitHub yet.
+- **Verified by reading:** the C# structs match `npc-ffi` byte for byte (also checked at runtime by the ABI test once CI runs).
+- **Not verified:** a real Unity build, the Unity ECS loop, native plugin packaging for any Unity target, Android/macOS builds, and any device timing.
+- **Known open ends:** nothing writes `NPCObservation` and nothing reads `NPCDecision`; no health source exists; no native plugin is in `Assets/`, so Unity would use the managed fallback today. Details and the decisions needed are in `unity-integration.md`.
+- **Next:** decide the perception, health and action questions in `unity-integration.md`, then NPC memory and decision scheduling.
 
 ## Enum use in C# (2026-09-29)
 
-`NPCIdentity`, `NPCDecision` and `NPCAuthoring` now use `NpcRole`, `DecisionBackend`, `LearningMode` and `NpcAction` from `Components/NPCEnums.cs` instead of raw integers. The native structs keep raw integers. `NPCDecisionSystem` converts at that boundary and its managed fallback uses the enums. Behavior is intended to be unchanged.
+`NPCIdentity`, `NPCDecision` and `NPCAuthoring` now use `NpcRole`, `DecisionBackend`, `LearningMode` and `NpcAction` from `Components/NPCEnums.cs` instead of raw integers. The native structs keep raw integers. `NPCDecisionSystem` converts at that boundary. The managed fallback now lives in `Native/NPCManagedFallback.cs` (no Unity dependencies) so the C# ABI test can compare it with the native library. Behavior is intended to be unchanged, and the ABI test checks that on 16384 NPCs.

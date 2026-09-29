@@ -54,7 +54,7 @@ The native structs in `NPCNativeTypes.cs` stay raw `uint`/`int` on purpose: they
 - **Style drift in the two older files.** They lack the signature comment and use unprefixed QuickFunc parameters. `@CONFIG` has no `features` key; the source's default is `"advanced"`, so this should compile, but it was not run.
 - **Candidate enums, not added.** A `Race` or faction enum fits the design docs, but the full race list is still open there. `dialogue_ref` stays a string because dialogue ids are open-ended content, not a fixed set.
 - **`LearningMode` on `NPCIdentity` is stored but not read by any system.** It carries authoring intent until an ML path exists.
-- **How C# was checked.** The changed C# was compiled with Mono's `mcs` against hand-written stubs of the Unity types, with a negative control (the old system file fails against the new components). That checks types and casts only. It is not a Unity build; Burst, source generators and the real ECS API were not exercised.
+- **How C# was checked.** The changed C# compiles with .NET 8 against hand-written stubs of the Unity types, and the native layer plus managed fallback also run against the real Rust library in CI (`docs/npc/unity-integration.md`). None of that is a Unity build; Burst, source generators and the real ECS API were not exercised.
 
 ## Validate locally
 

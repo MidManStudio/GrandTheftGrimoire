@@ -61,30 +61,13 @@ namespace MidManStudio.Gtg.NPC.Systems
             cursor = (cursor + count) % all.Length;
             if (!NPCNativeLib.TryDecide(observations, decisions, count))
                 for (int i = 0; i < count; i++)
-                    decisions[i] = ManagedFallback(observations[i]);
+                    decisions[i] = NPCManagedFallback.Decide(observations[i]);
             for (int i = 0; i < count; i++)
             {
                 // Guard against a native result accidentally being assigned to the wrong entity.
                 if (decisions[i].NpcId != observations[i].NpcId || decisions[i].Action < 0 || decisions[i].Action > MaxAction) continue;
                 EntityManager.SetComponentData(entities[i], new NPCDecision { Action = (NpcAction)decisions[i].Action });
             }
-        }
-
-        // Mirrors the deterministic Rust decision logic; used only when the native library is unavailable.
-        private static NPCNativeDecision ManagedFallback(NPCNativeObservation o)
-        {
-            NpcAction action;
-            var role = (NpcRole)o.Role;
-            bool threat = o.ThreatVisible != 0;
-            bool mobile = o.CanMove != 0;
-            float health = o.HealthFraction;
-            if (role == NpcRole.Merchant) action = threat ? NpcAction.Idle : NpcAction.Trade;
-            else if (role == NpcRole.Civilian) action = threat && mobile ? NpcAction.Retreat : mobile && !threat ? NpcAction.Patrol : NpcAction.Idle;
-            else if (!threat) action = mobile ? NpcAction.Patrol : NpcAction.Idle;
-            else if (health < 0.2f && mobile) action = NpcAction.Retreat;
-            else if ((DecisionBackend)o.Backend == DecisionBackend.StateMachine) action = NpcAction.Attack;
-            else action = mobile && 1f - health > 0.6f + 0.4f * health ? NpcAction.Retreat : NpcAction.Attack;
-            return new NPCNativeDecision { NpcId = o.NpcId, Action = (int)action };
         }
     }
 }
