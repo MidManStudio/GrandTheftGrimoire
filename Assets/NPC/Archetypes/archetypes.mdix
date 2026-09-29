@@ -1,0 +1,45 @@
+// Brought to u by MidManStudio
+
+@CONFIG(
+  version  -> "1.1.0"
+  author   -> "MidManStudio"
+  features -> "quickfuncs,enums,data"
+)
+
+// Numeric values are the Rust ABI v2 values (rust/npc/crates/npc-ffi). Do not renumber
+// without bumping the ABI version. NpcRole and DecisionBackend match the C ABI exactly;
+// LearningMode is authoring metadata only and is not an ABI field.
+@ENUMS(
+  NpcRole         { MERCHANT = 0, CIVILIAN = 1, GUARD = 2, ENEMY = 3, BOSS = 4 }
+  DecisionBackend { STATE_MACHINE = 0, UTILITY = 1, HYBRID_ML = 2 }
+  LearningMode    { DISABLED = 0, FIXED_WEIGHTS = 1, ONLINE_UPDATES = 2 }
+)
+
+@QUICKFUNCS(
+  // dialogue_ref is optional; an empty string means the archetype has no fixed dialogue.
+  // uses_ml and may_update_weights are derived here so every archetype states them the same way.
+  ~createArchetype<object>(_id<string>, _role<enum>, _backend<enum>, _can_move<bool>, _learning<enum>, _dialogue_ref<string> = "") {
+    let uses_ml<bool>             = _backend == DecisionBackend.HYBRID_ML
+    let may_update_weights<bool>  = _learning == LearningMode.ONLINE_UPDATES
+    return {
+      id                 = _id
+      role               = _role
+      decision_backend   = _backend
+      can_move           = _can_move
+      learning_mode      = _learning
+      dialogue_ref       = _dialogue_ref
+      uses_ml            = uses_ml
+      may_update_weights = may_update_weights
+    }
+  }
+)
+
+@DATA(
+  schema  = "gtg_npc_archetypes"
+  abi_version<int> = 2
+
+  archetypes::
+    createArchetype("merchant_stationary", NpcRole.MERCHANT, DecisionBackend.STATE_MACHINE, false, LearningMode.DISABLED, "merchant_default")
+    createArchetype("town_guard",          NpcRole.GUARD,    DecisionBackend.UTILITY,       true,  LearningMode.FIXED_WEIGHTS)
+    createArchetype("boss_prototype",      NpcRole.BOSS,     DecisionBackend.HYBRID_ML,     true,  LearningMode.ONLINE_UPDATES)
+)

@@ -38,11 +38,6 @@ invalid input. It cannot establish C# or Unity runtime correctness.
 `rust/rustfmt.toml` pins `style_edition = "2021"`, so CI and any local rustfmt agree. It can be removed later if you
 prefer 2024-edition style; run `cargo fmt --all` with a Rust 1.85+ toolchain afterwards and commit the result.
 
-## MDIX archetype cleanup
+## MDIX authoring
 
-Merchant, guard and boss archetype files now declare `NpcRole`, `DecisionBackend` and `LearningMode` enums instead of
-free-form strings. The same numeric role/backend values correspond to ABI v2, but **MDIX assets are not yet wired to
-the Unity authoring loader**. Existing `AIType` in `Assets/game_enemies.mdix` is deliberately untouched.
-`LearningMode` is descriptive authoring metadata, not an ABI field or an implemented ML feature. The three archetype
-files each declare the same local enums to remain independently parseable. Future consolidated imports require
-explicit parser/Unity-loader validation.
+NPC archetype data is documented in `docs/npc/mdix-authoring.md`; it does not affect the benchmarks.
