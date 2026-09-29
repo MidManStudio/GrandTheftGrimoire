@@ -1,0 +1,67 @@
+name: NPC Rust and C FFI benchmarks
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'rust/npc/**'
+      - '.github/workflows/npc-rust-ffi-bench.yml'
+permissions:
+  contents: read
+jobs:
+  rust-and-ffi:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Rust formatting and tests
+        run: |
+          cargo fmt --all --check
+          cargo test --workspace
+          cargo clippy --workspace --all-targets -- -D warnings
+      - name: Build release native library and Rust benchmark
+        run: cargo build -p gtg-npc-ffi --release --examples --lib
+      - name: Real C ABI smoke test
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -o target/release/gtg-npc-c-test npc/ffi-smoke-test/test.c -Inpc/ffi-smoke-test -Ltarget/release -lgtg_npc_ffi -Wl,-rpath,"$PWD/target/release" -lm
+          target/release/gtg-npc-c-test | tee ffi-smoke.txt
+      - name: Rust direct-call benchmark
+        run: cargo run -p gtg-npc-ffi --release --example decision_throughput | tee rust-bench.txt
+      - name: Real C to Rust FFI benchmark
+        run: |
+          gcc -std=c11 -O3 -Wall -Wextra -Werror -pedantic -o target/release/gtg-npc-c-bench npc/ffi-smoke-test/bench.c -Inpc/ffi-smoke-test -Ltarget/release -lgtg_npc_ffi -Wl,-rpath,"$PWD/target/release"
+          target/release/gtg-npc-c-bench | tee ffi-bench.csv
+      - name: Publish run summary
+        if: always()
+        run: |
+          {
+            echo '## GTG NPC Rust and C FFI benchmarks'
+            echo 'Release mode on hosted Ubuntu; results are not device-specific.'
+            echo '### Rust direct calls'
+            echo '```text'
+            cat rust-bench.txt 2>/dev/null || true
+            echo '```'
+            echo '### Native C FFI (CSV)'
+            echo '```csv'
+            cat ffi-bench.csv 2>/dev/null || true
+            echo '```'
+            echo '### C ABI smoke test'
+            cat ffi-smoke.txt 2>/dev/null || true
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gtg-npc-rust-ffi-bench-${{ github.run_number }}
+          path: |
+            rust/rust-bench.txt
+            rust/ffi-bench.csv
+            rust/ffi-smoke.txt
+          if-no-files-found: warn
+          retention-days: 30
