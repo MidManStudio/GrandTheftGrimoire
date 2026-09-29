@@ -1,5 +1,5 @@
 # .github/workflows/npc-rust-ci.yml
-# Correctness gate for the NPC Rust workspace: formatting, tests, Clippy. Runs on every push/PR
+# Correctness gate for the NPC system: enum sync across MDIX/C#/Rust, formatting, tests, Clippy. Runs on every push/PR
 # touching rust/**. Benchmarks live in npc-rust-ffi-bench.yml (dispatch-only).
 
 name: NPC Rust CI
@@ -9,10 +9,16 @@ on:
   push:
     paths:
       - 'rust/**'
+      - 'Assets/NPC/**'
+      - 'Assets/MidManStudio/Gtg/NPC/**'
+      - 'scripts/check_npc_enum_sync.py'
       - '.github/workflows/npc-rust-ci.yml'
   pull_request:
     paths:
       - 'rust/**'
+      - 'Assets/NPC/**'
+      - 'Assets/MidManStudio/Gtg/NPC/**'
+      - 'scripts/check_npc_enum_sync.py'
 
 permissions:
   contents: read
@@ -32,6 +38,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+
+      - name: Enum sync (MDIX, C#, Rust)
+        working-directory: .
+        run: python3 scripts/check_npc_enum_sync.py .
 
       - name: Formatting
         run: cargo fmt --all --check
