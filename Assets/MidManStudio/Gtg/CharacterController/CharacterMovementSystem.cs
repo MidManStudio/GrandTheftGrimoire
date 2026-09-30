@@ -12,18 +12,11 @@ using Unity.Transforms;
 namespace MidManStudio.Gtg.CharacterController
 {
     /// <summary>
-    /// Phase 0 kinematic movement: ground check via a downward raycast
-    /// against the Unity Physics collision world, then gravity/jump on the
-    /// vertical axis and a direct position move on the horizontal plane.
-    ///
-    /// Movement is world-axis-relative for now, not camera-relative — that's
-    /// a presentation-layer decision that depends on the Cinemachine rig,
-    /// which doesn't exist yet at this phase.
-    ///
-    /// Runs after <see cref="CharacterInputSystem"/> so it always sees this
-    /// frame's input, not last frame's.
+    /// Phase 0 kinematic movement. Ground check is a downward ray from just
+    /// above the feet, movement is relative to the current yaw, and the entity
+    /// pivot is the feet. Runs after <see cref="CharacterLookSystem"/>.
     /// </summary>
-    [UpdateAfter(typeof(CharacterInputSystem))]
+    [UpdateAfter(typeof(CharacterLookSystem))]
     [BurstCompile]
     public partial struct CharacterMovementSystem : ISystem
     {
@@ -37,43 +30,75 @@ namespace MidManStudio.Gtg.CharacterController
         public void OnUpdate(ref SystemState state)
         {
             float deltaTime = SystemAPI.Time.DeltaTime;
-            CollisionWorld collisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorld.CollisionWorld;
+            CollisionWorld collisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld;
+            float3 up = new float3(0f, 1f, 0f);
 
-            foreach (var (transform, verticalVelocity, ground, input, settings) in
+            foreach (var (transform, verticalVelocity, ground, look, input, settings, entity) in
                      SystemAPI.Query<
                          RefRW<LocalTransform>,
                          RefRW<CharacterVerticalVelocity>,
                          RefRW<CharacterGroundState>,
+                         RefRO<CharacterLook>,
                          RefRO<CharacterInput>,
                          RefRO<CharacterMoveSettings>>()
-                         .WithAll<CharacterTag>())
+                         .WithAll<CharacterTag>()
+                         .WithEntityAccess())
             {
+                CharacterMoveSettings cfg = settings.ValueRO;
+                CharacterInput inp = input.ValueRO;
                 float3 position = transform.ValueRO.Position;
-
-                var rayInput = new RaycastInput
-                {
-                    Start = position,
-                    End = position + new float3(0f, -settings.ValueRO.GroundCheckDistance, 0f),
-                    Filter = CollisionFilter.Default,
-                };
-                bool isGrounded = collisionWorld.CastRay(rayInput, out _);
-                ground.ValueRW.IsGrounded = isGrounded;
-
                 float vSpeed = verticalVelocity.ValueRO.Value;
-                if (isGrounded)
+
+                // Ground is ignored while rising, otherwise the ray still sees the
+                // floor for a few frames after takeoff and cancels the jump.
+                bool grounded = false;
+                float groundY = 0f;
+                if (vSpeed <= 0f)
                 {
-                    vSpeed = input.ValueRO.JumpPressed ? settings.ValueRO.JumpSpeed : 0f;
+                    // Reach far enough to cover this frame's fall so a fast fall
+                    // cannot step through thin ground.
+                    float fallStep = math.max(0f, -(vSpeed + cfg.Gravity * deltaTime) * deltaTime);
+                    var rayInput = new RaycastInput
+                    {
+                        Start = position + up * cfg.GroundSkin,
+                        End = position - up * (cfg.GroundCheckDistance + fallStep),
+                        Filter = CollisionFilter.Default,
+                    };
+
+                    if (PhysicsRayUtility.CastRayIgnoring(collisionWorld, rayInput, entity, out RaycastHit hit))
+                    {
+                        grounded = true;
+                        groundY = hit.Position.y;
+                    }
+                }
+
+                bool jumped = false;
+                if (grounded && inp.JumpPressed)
+                {
+                    vSpeed = cfg.JumpSpeed;
+                    jumped = true;
+                }
+                else if (grounded)
+                {
+                    vSpeed = 0f;
                 }
                 else
                 {
-                    vSpeed += settings.ValueRO.Gravity * deltaTime;
+                    vSpeed += cfg.Gravity * deltaTime;
                 }
+
+                quaternion yawRotation = quaternion.RotateY(math.radians(look.ValueRO.Yaw));
+                float3 horizontal = math.mul(yawRotation, new float3(inp.Move.x, 0f, inp.Move.y)) * cfg.MoveSpeed;
+                float3 newPosition = position + (horizontal + up * vSpeed) * deltaTime;
+
+                if (grounded && !jumped)
+                {
+                    newPosition.y = groundY;
+                }
+
                 verticalVelocity.ValueRW.Value = vSpeed;
-
-                float3 horizontal = new float3(input.ValueRO.Move.x, 0f, input.ValueRO.Move.y) * settings.ValueRO.MoveSpeed;
-                float3 displacement = (horizontal + new float3(0f, vSpeed, 0f)) * deltaTime;
-
-                transform.ValueRW.Position = position + displacement;
+                ground.ValueRW.IsGrounded = grounded && !jumped;
+                transform.ValueRW.Position = newPosition;
             }
         }
     }

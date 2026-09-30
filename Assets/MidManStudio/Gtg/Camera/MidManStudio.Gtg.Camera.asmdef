@@ -1,15 +1,14 @@
 {
-    "name": "MidManStudio.Gtg.CharacterController",
-    "rootNamespace": "MidManStudio.Gtg.CharacterController",
+    "name": "MidManStudio.Gtg.Camera",
+    "rootNamespace": "MidManStudio.Gtg.Camera",
     "references": [
+        "MidManStudio.Gtg.CharacterController",
         "Unity.Entities",
-        "Unity.Entities.Hybrid",
         "Unity.Transforms",
-        "Unity.Physics",
         "Unity.Mathematics",
-        "Unity.Burst",
+        "Unity.InputSystem",
         "Unity.Collections",
-        "Unity.InputSystem"
+        "Unity.Burst"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

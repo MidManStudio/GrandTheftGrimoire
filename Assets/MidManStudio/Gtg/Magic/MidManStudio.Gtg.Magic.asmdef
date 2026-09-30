@@ -1,15 +1,15 @@
 {
-    "name": "MidManStudio.Gtg.CharacterController",
-    "rootNamespace": "MidManStudio.Gtg.CharacterController",
+    "name": "MidManStudio.Gtg.Magic",
+    "rootNamespace": "MidManStudio.Gtg.Magic",
     "references": [
+        "MidManStudio.Gtg.CharacterController",
         "Unity.Entities",
         "Unity.Entities.Hybrid",
         "Unity.Transforms",
         "Unity.Physics",
         "Unity.Mathematics",
         "Unity.Burst",
-        "Unity.Collections",
-        "Unity.InputSystem"
+        "Unity.Collections"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

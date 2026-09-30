@@ -8,59 +8,69 @@ using Unity.Mathematics;
 
 namespace MidManStudio.Gtg.CharacterController
 {
-    /// <summary>
-    /// Marks an entity as a player-controlled character. Empty on purpose —
-    /// it exists so systems can query "the character" without depending on
-    /// any of its other components.
-    /// </summary>
+    /// <summary>Marks an entity as a player-controlled character.</summary>
     public struct CharacterTag : IComponentData
     {
     }
 
     /// <summary>
-    /// Tunable movement numbers, baked once from <see cref="CharacterAuthoring"/>.
-    /// Read-only at runtime — nothing in the movement system writes to this.
+    /// Movement and look tuning, baked once from <see cref="CharacterAuthoring"/>.
+    /// Read-only at runtime.
     /// </summary>
     public struct CharacterMoveSettings : IComponentData
     {
         public float MoveSpeed;
         public float JumpSpeed;
         public float Gravity;
+
+        /// <summary>How far below the feet the ground ray reaches, in meters.</summary>
         public float GroundCheckDistance;
+
+        /// <summary>The ground ray starts this far above the feet, in meters.</summary>
+        public float GroundSkin;
+
+        public float MouseDegreesPerPixel;
+        public float StickDegreesPerSecond;
+        public float MinPitch;
+        public float MaxPitch;
     }
 
     /// <summary>
-    /// Per-frame input state for one character, written by
-    /// <see cref="CharacterInputSystem"/> and read by
-    /// <see cref="CharacterMovementSystem"/>. Deliberately just data — no
-    /// device polling happens outside the input system.
+    /// Per-frame input for one character. Written by
+    /// <see cref="CharacterInputSystem"/>, read by the look, movement and spell systems.
     /// </summary>
     public struct CharacterInput : IComponentData
     {
-        /// <summary>Local-space move direction from WASD / left stick, each axis in [-1, 1].</summary>
+        /// <summary>Local move direction from WASD or left stick, each axis in [-1, 1].</summary>
         public float2 Move;
 
-        /// <summary>Look delta from mouse / right stick for this frame.</summary>
+        /// <summary>Look change this frame in degrees. x turns right, y looks up.</summary>
         public float2 Look;
 
-        /// <summary>True for exactly the frame the jump button went down.</summary>
+        /// <summary>True only on the frame the jump button went down.</summary>
         public bool JumpPressed;
+
+        /// <summary>True only on the frame the fire button went down.</summary>
+        public bool FirePressed;
     }
 
     /// <summary>
-    /// Current vertical speed, carried across frames so gravity can
-    /// accumulate between ground contacts. Horizontal movement doesn't need
-    /// this — it's re-derived from <see cref="CharacterInput"/> every frame.
+    /// View direction in degrees. Pitch follows the Unity convention, so a
+    /// positive value looks down. The camera rig and the spell aim both read it.
     /// </summary>
+    public struct CharacterLook : IComponentData
+    {
+        public float Yaw;
+        public float Pitch;
+    }
+
+    /// <summary>Vertical speed carried between frames so gravity accumulates.</summary>
     public struct CharacterVerticalVelocity : IComponentData
     {
         public float Value;
     }
 
-    /// <summary>
-    /// Result of this frame's ground check, written by the movement system's
-    /// raycast before it decides whether to apply gravity or a jump.
-    /// </summary>
+    /// <summary>Result of this frame's ground check.</summary>
     public struct CharacterGroundState : IComponentData
     {
         public bool IsGrounded;

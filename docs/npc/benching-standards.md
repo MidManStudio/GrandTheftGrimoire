@@ -1,0 +1,367 @@
+> **Provenance.** Everything from "# Benching Standards" down to the `---` divider is a verbatim copy of
+> `docs/benching-standards.md` from the mid-engine repo (copied 2026-09-29). Names such as `mid-math`,
+> `bench-vs-bevy-ecs.yml` and `scripts/bench_vs_*.py` refer to that repo. The GTG-specific application is
+> **below the divider** and is the part to keep current here.
+
+# Benching Standards
+
+How this project's `bench-vs-*.yml`/`Abench-*.yml` workflows are
+structured, so a new one doesn't have to rediscover the pattern (or skip
+part of it) each time. Written after `bench-vs-bevy-ecs.yml` shipped
+without the structured-summary step this doc describes — checked
+directly against every existing bench workflow rather than assumed.
+
+## The real, current state: two patterns, not one
+
+Grepping every `bench-vs-*.yml`/`Abench-*.yml` file turned up two
+genuinely different approaches in active use, not one consistent
+standard:
+
+1. **Python parser** (`bench-vs-mat4-fastest.yml`, `bench-vs-color.yml`,
+   `bench-vs-c-libs.yml`, `bench-vs-mid-vec.yml`, and others) — a
+   `scripts/bench_vs_*.py` script parses the raw criterion output into
+   real per-group markdown tables, optionally with a ratio-vs-baseline
+   column and colored badges.
+2. **Bash grep + collapsible raw dump** (`bench-mid-collections-sparse-
+   set.yml`) — no Python, just `grep -B 1 "time:"` for a quick headline
+   table plus the full raw log behind a `<details>` fold.
+
+Both are legitimate for what they show. Neither is "wrong." But a bench
+workflow written without deliberately picking one (what `bench-vs-bevy-
+ecs.yml` did originally) ends up with neither — just a raw, unparsed
+wall of criterion text in the step summary, which is the actual problem
+this doc exists to prevent from happening again.
+
+**Recommendation for new bench workflows:** use the Python parser
+pattern when there's a natural per-group baseline to compute a ratio
+against (a "vs X" comparison, which is most of them) — it's the more
+information-dense summary and the one worth writing once, correctly,
+and reusing the shape of. Fall back to the bash pattern only for
+something that doesn't have a clean baseline concept.
+
+## The correctness detail that actually matters more than formatting
+
+**`set -o pipefail` is not optional.** `cargo bench ... | tee raw.txt`
+without it means the step's exit code is `tee`'s (always `0`), not
+`cargo bench`'s — a real benchmark failure shows green. This was a real
+incident (see `Abench-vs-all-f64.yml`'s own "Run f64 criterion
+benchmarks" step comment and `mid-ecs-test.yml`'s), and it's why
+`mid-ecs-test.yml`, `bench-mid-collections-sparse-set.yml`, and four of
+the `bench-vs-*.yml` files have it. **Checked directly: 12 of the
+`bench-vs-*.yml` files — including `bench-vs-mat4-fastest.yml`, the one
+`bench-vs-bevy-ecs.yml` was originally modeled on — do not have it.**
+Not fixed as part of this pass (real, but out of scope for what was
+asked); worth a deliberate cleanup pass, not a silent gap to
+rediscover the hard way later.
+
+## The step-summary size limit — a real, hard GitHub constraint, not a formatting choice
+
+GitHub caps `$GITHUB_STEP_SUMMARY` at 1024 KiB total; write past it and
+the *entire* summary for that step is dropped, with only a terse
+`GITHUB_STEP_SUMMARY upload aborted... got NNNk` line in the log to say
+why — no partial summary, no indication of which content pushed it
+over. Hit for real on `bench-mid-ecs-archetype-core.yml` (1065k against
+the 1024k limit), on the run right after a new diagnostic bench group
+landed — the natural read is "too much new bench data," and it's wrong.
+A `raw_slice_ceiling`-only local run (8 benchmark instances total, no
+other group involved) produced 712,833 bytes and 18,952 lines on its
+own, and all but ~68 of those lines were `cargo bench`'s own build
+output — specifically a `warning: \`mid-math\` (lib) generated 3110
+warnings` worth of compiler lint noise (unnecessary-`unsafe`,
+missing-docs, and similar, from mid-math's own SIMD backends),
+captured because the run step's `2>&1 | tee raw.txt` pipes stderr
+(where rustc's warnings go) into the same file a later step `cat`s
+whole into the step summary. Real criterion result text is tiny by
+comparison — roughly 8-9 lines per benchmark instance; even every group
+`archetype_core.rs` has as of this pass (~76 instances total) comes to
+maybe 600-700 lines, well under 100 KB.
+
+**The bench data was never the risk. The compiler-warning preamble —
+which reappears in full on any cache miss, for any crate anywhere in
+the dependency graph, regardless of what the bench file itself
+contains — is.** A cold cache (GitHub Actions cache eviction, a
+`Cargo.toml` touch, or just a repo with enough *other* bench workflows
+competing for the same repo-wide 10 GB cache quota) can reintroduce
+thousands of warning lines at any time, on any of these workflows, with
+zero relationship to how much the benchmarks themselves grew.
+
+**Fix, applied to `bench-mid-ecs-archetype-core.yml`,
+`bench-mid-collections-sparse-set.yml`, and `bench-mid-ecs-sparse-
+shell.yml`** (`grep -l "Full raw output" .github/workflows/*.yml` shows
+these are the only three using the raw-`cat` pattern, so all three
+carried the same latent risk): before embedding the raw log in the step
+summary, skip everything before cargo's own `` Finished `bench` profile ``
+marker — the line it always prints once compilation succeeds, right
+before the benchmarked binary actually runs — so only real bench
+output reaches the summary, no build noise. Falls back to the untouched
+full log if that marker is missing entirely (a genuine compile
+failure, where the noise upstream of it *is* the signal and must not
+be hidden). A defensive `head -c 900000` cap sits behind that either
+way — current real output isn't remotely close to it, but it means
+this specific failure mode structurally can't recur here regardless of
+how much more diagnostic bench code gets added later. The untouched raw
+file, warnings and all, still goes to the uploaded artifact unchanged —
+nothing lost, just kept off the size-capped surface.
+
+**New bench workflows: don't `cat` a raw `cargo bench`/`cargo test` log
+into `$GITHUB_STEP_SUMMARY` without stripping the pre-`` Finished ``
+build output first.** A clean sandbox or a cold cache brings it back in
+full, on any crate, at any time — it has nothing to do with how much
+the bench file itself has grown, so growth in the bench matrix is not
+what to watch for here; cache-miss frequency is.
+
+## The recommended shape, end to end
+
+What `bench-vs-bevy-ecs.yml` now does, as the canonical reference:
+
+1. `workflow_dispatch` only, with a free-text `baseline_note` input.
+   **Never** `push`/`pull_request` — benchmarks take real time and
+   shouldn't run on every commit.
+2. `dtolnay/rust-toolchain@stable` (tracks true latest stable) +
+   `rustc --version` captured to a step output for the summary header.
+   If the target crate has a real MSRV wall above whatever the sandbox
+   this was written in could reach, say so explicitly in the workflow's
+   own header comment — this project doesn't hide toolchain gaps.
+3. Cache the cargo registry, keyed on the relevant `Cargo.toml`(s).
+4. Run the bench with **`set -o pipefail`** set first, `tee`'d to a
+   `bench-<name>-raw.txt` file.
+5. `if: always()` **diagnostics step** — `grep` the raw log for
+   criterion's own warning strings (`took zero time`, `Unable to
+   complete`, `Warning:`, `panicked`, `Completed N iterations`) into
+   their own step-summary block. Cheap, and it surfaces real sampling
+   problems (a real one showed up in `bench-vs-bevy-ecs.yml`'s first
+   actual run — criterion couldn't complete 100 samples in 5s for the
+   `bevy_ecs` structural-churn case, extended to 7.5s on its own) that
+   would otherwise sit buried in a wall of raw text.
+6. `if: always()` **summary step** — either the Python parser or the
+   bash-grep pattern above, not the raw dump alone. If it embeds any
+   slice of the raw log (even inside a `<details>` fold), strip
+   everything before cargo's own `` Finished `bench` profile `` marker
+   first and cap the result (e.g. `head -c 900000`) — see "The
+   step-summary size limit" above for why a raw `cat` of build output
+   plus bench output is a real, GitHub-hard-capped failure mode, not a
+   formatting nicety.
+7. `if: always()` **upload the raw log as an artifact**, 30-day
+   retention, *untouched* — no stripping or capping here, that's only
+   for the step-summary embed. The step summary is for skimming; the
+   raw file is for when someone actually needs the full confidence
+   intervals (or the build warnings the summary deliberately left out).
+
+## Writing a `scripts/bench_vs_*.py`
+
+Real, working shape (see `scripts/bench_vs_bevy_ecs.py` for the current
+reference implementation, adapted from `bench_vs_mat4_fastest.py`):
+
+- Strip ANSI codes first (`RE_ANSI`), criterion colors its output.
+- `RE_RESULT` matches criterion's real `name\n    time: [lo mid hi]`
+  shape — grounded in `report.rs`'s actual source at whatever criterion
+  version is pinned, not memory. `bench-mid-collections-sparse-set.yml`
+  found this the hard way (see its own header comment): it wrote a
+  parser it could never actually run against real output at the time,
+  since the sandbox that wrote it couldn't get `cargo bench` running at
+  all — grounded in real source, but a real workflow trigger was still
+  the first actual proof. Where possible, test the parser against real
+  captured output before trusting it, the way `bench_vs_bevy_ecs.py`
+  was checked against this workflow's own first real run.
+- Group results by everything before the final `/` in the benchmark
+  name (`spawn_n_entities_two_components/mid-ecs` → group
+  `spawn_n_entities_two_components`, variant `mid-ecs`).
+- If one variant per group is the natural baseline (a reference
+  implementation, or — for a two-engine comparison like `vs_bevy_ecs`
+  — the *other* engine), compute a ratio and badge it:
+  `≤1.05× parity`, `≤1.5× warn`, `≤5.0× error`, `>5.0×` flagged as
+  overhead-dominated. Don't hardcode a *reason* for a bad ratio in the
+  script unless it's a real, separately-diagnosed root cause (the way
+  `bench_vs_mat4_fastest.py` does for its own, already-profiled
+  storage-layout issue) — a first-ever run's script should report
+  honestly, not guess.
+
+## Related
+
+- `docs/bevy-comparison.md` / `docs/bevy-file-adoption.md` — why some
+  benches exist at all (comparing against a reference implementation).
+- `docs/mid-ecs.md`, `docs/mid-math.md` — the design context a given
+  bench's numbers should get read against.
+
+## Benchmarking across runners and platforms
+
+This is a real, separate axis from the summary-formatting stuff above,
+and `bench-vs-bevy-ecs.yml` didn't have it either on first write —
+checked directly against what's actually in this repo (`Abench-vs-all-
+f64.yml`, `mid-math-test-neon.yml`, `test-geom.yml`) rather than
+assumed. Two genuinely different concerns, easy to conflate:
+
+### 1. ISA-tier SIMD dispatch matrix — only for vectorized, dispatched-backend code
+
+`Abench-vs-all-f64.yml` (and its f32 counterpart) sweep a real
+`target_cpu` `workflow_dispatch` choice input — `native`, `x86-64-v4`
+(AVX-512), `x86-64-v3` (AVX2+FMA), `x86-64-v2` (SSE4.2), `x86-64`
+(SSE2-only), `neon`, `wasm`, `scalar` — because mid-math genuinely
+*has* a different dispatched SIMD backend per ISA tier
+(`f32/{sse2,avx,neon,wasm}/`), and the whole point of the matrix is
+proving the right backend gets picked and actually performs on each
+real tier. Real mechanics worth reusing wherever this pattern actually
+applies:
+
+- **`CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`, not plain
+  `RUSTFLAGS`**, for the target-cpu flag — plain `RUSTFLAGS` also
+  applies to build-script (host) compilation, which `SIGILL`s if the
+  runner's *real* CPU doesn't have the requested ISA (GitHub-hosted
+  `ubuntu-latest` runners are AMD EPYC, no AVX-512).
+- **Soft-gate hardware you can't guarantee**: `x86-64-v4` checks
+  `/proc/cpuinfo` for `avx512f` first and marks the run
+  skipped-not-failed with an explanatory step summary if it's absent,
+  rather than actually attempting a `SIGILL`ing run.
+- **Real ARM coverage exists and is cheap**: `mid-math-test-neon.yml`
+  runs on `macos-14` (Apple Silicon M1) — GitHub's free-tier hosted
+  ARM runner, not a self-hosted rig. `neon` in the f64/f32 bench
+  matrices runs on `ubuntu-24.04-arm` instead (also free-tier hosted),
+  with `-C target-cpu=native` as plain `RUSTFLAGS` — safe there
+  specifically because host and target are the same architecture, so
+  no cross-compile SIGILL risk the x86 tiers have.
+- **wasm needs `wasmtime` + a `.cargo/config.toml` runner shim** to
+  actually execute — see the `wasm` branch for the exact
+  `[target.wasm32-wasip1]` config.
+
+**When a bench does NOT need this matrix — real, already-established
+precedent, not new**: `bench-mid-collections-sparse-set.yml`'s own
+header comment explains it directly — `SparseSet`'s performance is
+governed by cache locality and pointer-chasing, not vectorizable
+arithmetic, so there's no ISA tier to sweep. **The same reasoning
+applies to `vs_bevy_ecs.rs`** — `spawn`/`dense_query_iteration`/
+`structural_churn` are all archetype-migration, hashmap-lookup, and
+`Box<dyn Any>`-boxing bound, not SIMD arithmetic bound. Neither
+`bench-mid-collections-sparse-set.yml` nor `bench-vs-bevy-ecs.yml` carry
+the `target_cpu` matrix, and that's a deliberate omission, not a gap —
+don't add one without a real, dispatched-SIMD-backend reason to.
+
+### 2. Cross-OS/cross-arch portability — a different, still-real concern
+
+Independent of SIMD: does the thing actually build and behave the same
+on Linux, macOS, and Windows? `test-geom.yml`'s pattern is the
+reference — a plain `strategy.matrix.os: [ubuntu-latest, macos-latest,
+windows-latest]` with `fail-fast: false`, no ISA-tier logic at all,
+just "does this work everywhere Mid Engine cares about."
+
+This is the piece `bench-vs-bevy-ecs.yml` was missing and now has: an
+opt-in `platforms` `workflow_dispatch` choice (`ubuntu-only` fast
+default, `all` for the full `ubuntu-latest` + `macos-latest` +
+`ubuntu-24.04-arm` sweep) — opt-in rather than every-run, because
+`bevy_ecs`'s ~400-crate dependency tree makes each platform's build
+alone take real minutes, and this bench doesn't need to pay that on
+every invocation the way a plain correctness test-matrix (`test-
+geom.yml`) does on every dispatch. Reach for `all` before trusting a
+cross-platform performance claim from this bench specifically, not by
+default.
+
+---
+
+# GTG application
+
+How this repo applies the standard above. Update this section whenever a workflow, script or benchmark changes.
+
+## Workflows
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `npc-rust-ci.yml` | push/PR on `rust/**`, `Assets/NPC/**`, `Assets/MidManStudio/Gtg/NPC/**`, manual | Job `test`: enum sync check (MDIX/C#/Rust), `cargo fmt --all --check`, `cargo test --workspace`, Clippy `-D warnings`. Job `csharp-abi`: the Unity-side native layer run against the real library with plain .NET 8. Both publish a summary. |
+| `npc-rust-ffi-bench.yml` | **manual only** (`workflow_dispatch`) | Rust direct-call vs real C-to-Rust FFI benchmark of `gtg_npc_decide_batch`, plus the C ABI smoke test. |
+
+Formatting, tests and Clippy used to be inside the bench workflow, which also ran on every push. That broke the
+standard's rule 1 (never `push`/`pull_request` for benchmarks) and made a formatting slip look like a benchmark
+failure. They are now separated.
+
+## How the bench workflow maps to the standard
+
+| Standard | GTG implementation |
+|---|---|
+| Dispatch-only, free-text note | `workflow_dispatch` with `baseline_note` and a `platforms` choice |
+| Toolchain version in header | `rustc --version` captured to a step output; runner CPU/arch written to `bench-out/runner.txt` |
+| Cache | `Swatinem/rust-cache`, keyed per runner OS |
+| `set -o pipefail` | Set in `defaults.run.shell: bash` **and** explicitly in every step that pipes to `tee` |
+| Diagnostics step | `if: always()`; greps build/smoke/bench logs for `panicked`, `error`, `warning:`, `FAIL`, `Segmentation`, `Aborted` |
+| Parsed summary | `scripts/bench_npc_ffi.py` builds one ratio table per scenario (`uniform`, `mixed`) and cross-checks the Rust and C mixed workloads; raw text only inside `<details>` |
+| Size cap | Everything before cargo's `Finished` marker is stripped and each embed is capped at 200 KB |
+| Raw artifact | `if: always()`, 30 days, untouched files in `rust/bench-out/` |
+
+`scripts/bench_npc_ffi.py` is CI tooling only. It is not part of the game, and the NPC training and inference
+pipeline stays pure Rust. The baseline in each row is the Rust direct-call figure. The ratio is the C-to-FFI
+figure divided by that baseline, with the standard's badges (`<=1.05x` parity, `<=1.5x` warn, `<=5.0x` error,
+otherwise overhead-dominated). Two runs of the same code will not be exactly 1.00x; do not read noise as overhead.
+The script was tested against real output from CI run #3 (see below), not invented samples.
+
+## Cross-platform axis
+
+The ISA-tier SIMD matrix from the standard does **not** apply: the NPC decision code has no dispatched SIMD
+backends, and its cost is branch and memory bound. The cross-OS/arch axis does apply, because the Galaxy A13 is
+aarch64 and the MacBook Pro is a separate x86-64 target.
+
+- `platforms = ubuntu-only` (default): `ubuntu-24.04` (x86-64). Pinned, not `ubuntu-latest`, because GitHub moves
+  `ubuntu-latest` to Ubuntu 26 on 2026-10-19 and results before and after would not be comparable.
+- `platforms = all`: adds `ubuntu-24.04-arm` (closest hosted proxy for the A13's aarch64 codegen) and `macos-latest`
+  (an Apple M1 virtual machine in run #4, so ARM, not the x86 MacBook Pro).
+
+Status: **all three legs passed in run #4** (ubuntu x86-64, Linux ARM64, macOS ARM64), including GCC/clang
+`-Werror -pedantic` builds of both C programs and the C ABI smoke test. That run used the earlier single-window
+benchmark, so its numbers are noisy (see the results log). None of these runners substitutes for measuring the
+phone and the MacBook directly. The 2010 MacBook Pro is Intel and old enough that no hosted runner resembles it.
+
+## Why the earlier summary was missing or poor
+
+Checked against the workflow as it stood at commit `9e8ff11`:
+
+- `npc-rust-ci.yml` never wrote to `$GITHUB_STEP_SUMMARY`, so it could not produce one.
+- `npc-rust-ffi-bench.yml` did have a summary step, but it only dumped raw text: no parsed table, no ratio, no
+  diagnostics and no size cap. That is the failure mode the standard's opening section describes.
+- Neither workflow set `pipefail`. GitHub's default `run` shell is `bash -e`, without `pipefail`, so a failing
+  `cargo run ... | tee file` would have passed. A green run was weaker evidence than it looked.
+
+I could not open the run page or job logs from the authoring environment (unauthenticated GitHub API rate limit),
+so I cannot say what the summary tab actually showed for runs #2 and #3. If the new workflow still shows no summary,
+check the run's **Summary** tab rather than the job log, and look for a `GITHUB_STEP_SUMMARY upload aborted` line.
+
+## Scenarios
+
+The Rust example and the C caller each run the same two scenarios at batch sizes 10, 100, 500 and 1000:
+
+- **`uniform`**: every NPC has identical input (an enemy, health 0.8, threat visible). Best case for branch prediction and caches. Kept so earlier results stay comparable.
+- **`mixed`**: a deterministic town-like population of 16384 NPCs: 15% merchants, 45% civilians, 15% guards, 20% enemies and 5% bosses. About 25% see a threat, health is pseudo-random, about 10% of non-merchants cannot move, and backends vary by role. The batch window slides across the pool on every call (step 977), so consecutive calls see different data and the branch predictor cannot memorize one batch.
+
+**Repetitions.** Each point is warmed up, then timed 9 times with about 4 million NPC decisions per repetition
+(roughly 25 to 60 ms each on a hosted x86 runner). The table reports the median, and the spread column is the slowest
+repetition divided by the fastest. Above 1.5x the point is marked unstable and its ratio should not be trusted. The
+earlier version timed one window of about 1 million decisions (5 to 10 ms), which is short enough for one scheduler
+hiccup on a shared runner to move a result by tens of percent. That was visible in run #4: the Rust-direct column
+jumped between 6.5 and 11.5 ns/NPC while the C column stayed within 6.4 to 6.7. A median cannot fix sustained
+interference, only isolated spikes, so a marked-unstable row means "rerun", not "regression". Repetition also
+raises the runtime of each program to roughly 3 seconds on x86 and will be several times that on a phone.
+
+A ratio below 0.8x is labelled "C faster" rather than parity. The Rust example calls the same exported function
+directly and the compiler may inline it, so the ratio is not guaranteed to be at least 1, but a large gap in
+that direction is more likely noise or a harness difference than a genuine FFI advantage.
+
+The generator (a splitmix64-style hash of the index) is duplicated in `decision_throughput.rs`, `ffi-smoke-test/bench.c` and the C# ABI test. Each also runs one untimed pass over the whole pool and prints a `# mixed_actions` line with the action histogram and an FNV-1a hash of every decision. The summary compares the Rust and C lines: equal means both saw the same data and the native library gave the same answers. Both programs also fail if any of the five actions never occurs, so the workload cannot silently degenerate. The pool (16384 x 32 bytes = 512 KiB) is larger than a typical L1 cache, so the mixed scenario also exercises some cache traffic that the uniform one does not.
+
+## Known limits of the current benchmark
+
+- The benchmark measures hosted-runner CPU time for the decision call only. Runner CPU models vary between runs of the same label, so compare runs on the same runner label and note when the image changes (the `ubuntu-latest` to Ubuntu 26 move on 2026-10-19 is the next known one).
+- `mixed` is one synthetic distribution. It has no correlation between neighbouring NPCs, no bursts (a battle where most NPCs suddenly see a threat) and no stationary-heavy market square. Treat it as closer to real data than `uniform`, not as a real town.
+- The Rust-direct and C-FFI numbers use separate harnesses. Differences include caller and compiler effects and are not a clean isolation of FFI overhead.
+- Nothing here measures Unity marshalling, ECS observation gathering, or action execution. Those are more likely bottlenecks than the decision function. `docs/npc/unity-integration.md` lists what is not yet measured.
+- No memory or allocation measurement yet. The standard's "measure" list from the project handover (memory usage, large-battle performance, ML inference overhead) is still open.
+
+## Results log
+
+C-to-FFI ns/NPC unless stated. `uniform` input only until the first run of the `mixed` scenario.
+
+| Date | Run | Runner | Batch 10 / 100 / 500 / 1000 | Notes |
+|---|---|---|---|---|
+| 2026-09-29 | Bench #3 | `ubuntu-latest` | 5.15 / 5.00 / 4.98 / 5.00 | After the rustfmt fix. Rust direct: 5.2 / 5.0 / 5.0 / 5.0. Uniform input, single window of about 1M decisions. |
+| 2026-09-29 | Bench #4 | `ubuntu-latest` (rustc 1.98.1) | 6.72 / 6.47 / 6.37 / 6.68 | Rust direct 11.5 / 11.0 / 9.0 / 6.5. All three runners passed. Single window; Rust-direct spread between batch sizes shows noise, not FFI cost. |
+| 2026-09-29 | Bench #4 | `ubuntu-24.04-arm` | 7.26 / 6.89 / 6.79 / 6.75 | Rust direct 7.2 / 6.8 / 6.8 / 6.7. Ratios 1.00 to 1.01. Steadiest of the three legs. |
+| 2026-09-29 | Bench #4 | `macos-latest` (Apple M1 virtual, arm64) | 5.73 / 9.88 / 7.70 / 5.78 | Rust direct 5.5 / 12.3 / 10.1 / 13.7. Ratios 0.42 to 1.04, so the run is too noisy to read a ratio from. |
+| pending | first run with `mixed` and repetitions | `ubuntu-24.04` | not run yet | Add uniform and mixed rows from the run summary, including the spread column. Runs before this one used `ubuntu-latest`. Sandbox numbers are not recorded here. |
+
+Reading run #4: the C-through-FFI figures sit in a narrow band of about 5.7 to 9.9 ns/NPC across all three runners,
+which is consistent with a cheap decision function. Nothing in it shows an FFI penalty. The Rust-direct column is
+less stable than the C column, so comparisons between the two columns from this run are not meaningful.
