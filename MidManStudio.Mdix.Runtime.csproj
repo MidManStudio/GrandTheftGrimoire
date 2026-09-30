@@ -9,11 +9,11 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>10.0.20506</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <RootNamespace></RootNamespace>
-    <ProjectGuid>{A6E3FA77-9C89-1C11-1055-D3BE0F3E7FF3}</ProjectGuid>
+    <RootNamespace>MidManStudio.Mdix.Unity</RootNamespace>
+    <ProjectGuid>{0D19285D-C858-3A27-13B3-9A71BCAE57BD}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <AssemblyName>Assembly-CSharp</AssemblyName>
+    <AssemblyName>MidManStudio.Mdix.Runtime</AssemblyName>
     <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <BaseDirectory>.</BaseDirectory>
@@ -27,7 +27,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <NoWarn>0169;USG0001</NoWarn>
-    <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -36,7 +36,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <NoWarn>0169;USG0001</NoWarn>
-    <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup>
     <NoConfig>true</NoConfig>
@@ -58,50 +58,40 @@
     <Analyzer Include="/Applications/Visual Studio.app/Contents/MonoBundle/Addins/MonoDevelop.Unity/Analyzers/Microsoft.Unity.Analyzers.dll" />
     <Analyzer Include="/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Tools/Unity.SourceGenerators/Unity.SourceGenerators.dll" />
     <Analyzer Include="/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Tools/Unity.SourceGenerators/Unity.Properties.SourceGenerator.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/AspectGenerator.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/Common.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/JobEntityGenerator.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/SystemGenerator.EntityQueryBulkOperations.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/SystemGenerator.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/Unity.Entities.Analyzer.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/SystemGenerator.LambdaJobs.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/SystemGenerator.SystemAPI.QueryBuilder.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/SystemGenerator.SystemAPI.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/Unity.Entities.Analyzer.CodeFixes.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/SystemGenerator.SystemAPI.Query.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/SourceGenerators/SystemGenerator.Common.dll" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets/MidManStudio/Gtg/Magic/Systems/FireballCastSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Camera/Presentation/CharacterCameraBridge.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Magic/Systems/FireballProjectileSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterLookSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Chemistry/ChemistryRecipe.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/NPC/Native/NPCNativeLib.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterComponents.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Magic/Presentation/SpellVfxMaterials.cs" />
-    <Compile Include="Assets/TutorialInfo/Scripts/Readme.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/NPC/Systems/NPCDecisionSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/NPC/Authoring/NPCAuthoring.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Components/ChemistryComponents.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterInputSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/NPC/Native/NPCManagedFallback.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Systems/ChemicalHazardSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterMovementSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/PhysicsRayUtility.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Magic/Authoring/SpellCasterAuthoring.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterAuthoring.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Magic/Components/SpellComponents.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Magic/Presentation/FireballPresentationSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/NPC/Native/NPCNativeTypes.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Presentation/ChemicalHazardPresentationSystem.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/NPC/Components/NPCComponents.cs" />
-    <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Systems/ChemistryReactionSystem.cs" />
+    <Compile Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/MdixBakeableAttribute.cs">
+      <Link>Runtime/MdixBakeableAttribute.cs</Link>
+    </Compile>
+    <Compile Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/MdixUnityExtensions.cs">
+      <Link>Runtime/MdixUnityExtensions.cs</Link>
+    </Compile>
+    <Compile Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/MdixInitializer.cs">
+      <Link>Runtime/MdixInitializer.cs</Link>
+    </Compile>
+    <Compile Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/MdixKeyStorage.cs">
+      <Link>Runtime/MdixKeyStorage.cs</Link>
+    </Compile>
+    <Compile Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/MdixAsset.cs">
+      <Link>Runtime/MdixAsset.cs</Link>
+    </Compile>
+    <Compile Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/MdixPaths.cs">
+      <Link>Runtime/MdixPaths.cs</Link>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Assets/EmaceArt/Slavic World Free/URP_Support/URP Info.txt" />
-    <None Include="Assets/EmaceArt/Slavic World Free/Thanks and checkout this/Info.txt" />
+    <None Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/Plugins/Windows/x86_64/mdix_ffi.dll">
+      <Link>Runtime/Plugins/Windows/x86_64/mdix_ffi.dll</Link>
+    </None>
+    <None Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/Plugins/MidManStudio.Mdix.Core.dll">
+      <Link>Runtime/Plugins/MidManStudio.Mdix.Core.dll</Link>
+    </None>
+    <None Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/MidManStudio.Mdix.Runtime.asmdef">
+      <Link>Runtime/MidManStudio.Mdix.Runtime.asmdef</Link>
+    </None>
+    <None Include="/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/link.xml">
+      <Link>Runtime/link.xml</Link>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
@@ -436,48 +426,20 @@
       <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Managed/UnityEngine/UnityEditor.UnityConnectModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Cecil.Awesome">
-      <HintPath>Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities.CodeGen/Unity.Cecil.Awesome.dll</HintPath>
+    <Reference Include="UnityEditor.Graphs">
+      <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Managed/UnityEditor.Graphs.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Collections.LowLevel.ILSupport">
-      <HintPath>Library/PackageCache/com.unity.collections@2.5.3/Unity.Collections.LowLevel.ILSupport/Unity.Collections.LowLevel.ILSupport.dll</HintPath>
+    <Reference Include="UnityEditor.OSXStandalone.Extensions">
+      <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/PlaybackEngines/MacStandaloneSupport/UnityEditor.OSXStandalone.Extensions.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="nunit.framework">
-      <HintPath>Library/PackageCache/com.unity.ext.nunit@2.0.3/net40/unity-custom/nunit.framework.dll</HintPath>
+    <Reference Include="UnityEditor.Android.Extensions">
+      <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/PlaybackEngines/AndroidPlayer/UnityEditor.Android.Extensions.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Analytics.Tracker">
-      <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/Unity.Analytics.Tracker.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Analytics.Editor">
-      <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/Unity.Analytics.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="System.IO.Hashing">
-      <HintPath>Library/PackageCache/com.unity.collections@2.5.3/Unity.Collections.Tests/System.IO.Hashing/System.IO.Hashing.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.Antlr3.Runtime">
-      <HintPath>Library/PackageCache/com.unity.visualscripting@1.9.1/Runtime/VisualScripting.Flow/Dependencies/NCalc/Unity.VisualScripting.Antlr3.Runtime.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>Library/PackageCache/com.unity.nuget.newtonsoft-json@3.2.1/Runtime/Newtonsoft.Json.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Mono.Cecil">
-      <HintPath>Library/PackageCache/com.unity.nuget.mono-cecil@1.11.5/Mono.Cecil.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="System.Runtime.CompilerServices.Unsafe">
-      <HintPath>Library/PackageCache/com.unity.collections@2.5.3/Unity.Collections.Tests/System.Runtime.CompilerServices.Unsafe/System.Runtime.CompilerServices.Unsafe.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Analytics.StandardEvents">
-      <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/AnalyticsStandardEvents/Unity.Analytics.StandardEvents.dll</HintPath>
+    <Reference Include="MidManStudio.Mdix.Core">
+      <HintPath>/Users/midman/Desktop/DixScript-Rust/com.midmanstudio.mdix/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Android.Types">
@@ -980,368 +942,16 @@
       <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/NetStandard/compat/2.1.0/shims/netfx/mscorlib.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Services.Analytics.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Services.Analytics.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.Purchasing.Stores">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.Stores.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="com.unity.cinemachine.editor">
-      <HintPath>Library/ScriptAssemblies/com.unity.cinemachine.editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Burst.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Burst.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Physics.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Physics.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.ScriptableBuildPipeline">
-      <HintPath>Library/ScriptAssemblies/Unity.ScriptableBuildPipeline.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Services.Core">
-      <HintPath>Library/ScriptAssemblies/Unity.Services.Core.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities.Build">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.Build.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipelines.Core.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities.UI.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.UI.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.Purchasing.SecurityCore">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.SecurityCore.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipelines.Core.ShaderLibrary">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.ShaderLibrary.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities.Hybrid.HybridComponents">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.Hybrid.HybridComponents.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Collections">
-      <HintPath>Library/ScriptAssemblies/Unity.Collections.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Deformations">
-      <HintPath>Library/ScriptAssemblies/Unity.Deformations.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="PPv2URPConverters">
-      <HintPath>Library/ScriptAssemblies/PPv2URPConverters.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.TextMeshPro">
-      <HintPath>Library/ScriptAssemblies/Unity.TextMeshPro.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEditor.Purchasing">
-      <HintPath>Library/ScriptAssemblies/UnityEditor.Purchasing.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VSCode.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VSCode.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipelines.Universal.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Mathematics.Extensions.Hybrid">
-      <HintPath>Library/ScriptAssemblies/Unity.Mathematics.Extensions.Hybrid.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.Purchasing">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipelines.Universal.Runtime">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Runtime.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Burst">
-      <HintPath>Library/ScriptAssemblies/Unity.Burst.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.Purchasing.SecurityStub">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.SecurityStub.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualStudio.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualStudio.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.Advertisements.Editor">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Advertisements.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="UnityEditor.UI">
       <HintPath>Library/ScriptAssemblies/UnityEditor.UI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Analytics">
-      <HintPath>Library/ScriptAssemblies/Analytics.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.Flow.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Flow.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Serialization.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Serialization.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipeline.Universal.ShaderLibrary">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipeline.Universal.ShaderLibrary.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.InputSystem.ForUI">
-      <HintPath>Library/ScriptAssemblies/Unity.InputSystem.ForUI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Transforms">
-      <HintPath>Library/ScriptAssemblies/Unity.Transforms.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Serialization">
-      <HintPath>Library/ScriptAssemblies/Unity.Serialization.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Scenes.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Scenes.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Services.Analytics">
-      <HintPath>Library/ScriptAssemblies/Unity.Services.Analytics.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities.UI">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.UI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities.Editor.Properties">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.Editor.Properties.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipelines.Universal.Shaders">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Shaders.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Searcher.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Searcher.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.State">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.State.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Scenes">
-      <HintPath>Library/ScriptAssemblies/Unity.Scenes.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.ScriptableBuildPipeline.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.ScriptableBuildPipeline.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipelines.Core.Runtime">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.Runtime.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.AI.Navigation">
-      <HintPath>Library/ScriptAssemblies/Unity.AI.Navigation.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Analytics.DataPrivacy">
-      <HintPath>Library/ScriptAssemblies/Unity.Analytics.DataPrivacy.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Rider.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Rider.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.Sprite.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Sprite.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities.Hybrid">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.Hybrid.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.Flow">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Flow.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Mathematics.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Mathematics.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Services.Core.Environments">
-      <HintPath>Library/ScriptAssemblies/Unity.Services.Core.Environments.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Physics">
-      <HintPath>Library/ScriptAssemblies/Unity.Physics.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.Purchasing.Codeless">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.Codeless.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Collections.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Collections.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Physics.Hybrid">
-      <HintPath>Library/ScriptAssemblies/Unity.Physics.Hybrid.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Services.Core.Analytics">
-      <HintPath>Library/ScriptAssemblies/Unity.Services.Core.Analytics.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.AI.Navigation.Editor.ConversionSystem">
-      <HintPath>Library/ScriptAssemblies/Unity.AI.Navigation.Editor.ConversionSystem.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Profiling.Core">
-      <HintPath>Library/ScriptAssemblies/Unity.Profiling.Core.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary">
-      <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.XR.LegacyInputHelpers">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.XR.LegacyInputHelpers.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.PlasticSCM.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.PlasticSCM.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.Advertisements">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Advertisements.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Timeline.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.Shared.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Shared.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.ShaderGraph.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.ShaderGraph.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Purchasing.Common">
-      <HintPath>Library/ScriptAssemblies/Purchasing.Common.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEditor.SpatialTracking">
-      <HintPath>Library/ScriptAssemblies/UnityEditor.SpatialTracking.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.Core">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Core.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="UnityEngine.SpatialTracking">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.SpatialTracking.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.Core.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Core.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEditor.XR.LegacyInputHelpers">
-      <HintPath>Library/ScriptAssemblies/UnityEditor.XR.LegacyInputHelpers.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Transforms.Hybrid">
-      <HintPath>Library/ScriptAssemblies/Unity.Transforms.Hybrid.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Timeline">
-      <HintPath>Library/ScriptAssemblies/Unity.Timeline.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.InputSystem">
-      <HintPath>Library/ScriptAssemblies/Unity.InputSystem.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.SettingsProvider.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.SettingsProvider.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.AI.Navigation.Updater">
-      <HintPath>Library/ScriptAssemblies/Unity.AI.Navigation.Updater.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.VisualScripting.State.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.State.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Mathematics">
-      <HintPath>Library/ScriptAssemblies/Unity.Mathematics.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.TextMeshPro.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.TextMeshPro.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.AI.Navigation.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.AI.Navigation.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Mathematics.Extensions">
-      <HintPath>Library/ScriptAssemblies/Unity.Mathematics.Extensions.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Cinemachine">
-      <HintPath>Library/ScriptAssemblies/Cinemachine.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Entities.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Entities.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.Tilemap.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="MidManStudio.Alembic.Samples.Playground.csproj">
-      <Project>{954ED032-78FE-39DC-72FD-51F4889A6361}</Project>
-      <Name>MidManStudio.Alembic.Samples.Playground</Name>
-    </ProjectReference>
-    <ProjectReference Include="MidManStudio.Alembic.csproj">
-      <Project>{4112D83A-2BB3-5C37-7D8A-9BCA91942FD6}</Project>
-      <Name>MidManStudio.Alembic</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)/Microsoft.CSharp.targets" />
   <Target Name="GenerateTargetFrameworkMonikerAttribute" />

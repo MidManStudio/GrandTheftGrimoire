@@ -52,7 +52,7 @@ namespace MidManStudio.Gtg.CharacterController
 
             if (gamepad != null)
             {
-                move += gamepad.leftStick.ReadValue();
+                move += (float2)gamepad.leftStick.ReadValue();
                 stick = gamepad.rightStick.ReadValue();
                 jumpPressed |= gamepad.buttonSouth.wasPressedThisFrame;
                 firePressed |= gamepad.rightTrigger.wasPressedThisFrame;

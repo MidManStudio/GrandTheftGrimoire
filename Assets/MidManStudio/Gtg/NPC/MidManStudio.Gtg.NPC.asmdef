@@ -1,8 +1,0 @@
-{
-    "name": "MidManStudio.Gtg.NPC",
-    "rootNamespace": "MidManStudio.Gtg.NPC",
-    "references": ["Unity.Entities", "Unity.Mathematics", "Unity.Collections"],
-    "includePlatforms": [], "excludePlatforms": [], "allowUnsafeCode": false,
-    "overrideReferences": false, "precompiledReferences": [], "autoReferenced": true,
-    "defineConstraints": [], "versionDefines": [], "noEngineReferences": false
-}
