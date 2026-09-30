@@ -14,10 +14,17 @@ only covers the code-level docs that do.
 
 - [`GrandTheftGrimoire/character-controller.md`](GrandTheftGrimoire/character-controller.md)
   -- kinematic character controller, ECS/Netcode for Entities, currently
-  Phase 0 (local movement only, no networking yet)
-- [`GrandTheftGrimoire/chemistry.md`](GrandTheftGrimoire/chemistry.md)
+  Phase 0 (local movement and look only, no networking yet)
+- [`GrandTheftGrimoire/camera.md`](GrandTheftGrimoire/camera.md)
+  -- `MidManStudio.Gtg.Camera`, GameObject presentation of the ECS
+  character and the Cinemachine third person and first person rig
+- [`GrandTheftGrimoire/magic.md`](GrandTheftGrimoire/magic.md)
+  -- `MidManStudio.Gtg.Magic`, spell casting and projectiles, first spell
+  is a fireball that flies straight
+- [`chemistry.md`](chemistry.md)
   -- `MidManStudio.Gtg.Chemistry`, the game-side glue around
-  `com.midmanstudio.alembic`; no code yet, currently design notes only
+  `com.midmanstudio.alembic`; a fireball impact runs a short Alembic
+  reaction and spawns a chemical hazard
 
 ## CI and Workflows
 

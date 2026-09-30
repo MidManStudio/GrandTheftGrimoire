@@ -1,15 +1,14 @@
 {
-    "name": "MidManStudio.Gtg.CharacterController",
-    "rootNamespace": "MidManStudio.Gtg.CharacterController",
+    "name": "MidManStudio.Gtg.Chemistry",
+    "rootNamespace": "MidManStudio.Gtg.Chemistry",
     "references": [
+        "MidManStudio.Gtg.Magic",
+        "MidManStudio.Alembic",
         "Unity.Entities",
-        "Unity.Entities.Hybrid",
         "Unity.Transforms",
-        "Unity.Physics",
         "Unity.Mathematics",
         "Unity.Burst",
-        "Unity.Collections",
-        "Unity.InputSystem"
+        "Unity.Collections"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
