@@ -86,8 +86,10 @@
     <Compile Include="Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Components/ChemistryComponents.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterInputSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterJumpSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/NPC/Native/NPCManagedFallback.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Systems/ChemicalHazardSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterGravitySystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterMovementSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/CharacterController/PhysicsRayUtility.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Magic/Authoring/SpellCasterAuthoring.cs" />
@@ -95,9 +97,11 @@
     <Compile Include="Assets/MidManStudio/Gtg/Magic/Components/SpellComponents.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Magic/Presentation/FireballPresentationSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/NPC/Native/NPCNativeTypes.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterWalkSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Presentation/ChemicalHazardPresentationSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/NPC/Components/NPCComponents.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Chemistry/Systems/ChemistryReactionSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/CharacterController/CharacterGroundSystem.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets/EmaceArt/Slavic World Free/URP_Support/URP Info.txt" />
