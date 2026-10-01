@@ -11,8 +11,8 @@ using Unity.Transforms;
 namespace MidManStudio.Gtg.CharacterController
 {
     /// <summary>
-    /// Integrates look input into yaw and pitch, and turns the entity to face
-    /// the yaw. Pitch is clamped and only stored, since the body stays upright.
+    /// Look module. Adds the frame's look change to yaw and pitch, clamps pitch, and
+    /// turns the entity to the yaw. Pitch is only stored, the body stays upright.
     /// </summary>
     [UpdateAfter(typeof(CharacterInputSystem))]
     [BurstCompile]
@@ -21,24 +21,28 @@ namespace MidManStudio.Gtg.CharacterController
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            foreach (var (look, transform, input, settings) in
-                     SystemAPI.Query<
-                         RefRW<CharacterLook>,
-                         RefRW<LocalTransform>,
-                         RefRO<CharacterInput>,
-                         RefRO<CharacterMoveSettings>>()
-                         .WithAll<CharacterTag>())
-            {
-                float2 delta = input.ValueRO.Look;
-                float yaw = math.fmod(look.ValueRO.Yaw + delta.x, 360f);
-                float pitch = math.clamp(
-                    look.ValueRO.Pitch - delta.y,
-                    settings.ValueRO.MinPitch,
-                    settings.ValueRO.MaxPitch);
+            new LookJob().ScheduleParallel();
+        }
 
-                look.ValueRW.Yaw = yaw;
-                look.ValueRW.Pitch = pitch;
-                transform.ValueRW.Rotation = quaternion.RotateY(math.radians(yaw));
+        [BurstCompile]
+        public partial struct LookJob : IJobEntity
+        {
+            public void Execute(
+                ref CharacterLook look,
+                ref LocalTransform transform,
+                in CharacterInput input,
+                in CharacterSettings settings,
+                in CharacterFeatures features)
+            {
+                if (!features.Has(CharacterFeature.Look))
+                {
+                    return;
+                }
+
+                float yaw = math.fmod(look.Yaw + input.Look.x, 360f);
+                look.Yaw = yaw;
+                look.Pitch = math.clamp(look.Pitch - input.Look.y, settings.MinPitch, settings.MaxPitch);
+                transform.Rotation = quaternion.RotateY(math.radians(yaw));
             }
         }
     }

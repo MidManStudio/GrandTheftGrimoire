@@ -10,7 +10,6 @@ using Unity.Mathematics;
 namespace MidManStudio.Gtg.Chemistry
 {
     /// <summary>Grows each hazard to its full radius, then removes it when its duration ends.</summary>
-    [UpdateAfter(typeof(ChemistryReactionSystem))]
     [BurstCompile]
     public partial struct ChemicalHazardSystem : ISystem
     {
@@ -22,23 +21,34 @@ namespace MidManStudio.Gtg.Chemistry
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            double now = SystemAPI.Time.ElapsedTime;
             EntityCommandBuffer ecb = SystemAPI
                 .GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
 
-            foreach (var (hazard, entity) in SystemAPI.Query<RefRW<ChemicalHazard>>().WithEntityAccess())
+            new HazardJob
             {
-                ChemicalHazard value = hazard.ValueRO;
-                float age = (float)(now - value.SpawnTime);
-                if (age >= value.Duration)
+                Now = SystemAPI.Time.ElapsedTime,
+                Ecb = ecb.AsParallelWriter(),
+            }.ScheduleParallel();
+        }
+
+        [BurstCompile]
+        public partial struct HazardJob : IJobEntity
+        {
+            public double Now;
+            public EntityCommandBuffer.ParallelWriter Ecb;
+
+            public void Execute([ChunkIndexInQuery] int sortKey, Entity entity, ref ChemicalHazard hazard)
+            {
+                float age = (float)(Now - hazard.SpawnTime);
+                if (age >= hazard.Duration)
                 {
-                    ecb.DestroyEntity(entity);
-                    continue;
+                    Ecb.DestroyEntity(sortKey, entity);
+                    return;
                 }
 
-                float grown = value.GrowDuration <= 0f ? 1f : math.saturate(age / value.GrowDuration);
-                hazard.ValueRW.CurrentRadius = value.MaxRadius * grown;
+                float grown = hazard.GrowDuration <= 0f ? 1f : math.saturate(age / hazard.GrowDuration);
+                hazard.CurrentRadius = hazard.MaxRadius * grown;
             }
         }
     }

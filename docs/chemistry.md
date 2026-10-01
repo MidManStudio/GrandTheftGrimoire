@@ -143,10 +143,9 @@ events).
 
 ## Modules
 
-Files are in `Assets/MidManStudio/Gtg/Chemistry/`. The assembly references
-`MidManStudio.Alembic`, so `com.midmanstudio.alembic` and its
-`com.midmanstudio.mdix` dependency must be installed or the project will not
-compile. Spell impacts come from `GrandTheftGrimoire/magic.md`.
+Files are in `Assets/MidManStudio/Gtg/Chemistry/`. The code needs the
+`com.midmanstudio.alembic` package installed, because the reaction system uses
+its C# bindings. Spell impacts come from `GrandTheftGrimoire/magic.md`.
 
 ### `ChemistryComponents.cs`
 
@@ -180,35 +179,43 @@ Decisions:
 
 ### `ChemistryReactionSystem.cs`
 
-Managed system that reads the spell impact buffer and, for each impact, runs
-the recipe in Alembic and then creates a `ChemicalHazard` at the hit point.
-Alembic is the trigger and confirmation, and it does not choose the radius.
+Managed system that reads the `SpellImpact` entities and, for each one, runs the
+recipe in Alembic, creates a `ChemicalHazard` at the hit point, and destroys the
+impact entity. Alembic is the trigger and confirmation, and it does not choose
+the radius.
 
 Decisions:
 
 - One persistent native context, created on first use and destroyed with the
-  system. Each reaction spawns its atoms, initializes velocities, steps until
-  a bond forms or the step budget ends, then despawns its own atoms.
-- The reaction runs inside the frame of the impact. The cost is bounded by
-  the step budget and six atoms.
+  system. Each reaction spawns its atoms, initializes velocities, steps until a
+  bond forms or the step budget ends, then despawns its own atoms.
+- The impacts are copied out of the query before any entity is created or
+  destroyed, because a structural change is not allowed while a query is being
+  iterated.
+- The system has no ordering attribute. It reads whatever impact entities exist
+  when it runs. The projectile job creates them through the end of simulation
+  command buffer, so they are handled on the next frame.
+- The reaction runs inside the frame of the impact. The cost is bounded by the
+  step budget and six atoms.
 - Bond events are read after each step and the formed ones are counted.
-  Alembic's own note recommends one read per frame, but reading more often
-  only splits events across reads, and the counts are summed here.
+  Alembic's own note recommends one read per frame, but reading more often only
+  splits events across reads, and the counts are summed here.
 - The native library can be missing or fail to load. The system checks
-  `ChemistryLib.IsAvailable` and the struct sizes once, logs, and carries on.
-  An unconfirmed reaction still spawns its hazard, marked unconfirmed, so
-  gameplay can be tested without the library. `RequireConfirmation` on the
-  recipe turns that into a hard requirement.
+  `ChemistryLib.IsAvailable` and the struct sizes once, logs, and carries on. An
+  unconfirmed reaction still spawns its hazard, marked unconfirmed, so gameplay
+  can be tested without the library. `RequireConfirmation` on the recipe turns
+  that into a hard requirement.
 - Not Burst compiled, since P/Invoke calls cannot be.
 
 ### `ChemicalHazardSystem.cs`
 
-Sets `CurrentRadius` from the hazard's age and removes it when its duration
-ends. The Explosion recipe has a grow time of zero, so it is at full radius
-on the frame it spawns, as the archetype note above describes. The radius is
-computed here and not in the presentation, so it stays a simulation value.
-Time comes from the variable rate world clock, which Phase 1 networking will
-replace with the tick.
+An `ISystem` with a nested `IJobEntity`. The job sets `CurrentRadius` from the
+hazard's age and removes the hazard through a command buffer when its duration
+ends. The Explosion recipe has a grow time of zero, so it is at full radius on
+the frame it spawns, as the archetype note above describes. The radius is
+computed here and not in the presentation, so it stays a simulation value. Time
+comes from the variable rate world clock, which Phase 1 networking will replace
+with the tick.
 
 ### `ChemicalHazardPresentationSystem.cs`
 
@@ -216,11 +223,6 @@ Draws each hazard as a translucent sphere sized from `CurrentRadius`. Orange
 means Alembic confirmed the reaction, yellow means it did not. Because it
 reads only the simulation radius, it also works as the debug view that the
 note above asks for.
-
-### `MidManStudio.Gtg.Chemistry.asmdef`
-
-References the Magic assembly (for the impact event), Alembic, Entities,
-Transforms, Mathematics, Burst and Collections.
 
 ## Known gaps
 
@@ -235,4 +237,9 @@ None yet. Nothing here is built or tested by CI.
 
 ## Fixes and Problems
 
-None yet. Not compiled or run against the Editor at the time of writing.
+### `ChemistryReactionSystem.cs`
+
+- It ordered itself after `FireballProjectileSystem` and read a shared event
+  buffer from that system. Because that system never started, the log carried a
+  warning about the ordering. The buffer is replaced by impact entities and the
+  ordering attribute is removed.

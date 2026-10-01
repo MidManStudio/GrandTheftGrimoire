@@ -3,6 +3,7 @@
 // live in docs/GrandTheftGrimoire/character-controller.md, section "CharacterInputSystem.cs"
 // ============================================================================
 
+using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -11,10 +12,9 @@ using UnityEngine.InputSystem;
 namespace MidManStudio.Gtg.CharacterController
 {
     /// <summary>
-    /// Phase 0 input gathering. Polls the local devices and writes the result
-    /// into every <see cref="CharacterInput"/>. Correct for one local player only.
-    /// Replaced, not extended, when Netcode for Entities input arrives.
-    /// Not Burst compiled because it reads managed Input System objects.
+    /// Phase 0 input gathering. The system polls the local devices on the main thread
+    /// and a job writes the result into every <see cref="CharacterInput"/>. Correct for
+    /// one local player only, replaced in Phase 1 by networked input.
     /// </summary>
     public partial struct CharacterInputSystem : ISystem
     {
@@ -24,7 +24,6 @@ namespace MidManStudio.Gtg.CharacterController
             Mouse mouse = Mouse.current;
             Gamepad gamepad = Gamepad.current;
             bool cursorLocked = Cursor.lockState == CursorLockMode.Locked;
-            float deltaTime = SystemAPI.Time.DeltaTime;
 
             float2 move = float2.zero;
             float2 mouseDelta = float2.zero;
@@ -42,7 +41,7 @@ namespace MidManStudio.Gtg.CharacterController
                 firePressed |= keyboard.fKey.wasPressedThisFrame;
             }
 
-            // Mouse look and click fire only count while the cursor is captured,
+            // Mouse look and mouse fire count only while the cursor is captured,
             // so the click that captures it does not also shoot.
             if (mouse != null && cursorLocked)
             {
@@ -52,24 +51,45 @@ namespace MidManStudio.Gtg.CharacterController
 
             if (gamepad != null)
             {
-                move += (float2)gamepad.leftStick.ReadValue();
+                move += gamepad.leftStick.ReadValue();
                 stick = gamepad.rightStick.ReadValue();
                 jumpPressed |= gamepad.buttonSouth.wasPressedThisFrame;
                 firePressed |= gamepad.rightTrigger.wasPressedThisFrame;
             }
 
-            move = math.length(move) > 1f ? math.normalize(move) : move;
-
-            foreach (var (input, settings) in
-                     SystemAPI.Query<RefRW<CharacterInput>, RefRO<CharacterMoveSettings>>()
-                         .WithAll<CharacterTag>())
+            if (math.length(move) > 1f)
             {
-                CharacterMoveSettings cfg = settings.ValueRO;
-                input.ValueRW.Move = move;
-                input.ValueRW.Look = mouseDelta * cfg.MouseDegreesPerPixel
-                                     + stick * cfg.StickDegreesPerSecond * deltaTime;
-                input.ValueRW.JumpPressed = jumpPressed;
-                input.ValueRW.FirePressed = firePressed;
+                move = math.normalize(move);
+            }
+
+            new InputJob
+            {
+                DeltaTime = SystemAPI.Time.DeltaTime,
+                Move = move,
+                MouseDelta = mouseDelta,
+                Stick = stick,
+                JumpPressed = jumpPressed,
+                FirePressed = firePressed,
+            }.Schedule();
+        }
+
+        [BurstCompile]
+        public partial struct InputJob : IJobEntity
+        {
+            public float DeltaTime;
+            public float2 Move;
+            public float2 MouseDelta;
+            public float2 Stick;
+            public bool JumpPressed;
+            public bool FirePressed;
+
+            public void Execute(ref CharacterInput input, in CharacterSettings settings)
+            {
+                input.Move = Move;
+                input.Look = MouseDelta * settings.MouseDegreesPerPixel
+                             + Stick * settings.StickDegreesPerSecond * DeltaTime;
+                input.JumpPressed = JumpPressed;
+                input.FirePressed = FirePressed;
             }
         }
     }

@@ -1,96 +1,174 @@
 # CharacterController
 
 Custom kinematic character controller, built on ECS and (once Phase 1
-lands) networked with Netcode for Entities. See
-`GTG_REPO_CONVENTIONS.md` section 5 for why this system is ECS rather than
-MonoBehaviour, and the gameplay design reference for what the character
-needs to do later (melee, chemistry-thrown weapons, Excalibur, summoned
-weapons).
+lands) networked with Netcode for Entities. See `GTG_REPO_CONVENTIONS.md`
+section 5 for why this system is ECS rather than MonoBehaviour, and the
+gameplay design reference for what the character needs to do later (melee,
+chemistry thrown weapons, Excalibur, summoned weapons).
 
-## Current phase
+## Overview
 
-**Phase 0: local movement only, no networking.** The goal is narrow on
-purpose: prove the kinematic movement feels right for one local player
-before adding Netcode for Entities ghosting and prediction on top of it.
+The controller is a set of small modules that share one data component. Each
+module is its own system, gated by a flag on the character, so a behavior can
+be switched off at runtime or deleted from the project without touching the
+others. The structure follows the feature flags and extension hook points of
+`boaheck/TheFirstPerson`, and the collision method follows Unity's Character
+Controller package, without using either as a dependency.
 
-Phase 0 now covers mouse and stick look, yaw-relative movement, a fixed
-ground check, and the fire input that the Magic system reads. The camera
-lives in `camera.md`, and the fireball in `magic.md`.
+The character is a kinematic body. It has a `CapsuleCollider` baked into a
+`PhysicsCollider`, and no rigidbody. Nothing pushes it, the movement system
+moves it by sweeping that capsule through the physics world.
 
-Phase 1 replaces `CharacterInputSystem` with per-connection networked input
-(`IInputComponentData`), adds ghost components for position, velocity and
-grounded state, and moves the simulation into the prediction loop. The
-movement math should not change much, only how inputs arrive and how
-outputs replicate.
+Phase 0 is local movement for one player, with no networking. Phase 1
+replaces `CharacterInputSystem` with networked input, adds ghost components,
+and moves the simulation into the prediction loop. The movement math should
+not change much.
+
+## Pipeline and feature flags
+
+Modules run in this order inside the simulation group, each with an
+`UpdateAfter` on the one before it:
+
+1. `CharacterInputSystem`, device polling.
+2. `CharacterLookSystem`, feature `Look`.
+3. `CharacterGroundSystem`, always runs.
+4. `CharacterWalkSystem`, feature `Move`.
+5. `CharacterJumpSystem`, feature `Jump`.
+6. `CharacterGravitySystem`, feature `Gravity`.
+7. `CharacterMovementSystem`, the collide and slide step.
+8. `FireballCastSystem`, feature `Cast`, in the Magic system.
+
+Every flag is a bit of `CharacterFeatures.Enabled`. The authoring component
+has one checkbox per flag, and the dev overlay in the camera bridge flips them
+while the game runs. Any system can switch a behavior by writing the flag, for
+example a stun clears `Move` and `Jump`, and a flight mode clears `Gravity`.
+
+Extension hook points follow the same idea as the hooks in TheFirstPerson. A
+new module is a system ordered between two existing ones, and it edits
+`CharacterMotor`. A dash module sits after `CharacterJumpSystem` and before
+`CharacterGravitySystem`. Anything that changes the final position goes
+before `CharacterMovementSystem`. Adding a module means adding one flag to
+`CharacterFeature`, one authoring checkbox, and one system file.
 
 ## Modules
 
-Files are flat in `Assets/MidManStudio/Gtg/CharacterController/`. The
+Files are in `Assets/MidManStudio/Gtg/CharacterController/`, flat. The
 `Components/`, `Systems/` and `Authoring/` split from the repo conventions
-is pending, because moving files needs a move commit and cannot be done
-through a replacements drop.
+is pending, because moving files needs a move commit and a replacements drop
+cannot do that.
 
 ### `CharacterComponents.cs`
 
-All ECS data for the character: tag, baked settings, per-frame input, look
-angles, vertical velocity and ground state. `CharacterLook` stores yaw and
-pitch in degrees with the Unity sign convention (positive pitch looks down),
-so the camera rig and the spell aim read the same numbers. `CharacterInput.Look`
-is already in degrees for the frame, so the systems after the input system
-never see device units.
+All ECS data for the character: the tag, the `CharacterFeature` flags and
+`CharacterFeatures`, the baked `CharacterSettings`, the per-frame
+`CharacterInput`, `CharacterLook`, and `CharacterMotor`. `CharacterLook` stores
+yaw and pitch in degrees with the Unity sign convention, so a positive pitch
+looks down, and the camera rig and the spell aim read the same numbers.
+`CharacterInput.Look` is already in degrees for the frame. `CharacterMotor`
+carries the horizontal velocity, the vertical velocity, the grounded flag, the
+ground normal, and the time since the character last stood on ground. The
+modules write it and the movement system reads it.
 
 ### `CharacterAuthoring.cs`
 
-Editor-only `MonoBehaviour` and `Baker`. It goes on an empty GameObject
-inside a SubScene. The pivot of that GameObject is the character's feet, and
-the ground ray and the muzzle offset both measure from it. The starting yaw
-comes from the GameObject's Y rotation. The body mesh is not part of this
-object, it lives outside the SubScene and is moved by the camera bridge.
+Editor-only `MonoBehaviour` and `Baker`. It goes on an empty GameObject inside
+a SubScene, and the pivot of that object is the feet. It requires a
+`CapsuleCollider`, which Unity Physics bakes into the entity's
+`PhysicsCollider` on its own, so the controller needs no `Physics Shape`
+component. That component exists only as a sample in the Physics package and
+is not part of it. `Reset` shapes a new capsule to 2 m tall, radius 0.5, centre
+at half the height. If the collider is changed, keep its centre at half the
+height so the pivot stays at the feet. All tuning values and the module
+checkboxes are baked here. The starting yaw comes from the object's Y rotation.
 
 ### `CharacterInputSystem.cs`
 
-Polls keyboard, mouse and gamepad through the new Input System and writes
-the result into every `CharacterInput`. Not Burst compiled, since it reads
-managed Input System objects. Mouse look and mouse fire count only while the
-cursor is locked, so the click that captures the cursor does not also fire.
-Fire is left mouse, F, or right trigger. Replaced, not extended, in Phase 1.
+Polls keyboard, mouse and gamepad through the Input System on the main thread,
+then a job writes the result into every `CharacterInput`. Not Burst compiled,
+since it reads managed Input System objects. Mouse look and mouse fire count
+only while the cursor is locked, so the click that captures the cursor does not
+also fire. Fire is left mouse, F, or right trigger. Replaced in Phase 1.
 
 ### `CharacterLookSystem.cs`
 
 Adds the frame's look change to yaw and pitch, clamps pitch to the baked
-limits, and rotates the entity to the yaw. Pitch is stored only, the body
-stays upright.
+limits, and turns the entity to the yaw. Pitch is only stored, the body stays
+upright.
+
+### `CharacterGroundSystem.cs`
+
+Sweeps the character's own capsule a short way down, ignoring the character's
+own entity, and records whether the surface is walkable by comparing its normal
+with the slope limit. It skips the sweep while the vertical speed is positive,
+because the sweep would still see the floor just after takeoff and cancel the
+jump. It also tracks the time since the last grounded frame, which the jump
+module uses for coyote time.
+
+### `CharacterWalkSystem.cs`
+
+Turns the move input into a target velocity relative to the yaw, then moves the
+horizontal velocity toward it at the baked acceleration. In the air only the
+air control share of that acceleration applies. With the `Move` flag off the
+target is zero, so the character glides to a stop instead of freezing.
+
+### `CharacterJumpSystem.cs`
+
+Jumps when the button went down and the character is grounded or left the
+ground within the coyote time. A jump sets the time since grounded past the
+coyote window, so a second press in the air does nothing.
+
+### `CharacterGravitySystem.cs`
+
+Adds gravity to the vertical speed up to the fall cap. While grounded it holds
+a small downward speed so the character follows the floor down slopes and over
+small drops. With the `Gravity` flag off the vertical speed is left alone.
 
 ### `CharacterMovementSystem.cs`
 
-Ground check by ray, gravity, jump, and a direct position move. Movement is
-relative to the current yaw. The ray starts `GroundSkin` above the feet and
-reaches `GroundCheckDistance` below them, plus the distance the character
-will fall this frame, so a fast fall cannot step through thin ground. Ground
-is ignored while the vertical speed is positive. When grounded and not
-jumping, the feet snap to the hit height.
+The collide and slide step. It builds the frame's displacement from the motor
+velocities, sweeps the capsule along it, stops a skin width before the surface
+it hits, removes the part of the motion that points into the surface, and
+repeats up to the baked iteration count. A surface facing up zeroes a downward
+vertical speed, and a surface facing down zeroes an upward one. The skin width
+keeps the capsule from resting in contact, which would make every later sweep
+report a hit at distance zero.
 
 ### `PhysicsRayUtility.cs`
 
-Casts a ray and returns the closest hit that does not belong to a given
-entity. The ground check and the fireball both use it, so the caster never
-hits itself if a collider is ever baked onto it.
+Two queries that skip a given entity. `CastRayIgnoring` is used by the fireball.
+`CastColliderIgnoring` sweeps the character's collider and also skips surfaces
+the sweep is moving away from or along. Both are needed because the character's
+own collider is in the physics world.
 
-### `MidManStudio.Gtg.CharacterController.asmdef`
+## References
 
-References Entities, Entities.Hybrid, Transforms, Physics, Mathematics,
-Burst, Collections and InputSystem. `Baker<T>` lives in
-`Unity.Entities.Hybrid`, so authoring code does not compile without it.
+Three repositories were read for this controller and none is a dependency.
+
+- `Mid-D-Man/CharacterControllerSamples` and the Unity Character Controller
+  package it ships with. Taken: the capsule collider and no rigidbody
+  authoring, grounding by a collider sweep, a small collision offset, and the
+  repeated sweep and slide loop. Not taken: the package itself. Its latest
+  version needs Entities 1.3.15 and Unity 2022.3.50f1, newer than this
+  project, and it brings a large amount of machinery the game does not need yet.
+- `boaheck/TheFirstPerson`. Taken: one flag per feature, a shared state struct,
+  hook points between input, movement calculation and the move itself, coyote
+  time, and air control. Not yet taken: variable jump height, jump buffering,
+  crouch, sprint, slope sliding, momentum.
+- `dyrdadev/first-person-controller-for-unity`. Read for its split between an
+  input interface and the controller, and its signals for effects such as
+  footsteps and head bob. The signal idea is the likely model for presentation
+  events later.
 
 ## Known gaps at this phase
 
-- Ground check is a single straight ray, not a shape cast. There is no
-  slope or step handling. Fine for flat test geometry.
-- The character has no collider of its own. Other systems that need to hit
-  the player will need one added later.
+- No step handling. Stairs and curbs block the character.
+- No moving platforms and no pushing of other bodies.
+- Slope handling is a limit on walkable angle. Steeper surfaces are slid along.
+- The collision query cost grows with the number of sweeps. At four iterations
+  and one character it is small.
 - Written against the documented Entities 1.x, Unity Physics and Input System
-  APIs and checked against Unity's official samples, but not compiled in this
-  environment. The first Editor open is the real test.
+  APIs and checked against the package sources for version 1.3.10, but not
+  compiled in this environment. The first Editor open is the real test.
 
 ## CI and Workflows
 
@@ -99,71 +177,42 @@ Burst, Collections and InputSystem. `Baker<T>` lives in
 
 ## Fixes and Problems
 
-### Editor startup errors (Burst, world initialization)
+### Startup failures in the ECS world
 
-The console at first Play showed four kinds of message. None of the stack
-frames were GTG code, every failing system was a Unity package system.
-
-- Many warnings of the form "Ignoring invalid [UpdateAfter] attribute"
-  on Unity.Scenes, Unity.Entities and Unity.Physics systems. These are a
-  consequence of the next item: the target systems were never created, so
-  the sorter cannot find them.
-- A `JobTempAlloc` leak warning. Also a consequence of the failed startup.
-- Repeated `InvalidOperationException: Illegal instruction executed`,
-  thrown from Burst compiled code. The path is
-  `World.GetOrCreateSystemsAndLogException`, then a system creation that
-  fails, then the cleanup that destroys the system entity, which crashes in
-  the Burst compiled `ChunkDataUtility.RemoveFromEnabledBitsHierarchicalData`.
-  The traces show the same crash for each failing system creation, so it
-  is not tied to one system.
-- `ArgumentException: The entity does not exist` in
-  `EditorSubSceneLiveConversionSystem.OnUpdate`. Its system entity was
-  destroyed by the same failed cleanup.
-
-Status: root cause not yet confirmed. Working theory is Burst code
-generation on the development machine, a mid 2010 MacBook Pro whose CPU has
-no AVX and an older SSE level. "Illegal instruction executed" from Burst
-code is the reported symptom of that class of problem, and reports of the
-same message say the code runs with Burst switched off.
-
-Check: turn off `Jobs > Burst > Enable Compilation`, enter Play, and read
-the console. A clean console confirms the theory. Then leave Burst off for
-Editor work on that machine, and for player builds restrict the Burst target
-CPU list under `Project Settings > Burst AOT Settings` to SSE2 and SSE4.
-
-Version note: the project uses editor 2022.3.13f1 with Entities and Physics
-1.3.10. The package changelogs raise the editor minimum in a later 1.3.x
-release, so if the packages are upgraded the editor has to be upgraded with
-them. A newer 2022.3 patch is also a cheap second thing to try if the Burst
-check does not clear the errors.
-
-The raw log that used to sit in this file was about 1,660 lines of repeated
-traces and was removed. The messages above are the complete set of distinct
-ones.
+The console errors the project has been logging are covered in
+`generalprobs.md`. The short version: the world fails while creating Unity's own
+systems, so the physics world and command buffer singletons never exist, and
+every system that waits for them never updates. That is why the character did
+not move, no gravity showed, and the fireball did not fire. It is not caused by
+controller code. Status there.
 
 ### `CharacterMovementSystem.cs`
 
-- The ground ray started at the entity pivot and reached only 0.2 m down.
-  With the pivot in the middle of a capsule the ray never reached the floor,
-  so the character fell forever. Fixed by making the pivot the feet, starting
-  the ray at a small skin height above them, and snapping to the hit.
-- A jump was cancelled one frame after takeoff, because the ray still saw the
-  floor and reset the vertical speed. Fixed by ignoring ground while rising.
-- A fall faster than the ray length could step through thin ground. Fixed by
-  extending the ray by the fall distance of the frame.
-- A collider on the character would have made the ray hit the character
-  itself. Fixed by ignoring the caster's own entity.
-- Movement was world-axis relative. It is now relative to yaw.
+- The first version had no collision except one ray under the pivot. It walked
+  through walls and the ray started at the pivot, so with the pivot in the middle
+  of a capsule the floor was never reached. Replaced by the capsule sweep with
+  the feet as the pivot.
+- The first version waited for the physics world and had no way to show that it
+  was waiting. The camera bridge overlay now reports the missing singletons.
+- A fall faster than the probe length could step through thin ground. The sweep
+  now runs along the real motion, so the step cannot skip a surface.
 
-### `CharacterAuthoring.cs` and `MidManStudio.Gtg.CharacterController.asmdef`
+### `CharacterGroundSystem.cs`
 
-- The asmdef did not reference `Unity.Entities.Hybrid`, where `Baker<T>`
-  is defined. The nested `Baker` class then binds to itself and the compiler
-  reports CS0308. Fixed by adding the reference.
+- A jump was cancelled one frame after takeoff, because the check still saw the
+  floor. Ground is now ignored while the vertical speed is positive.
+
+### `CharacterAuthoring.cs`
+
+- The entity had no collider, which is why nothing could stand on or collide
+  with it. It now requires a `CapsuleCollider`, baked by Unity Physics.
+- An earlier assembly definition lacked `Unity.Entities.Hybrid`, so `Baker<T>`
+  did not resolve and the compiler reported CS0308. Asmdefs were removed from
+  the repo, see `GTG_REPO_CONVENTIONS.md`.
 
 ### `CharacterInputSystem.cs`
 
-- Look was passed on in device units. It is now converted to degrees at
-  input time, using the baked sensitivity.
-- Mouse look was live while the cursor was free. It is now ignored unless
-  the cursor is locked.
+- Look was passed on in device units. It is now in degrees, using the baked
+  sensitivity.
+- Mouse look was live while the cursor was free. It is now ignored unless the
+  cursor is locked.

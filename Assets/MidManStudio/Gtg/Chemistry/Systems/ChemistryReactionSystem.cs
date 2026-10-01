@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using MidManStudio.Alembic.Core;
 using MidManStudio.Gtg.Magic;
-using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -23,12 +22,13 @@ namespace MidManStudio.Gtg.Chemistry
     /// Managed on purpose: the native calls cannot be Burst compiled.
     /// </summary>
     [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(FireballProjectileSystem))]
     public partial class ChemistryReactionSystem : SystemBase
     {
         private const byte BondEventFormed = 0;
 
         private readonly List<AtomHandle> _handles = new List<AtomHandle>();
+        private readonly List<SpellImpact> _impacts = new List<SpellImpact>();
+        private readonly List<Entity> _impactEntities = new List<Entity>();
         private IntPtr _context;
         private bool _nativeChecked;
         private bool _nativeReady;
@@ -53,7 +53,7 @@ namespace MidManStudio.Gtg.Chemistry
 
         protected override void OnCreate()
         {
-            RequireForUpdate<SpellImpactEvent>();
+            RequireForUpdate<SpellImpact>();
         }
 
         protected override void OnDestroy()
@@ -67,25 +67,25 @@ namespace MidManStudio.Gtg.Chemistry
 
         protected override void OnUpdate()
         {
-            DynamicBuffer<SpellImpactEvent> buffer = SystemAPI.GetSingletonBuffer<SpellImpactEvent>(true);
-            if (buffer.Length == 0)
+            // Copy first: creating hazard entities is a structural change and is not
+            // allowed while a query is being iterated.
+            _impacts.Clear();
+            _impactEntities.Clear();
+            foreach (var (impact, entity) in SystemAPI.Query<RefRO<SpellImpact>>().WithEntityAccess())
             {
-                return;
+                _impacts.Add(impact.ValueRO);
+                _impactEntities.Add(entity);
             }
 
-            // Copy first: creating entities below is a structural change and
-            // would invalidate the buffer handle.
-            NativeArray<SpellImpactEvent> impacts = buffer.ToNativeArray(Allocator.Temp);
             double now = SystemAPI.Time.ElapsedTime;
-            for (int i = 0; i < impacts.Length; i++)
+            for (int i = 0; i < _impacts.Count; i++)
             {
-                HandleImpact(impacts[i], now);
+                HandleImpact(_impacts[i], now);
+                EntityManager.DestroyEntity(_impactEntities[i]);
             }
-
-            impacts.Dispose();
         }
 
-        private void HandleImpact(SpellImpactEvent impact, double now)
+        private void HandleImpact(SpellImpact impact, double now)
         {
             ChemistryRecipe recipe = ChemistryRecipe.ForSpell(impact.Kind);
             ReactionResult result = RunReaction(recipe);

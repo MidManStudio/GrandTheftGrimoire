@@ -1,3 +1,103 @@
+# General problems
+
+Running notes on errors and warnings seen in the Editor, with the current
+reading of each. The raw console text pasted on 2026-09-30 is kept at the
+bottom of this file.
+
+## Analysis, 2026-09-30
+
+Written after reading the console text below and the package sources for
+Entities and Physics 1.3.10.
+
+### Versions
+
+| Item | Version |
+| --- | --- |
+| Unity Editor | 2022.3.13f1 |
+| Entities, Physics | 1.3.10 |
+| Burst | 1.8.18 |
+| Collections | 2.5.3 |
+| Mathematics | 1.3.2 |
+| Input System | 1.7.0 |
+| Cinemachine | 2.9.7 |
+| URP | 14.0.9 |
+
+Entities 1.3.10 and Physics 1.3.10 both declare a minimum editor of
+2022.3.11f1 in their `package.json`, so this editor is supported. A version
+mismatch is not the cause. The Unity Character Controller package 1.4.5
+would need Entities and Physics 1.3.15 and editor 2022.3.50f1, which is one
+reason the project does not use it.
+
+### What the console says
+
+- 13 warnings "Ignoring invalid [UpdateAfter] / [UpdateBefore] attribute".
+  Unity raises this when a system names an ordering partner that is not in
+  the same group, and here the partner was never created. The partners named
+  are `Unity.Physics.Systems.ExportPhysicsWorld`,
+  `BeginSimulationEntityCommandBufferSystem`,
+  `EndSimulationEntityCommandBufferSystem` and `Unity.Scenes.SceneSystem`,
+  all Unity systems, plus one GTG system, `FireballProjectileSystem`.
+- One `InvalidOperationException: Illegal instruction executed`, thrown from
+  Burst compiled code. The path is a system creation that failed, then the
+  cleanup that destroys the half built system, which crashes in
+  `ChunkDataUtility.RemoveFromEnabledBitsHierarchicalData`. That crash replaces
+  the first exception, so the real cause of each failed creation is hidden.
+- Three `ArgumentException: The entity does not exist` from
+  `ResolveSceneReferenceSystem` and the live conversion system. They read data
+  from the scene system's own entity, which the failed creation destroyed.
+- Two `JobTempAlloc` leak warnings, which follow from the failed startup.
+
+### What the failing systems have in common
+
+Each failing system changes the archetype of its own entity or creates an
+entity while it is being created. The command buffer systems add their
+singleton component to their own entity. `BuildPhysicsWorld` creates the
+`PhysicsWorldSingleton` in `OnCreate`. The first version of
+`FireballProjectileSystem` created an event entity in `OnCreate`, and it is the
+one GTG system in the warnings. Systems that do no structural work while being
+created, such as the character input system, are not in the list.
+
+So the reading is that structural changes made by Burst compiled Entities code
+fail on this machine, and every system that needs one during startup is lost.
+
+### Why the game symptoms follow
+
+- With `BuildPhysicsWorld` lost there is no `PhysicsWorldSingleton`. The
+  ground, movement and projectile systems wait for it with `RequireForUpdate`,
+  so they never run. No gravity, no movement.
+- With the command buffer systems lost, the cast system waits for a command
+  buffer singleton that never appears. No fireball.
+- With `SceneSystem` lost, a SubScene cannot load at all, so the character
+  entity may not exist either.
+- The camera still switches, because that part is plain GameObject code.
+
+### Status
+
+The cause is not confirmed. The working theory is Burst code generation on the
+development machine, a mid 2010 MacBook Pro, whose CPU lacks the newer
+instruction sets Burst may assume. The failing function counts and updates bit
+sets, and reports of the same message from Burst say the code runs with Burst
+switched off.
+
+Checks, in this order:
+
+1. Turn off `Jobs > Burst > Enable Compilation`, enter Play, and read the
+   console. A clean console confirms the theory. Burst can stay off for
+   Editor work on that machine.
+2. Run `sysctl -n machdep.cpu.brand_string` and
+   `sysctl -n machdep.cpu.features | tr ' ' '\n' | grep -E 'SSE4|POPCNT|AVX'`
+   in Terminal and note which lines appear.
+3. Enter Play and read the overlay at the top left of the Game view. It lists
+   the physics world, the command buffer, and any character system that was
+   not created, so the state is visible without the console.
+
+If the console is still red with Burst off, the first red message after the
+toggle is the next thing to read. For player builds on that machine, the Burst
+target CPU list under `Project Settings > Burst AOT Settings` needs the older
+targets.
+
+## Raw console text, 2026-09-30
+
 ArgumentException: The entity does not exist. Entity(50:1) was previously destroyed in world Default World.
 Unity.Entities.EntityComponentStore.AssertEntityHasComponent (Unity.Entities.Entity entity, Unity.Entities.ComponentType componentType) (at ./Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/EntityComponentStoreDebug.cs:342)
 Unity.Entities.EntityComponentStore.AssertEntityHasComponent (Unity.Entities.Entity entity, Unity.Entities.TypeIndex componentTypeIndex) (at ./Library/PackageCache/com.unity.entities@1.3.10/Unity.Entities/EntityComponentStoreDebug.cs:364)

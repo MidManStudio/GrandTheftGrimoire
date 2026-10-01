@@ -36,11 +36,10 @@ namespace MidManStudio.Gtg.Magic
     }
 
     /// <summary>
-    /// One spell hit. Lives in the buffer of a single event entity that
-    /// <c>FireballProjectileSystem</c> clears at the start of every frame, so
-    /// consumers must run after it in the same frame.
+    /// One spell hit, created by the projectile system as its own short-lived entity.
+    /// The chemistry system reads it and destroys it.
     /// </summary>
-    public struct SpellImpactEvent : IBufferElementData
+    public struct SpellImpact : IComponentData
     {
         public float3 Position;
         public float3 Normal;

@@ -3,6 +3,7 @@
 // live in docs/GrandTheftGrimoire/character-controller.md, section "CharacterComponents.cs"
 // ============================================================================
 
+using System;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -13,50 +14,86 @@ namespace MidManStudio.Gtg.CharacterController
     {
     }
 
+    /// <summary>One switch per character module. A module system does nothing when its flag is off.</summary>
+    [Flags]
+    public enum CharacterFeature : uint
+    {
+        None = 0,
+        Look = 1 << 0,
+        Move = 1 << 1,
+        Jump = 1 << 2,
+        Gravity = 1 << 3,
+        Cast = 1 << 4,
+    }
+
     /// <summary>
-    /// Movement and look tuning, baked once from <see cref="CharacterAuthoring"/>.
-    /// Read-only at runtime.
+    /// The enabled modules of a character. Baked from the authoring checkboxes and
+    /// writable at runtime, so a stun, a cutscene or a flight mode only flips a flag.
     /// </summary>
-    public struct CharacterMoveSettings : IComponentData
+    public struct CharacterFeatures : IComponentData
+    {
+        public CharacterFeature Enabled;
+
+        public bool Has(CharacterFeature feature)
+        {
+            return (Enabled & feature) != 0;
+        }
+    }
+
+    /// <summary>Tuning for the character modules, baked once and read only at runtime.</summary>
+    public struct CharacterSettings : IComponentData
     {
         public float MoveSpeed;
+        public float Acceleration;
+
+        /// <summary>Share of the acceleration that still applies in the air, 0 to 1.</summary>
+        public float AirControl;
+
         public float JumpSpeed;
+
+        /// <summary>Seconds after leaving an edge in which a jump is still allowed.</summary>
+        public float CoyoteTime;
+
+        /// <summary>Negative, in meters per second squared.</summary>
         public float Gravity;
 
-        /// <summary>How far below the feet the ground ray reaches, in meters.</summary>
-        public float GroundCheckDistance;
+        /// <summary>Largest fall speed, positive.</summary>
+        public float GravityCap;
 
-        /// <summary>The ground ray starts this far above the feet, in meters.</summary>
-        public float GroundSkin;
+        /// <summary>Downward speed held while grounded so the character follows the floor.</summary>
+        public float GroundStickSpeed;
 
+        public float GroundProbeDistance;
+
+        /// <summary>Cosine of the steepest walkable slope angle.</summary>
+        public float MaxSlopeDot;
+
+        /// <summary>Gap kept between the capsule and every surface.</summary>
+        public float SkinWidth;
+
+        public int MaxSlideIterations;
         public float MouseDegreesPerPixel;
         public float StickDegreesPerSecond;
         public float MinPitch;
         public float MaxPitch;
     }
 
-    /// <summary>
-    /// Per-frame input for one character. Written by
-    /// <see cref="CharacterInputSystem"/>, read by the look, movement and spell systems.
-    /// </summary>
+    /// <summary>Per-frame input for one character, written by <see cref="CharacterInputSystem"/>.</summary>
     public struct CharacterInput : IComponentData
     {
-        /// <summary>Local move direction from WASD or left stick, each axis in [-1, 1].</summary>
+        /// <summary>Local move direction, each axis in [-1, 1].</summary>
         public float2 Move;
 
         /// <summary>Look change this frame in degrees. x turns right, y looks up.</summary>
         public float2 Look;
 
-        /// <summary>True only on the frame the jump button went down.</summary>
         public bool JumpPressed;
-
-        /// <summary>True only on the frame the fire button went down.</summary>
         public bool FirePressed;
     }
 
     /// <summary>
-    /// View direction in degrees. Pitch follows the Unity convention, so a
-    /// positive value looks down. The camera rig and the spell aim both read it.
+    /// View direction in degrees. Pitch follows the Unity convention, so a positive
+    /// value looks down. The camera rig and the spell aim both read it.
     /// </summary>
     public struct CharacterLook : IComponentData
     {
@@ -64,15 +101,13 @@ namespace MidManStudio.Gtg.CharacterController
         public float Pitch;
     }
 
-    /// <summary>Vertical speed carried between frames so gravity accumulates.</summary>
-    public struct CharacterVerticalVelocity : IComponentData
+    /// <summary>Motion state shared by the modules. The movement system turns it into a position change.</summary>
+    public struct CharacterMotor : IComponentData
     {
-        public float Value;
-    }
-
-    /// <summary>Result of this frame's ground check.</summary>
-    public struct CharacterGroundState : IComponentData
-    {
+        public float3 HorizontalVelocity;
+        public float VerticalVelocity;
         public bool IsGrounded;
+        public float3 GroundNormal;
+        public float TimeSinceGrounded;
     }
 }
