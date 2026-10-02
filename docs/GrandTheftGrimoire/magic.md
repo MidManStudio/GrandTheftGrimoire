@@ -1,5 +1,7 @@
 # Magic (`MidManStudio.Gtg.Magic`)
 
+> Code location: `Assets/MidManStudio/Gtg/ECS/Magic/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/Magic/`, see `managed.md`.
+
 Spell casting and projectiles. The first spell is a fireball that flies
 straight, used to test the whole path from input to a chemical hazard. What
 happens after a hit is handled by the Chemistry system, see `../chemistry.md`.

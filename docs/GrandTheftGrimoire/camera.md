@@ -1,5 +1,7 @@
 # Camera (`MidManStudio.Gtg.Camera`)
 
+> Code location: `Assets/MidManStudio/Gtg/ECS/Camera/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/Camera/`, see `managed.md`.
+
 Presentation layer for the character. The simulation stays in ECS, and
 everything the player sees is ordinary GameObjects that copy the ECS state
 each frame.

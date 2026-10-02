@@ -23,6 +23,10 @@ only covers the code-level docs that do.
   is a fireball that flies straight
 - [`GrandTheftGrimoire/generalprobs.md`](GrandTheftGrimoire/generalprobs.md)
   -- running notes on Editor errors and warnings, with the current analysis
+- [`GrandTheftGrimoire/managed.md`](GrandTheftGrimoire/managed.md)
+  -- the Managed stack: MonoBehaviour versions of the character, camera,
+  magic and chemistry systems that need no ECS package, and how the
+  `ECS/` and `Managed/` folders relate
 - [`chemistry.md`](chemistry.md)
   -- `MidManStudio.Gtg.Chemistry`, the game-side glue around
   `com.midmanstudio.alembic`; a fireball impact runs a short Alembic
@@ -31,6 +35,9 @@ only covers the code-level docs that do.
 ## Repo rules
 
 - No asmdefs under `Assets/MidManStudio/Gtg/`, see `GTG_REPO_CONVENTIONS.md`.
+- Two stacks: `Assets/MidManStudio/Gtg/ECS/` is wrapped in `#if GTG_ECS`,
+  `Assets/MidManStudio/Gtg/Managed/` has no ECS dependency. See
+  `GrandTheftGrimoire/managed.md`.
 - ECS systems are `ISystem` structs with a nested `IJobEntity`, see the same file.
 
 ## CI and Workflows

@@ -1,5 +1,7 @@
 # Chemistry (`MidManStudio.Gtg.Chemistry`)
 
+> Code location: `Assets/MidManStudio/Gtg/ECS/Chemistry/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/Chemistry/`, see `GrandTheftGrimoire/managed.md`.
+
 ## Overview
 
 The game-side glue around `com.midmanstudio.alembic` -- not the

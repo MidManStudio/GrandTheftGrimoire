@@ -1,0 +1,30 @@
+@CONFIG(
+  version    -> "1.0.0"
+  generated  -> "2026-10-02T08:33:12Z"
+  debug_mode -> "off"
+)
+
+@DATA(
+  template      = ".mdix/patches/patch.mdix"
+  template_hash = "a9f68f3a9675"
+  last_run      = "2026-10-02T08:33:12Z"
+  new_this_run  = 0
+  overridden    = 0
+  skipped       = 0
+  deleted       = 0
+  renamed       = 0
+  moved         = 10
+  updated       = 0
+
+  created_files::
+    "Assets/MidManStudio/Gtg/ECS/Camera"
+    "Assets/MidManStudio/Gtg/ECS/Camera.meta"
+    "Assets/MidManStudio/Gtg/ECS/CharacterController"
+    "Assets/MidManStudio/Gtg/ECS/CharacterController.meta"
+    "Assets/MidManStudio/Gtg/ECS/Chemistry"
+    "Assets/MidManStudio/Gtg/ECS/Chemistry.meta"
+    "Assets/MidManStudio/Gtg/ECS/Magic"
+    "Assets/MidManStudio/Gtg/ECS/Magic.meta"
+    "Assets/MidManStudio/Gtg/ECS/NPC"
+    "Assets/MidManStudio/Gtg/ECS/NPC.meta"
+)

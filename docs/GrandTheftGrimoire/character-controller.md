@@ -1,5 +1,7 @@
 # CharacterController
 
+> Code location: `Assets/MidManStudio/Gtg/ECS/CharacterController/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/CharacterController/`, see `managed.md`.
+
 Custom kinematic character controller, built on ECS and (once Phase 1
 lands) networked with Netcode for Entities. See `GTG_REPO_CONVENTIONS.md`
 section 5 for why this system is ECS rather than MonoBehaviour, and the

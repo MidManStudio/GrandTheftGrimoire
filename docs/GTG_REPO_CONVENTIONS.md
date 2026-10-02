@@ -131,6 +131,8 @@ places that can drift apart.
 
 ## 5. ECS / DOTS and Netcode for Entities
 
+> Status: ECS is paused while development hardware cannot run it. The ECS code is kept under `Assets/MidManStudio/Gtg/ECS/` behind `GTG_ECS`, and the game is built in parallel on the Managed stack under `MidManStudio.Gtg.Managed.<System>`, see `GrandTheftGrimoire/managed.md`. The direction below is unchanged.
+
 Confirmed direction: GTG's core simulation (character movement, weapon
 state, combat resolution) is built on Unity's Entity Component System
 and networked with **Netcode for Entities** (`com.unity.netcode`), not
