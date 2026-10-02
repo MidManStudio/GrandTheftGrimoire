@@ -1,0 +1,122 @@
+// Brought to u by MidManStudio
+//
+// One-shot patch: split Assets/MidManStudio/Gtg into ECS/ and Managed/.
+// 1. Moves every existing system folder (and its folder .meta) under ECS/,
+//    so script GUIDs and scene references survive.
+// 2. Wraps every ECS-dependent C# file in #if GTG_ECS ... #endif.
+// 3. Adds location notes to the existing docs.
+// Run once. A dry run does not move files, so the wrap lines report
+// "file not found" there; the real run resolves them after the moves.
+
+@CONFIG(
+  version    -> "1.0.0"
+  author     -> "MidManStudio"
+  features   -> "quickfuncs,data"
+  debug_mode -> "off"
+)
+
+@QUICKFUNCS(
+
+  ~move<object>(_src, _dst) {
+    return { from_path = _src, to_path = _dst }
+  }
+
+  ~patch_insert_after<object>(_path, _anchor, _content) {
+    return { path = _path, op = "insert_after", anchor = _anchor, content = _content }
+  }
+
+  ~patch_replace_regex<object>(_path, _pattern, _content) {
+    return { path = _path, op = "replace_regex", pattern = _pattern, content = _content }
+  }
+
+)
+
+@DATA(
+  project_name = "GrandTheftGrimoire"
+
+  move_files::
+    move("Assets/MidManStudio/Gtg/CharacterController", "Assets/MidManStudio/Gtg/ECS/CharacterController")
+    move("Assets/MidManStudio/Gtg/CharacterController.meta", "Assets/MidManStudio/Gtg/ECS/CharacterController.meta")
+    move("Assets/MidManStudio/Gtg/Camera", "Assets/MidManStudio/Gtg/ECS/Camera")
+    move("Assets/MidManStudio/Gtg/Camera.meta", "Assets/MidManStudio/Gtg/ECS/Camera.meta")
+    move("Assets/MidManStudio/Gtg/Magic", "Assets/MidManStudio/Gtg/ECS/Magic")
+    move("Assets/MidManStudio/Gtg/Magic.meta", "Assets/MidManStudio/Gtg/ECS/Magic.meta")
+    move("Assets/MidManStudio/Gtg/Chemistry", "Assets/MidManStudio/Gtg/ECS/Chemistry")
+    move("Assets/MidManStudio/Gtg/Chemistry.meta", "Assets/MidManStudio/Gtg/ECS/Chemistry.meta")
+    move("Assets/MidManStudio/Gtg/NPC", "Assets/MidManStudio/Gtg/ECS/NPC")
+    move("Assets/MidManStudio/Gtg/NPC.meta", "Assets/MidManStudio/Gtg/ECS/NPC.meta")
+
+  patch_files::
+    // Wrap the ECS-dependent sources. Both regexes refuse to match an already wrapped file.
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterAuthoring.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterAuthoring.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterComponents.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterComponents.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGravitySystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGravitySystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGroundSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGroundSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterInputSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterInputSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterJumpSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterJumpSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterLookSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterLookSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterMovementSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterMovementSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterWalkSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterWalkSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/PhysicsRayUtility.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/CharacterController/PhysicsRayUtility.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Camera/Presentation/CharacterCameraBridge.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Camera/Presentation/CharacterCameraBridge.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Authoring/SpellCasterAuthoring.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Authoring/SpellCasterAuthoring.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Components/SpellComponents.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Components/SpellComponents.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Presentation/FireballPresentationSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Presentation/FireballPresentationSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Presentation/SpellVfxMaterials.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Presentation/SpellVfxMaterials.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Systems/FireballCastSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Systems/FireballCastSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Systems/FireballProjectileSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Magic/Systems/FireballProjectileSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/ChemistryRecipe.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/ChemistryRecipe.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Components/ChemistryComponents.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Components/ChemistryComponents.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Presentation/ChemicalHazardPresentationSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Presentation/ChemicalHazardPresentationSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Systems/ChemicalHazardSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Systems/ChemicalHazardSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Systems/ChemistryReactionSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/Chemistry/Systems/ChemistryReactionSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Authoring/NPCAuthoring.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Authoring/NPCAuthoring.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCComponents.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCComponents.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Native/NPCManagedFallback.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Native/NPCManagedFallback.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Systems/NPCDecisionSystem.cs", "\\A(?!#if GTG_ECS)", "#if GTG_ECS\n")
+    patch_replace_regex("Assets/MidManStudio/Gtg/ECS/NPC/Systems/NPCDecisionSystem.cs", "(?<!#endif)(?<=\\S)\\n*\\Z", "\n#endif\n")
+
+    // Docs: location notes under each moved system's title.
+    patch_insert_after("docs/GrandTheftGrimoire/character-controller.md", "# CharacterController", "\n> Code location: `Assets/MidManStudio/Gtg/ECS/CharacterController/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/CharacterController/`, see `managed.md`.\n")
+    patch_insert_after("docs/GrandTheftGrimoire/camera.md", "# Camera (`MidManStudio.Gtg.Camera`)", "\n> Code location: `Assets/MidManStudio/Gtg/ECS/Camera/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/Camera/`, see `managed.md`.\n")
+    patch_insert_after("docs/GrandTheftGrimoire/magic.md", "# Magic (`MidManStudio.Gtg.Magic`)", "\n> Code location: `Assets/MidManStudio/Gtg/ECS/Magic/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/Magic/`, see `managed.md`.\n")
+    patch_insert_after("docs/chemistry.md", "# Chemistry (`MidManStudio.Gtg.Chemistry`)", "\n> Code location: `Assets/MidManStudio/Gtg/ECS/Chemistry/`. The ECS sources compile only when `GTG_ECS` is defined. A MonoBehaviour version lives under `Assets/MidManStudio/Gtg/Managed/Chemistry/`, see `GrandTheftGrimoire/managed.md`.\n")
+    patch_insert_after("docs/npc/architecture.md", "# GTG NPC architecture", "\n> Code location: `Assets/MidManStudio/Gtg/ECS/NPC/`. The ECS sources compile only when `GTG_ECS` is defined. There is no Managed NPC version yet, see `../GrandTheftGrimoire/managed.md`.\n")
+
+    patch_insert_after("docs/GrandTheftGrimoire.md",
+      "-- running notes on Editor errors and warnings, with the current analysis",
+      "- [`GrandTheftGrimoire/managed.md`](GrandTheftGrimoire/managed.md)\n  -- the Managed stack: MonoBehaviour versions of the character, camera,\n  magic and chemistry systems that need no ECS package, and how the\n  `ECS/` and `Managed/` folders relate\n")
+
+    patch_insert_after("docs/GrandTheftGrimoire.md",
+      "- No asmdefs under",
+      "- Two stacks: `Assets/MidManStudio/Gtg/ECS/` is wrapped in `#if GTG_ECS`,\n  `Assets/MidManStudio/Gtg/Managed/` has no ECS dependency. See\n  `GrandTheftGrimoire/managed.md`.\n")
+
+    patch_insert_after("docs/GTG_REPO_CONVENTIONS.md",
+      "## 5. ECS / DOTS and Netcode for Entities",
+      "\n> Status: ECS is paused while development hardware cannot run it. The ECS code is kept under `Assets/MidManStudio/Gtg/ECS/` behind `GTG_ECS`, and the game is built in parallel on the Managed stack under `MidManStudio.Gtg.Managed.<System>`, see `GrandTheftGrimoire/managed.md`. The direction below is unchanged.\n")
+)
