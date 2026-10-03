@@ -5,6 +5,7 @@
 
 using System.Text;
 using MidManStudio.Gtg.Managed.CharacterController;
+using MidManStudio.Gtg.Managed.Magic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
@@ -14,7 +15,7 @@ namespace MidManStudio.Gtg.Managed.Camera
     /// <summary>
     /// Camera and cursor owner for the managed character. Switches between a third person
     /// and a first person view, captures the cursor and draws a debug overlay with the
-    /// module toggles. With Cinemachine cameras assigned it only moves the follow target
+    /// module toggles and a crosshair at the screen center. With Cinemachine cameras assigned it only moves the follow target
     /// and switches the cameras on and off. With none assigned it drives the main camera
     /// itself. Inside MidManStudio.Gtg namespaces write UnityEngine.Camera in full, because
     /// the simple name Camera resolves to a namespace.
@@ -42,10 +43,12 @@ namespace MidManStudio.Gtg.Managed.Camera
         [SerializeField] private bool _startInFirstPerson;
         [SerializeField] private bool _lockCursorOnStart = true;
         [SerializeField] private bool _showDebugOverlay = true;
+        [SerializeField] private bool _showCrosshair = true;
 
         private const float WallPadding = 0.15f;
 
         private UnityEngine.Camera _builtInCamera;
+        private ManagedSpellCaster _caster;
         private bool _firstPerson;
         private GUIStyle _style;
         private readonly StringBuilder _text = new StringBuilder(384);
@@ -159,6 +162,7 @@ namespace MidManStudio.Gtg.Managed.Camera
         private void FindPlayer()
         {
             _player = FindFirstObjectByType<ManagedCharacter>();
+            _caster = FindFirstObjectByType<ManagedSpellCaster>();
             if (_player != null && (_bodyRenderers == null || _bodyRenderers.Length == 0))
             {
                 _bodyRenderers = _player.GetComponentsInChildren<Renderer>();
@@ -199,6 +203,11 @@ namespace MidManStudio.Gtg.Managed.Camera
 
         private void OnGUI()
         {
+            if (_showCrosshair && _player != null)
+            {
+                DrawCrosshair();
+            }
+
             if (!_showDebugOverlay)
             {
                 return;
@@ -227,8 +236,14 @@ namespace MidManStudio.Gtg.Managed.Camera
                 _text.Append("Character: NONE (add ManagedCharacter to a GameObject)\n");
             }
 
+            if (_caster != null)
+            {
+                _text.Append("Spell: ").Append(_caster.SelectedSpell.DisplayName)
+                    .Append("  (1, 2, Tab or d-pad)  Shots in flight ").Append(_caster.ShotCount).Append('\n');
+            }
+
             _text.Append("Cursor ").Append(Cursor.lockState).Append("  (Esc releases, click captures)\n");
-            _text.Append("Move WASD  Jump Space  Fireball LMB, F or right trigger");
+            _text.Append("Move WASD or arrows  Jump Space  Cast LMB, F or right trigger");
 
             GUI.Label(new Rect(12f, 10f, 900f, 160f), _text.ToString(), _style);
 
@@ -236,6 +251,19 @@ namespace MidManStudio.Gtg.Managed.Camera
             {
                 DrawFeatureToggles();
             }
+        }
+
+        private void DrawCrosshair()
+        {
+            float cx = Screen.width * 0.5f;
+            float cy = Screen.height * 0.5f;
+            Color previous = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.9f);
+            GUI.DrawTexture(new Rect(cx - 1f, cy - 9f, 2f, 7f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(cx - 1f, cy + 2f, 2f, 7f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(cx - 9f, cy - 1f, 7f, 2f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(cx + 2f, cy - 1f, 7f, 2f), Texture2D.whiteTexture);
+            GUI.color = previous;
         }
 
         private void DrawFeatureToggles()

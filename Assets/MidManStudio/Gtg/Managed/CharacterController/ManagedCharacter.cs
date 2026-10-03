@@ -44,6 +44,8 @@ namespace MidManStudio.Gtg.Managed.CharacterController
         [Header("Look")]
         [SerializeField] private float _mouseDegreesPerPixel = 0.1f;
         [SerializeField] private float _stickDegreesPerSecond = 180f;
+        [Tooltip("Look speed of the keyboard keys, J and L turn, I and K look up and down. Zero turns them off.")]
+        [SerializeField] private float _keyboardLookDegreesPerSecond = 120f;
         [SerializeField] private float _minPitch = -80f;
         [SerializeField] private float _maxPitch = 80f;
 
@@ -108,7 +110,8 @@ namespace MidManStudio.Gtg.Managed.CharacterController
         private void Update()
         {
             float dt = Time.deltaTime;
-            _input = ManagedCharacterInput.Read(dt, _mouseDegreesPerPixel, _stickDegreesPerSecond);
+            _input = ManagedCharacterInput.Read(
+                dt, _mouseDegreesPerPixel, _stickDegreesPerSecond, _keyboardLookDegreesPerSecond);
 
             ApplyLook();
             _timeSinceGrounded = _grounded ? 0f : _timeSinceGrounded + dt;

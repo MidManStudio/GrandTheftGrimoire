@@ -12,6 +12,7 @@ namespace MidManStudio.Gtg.Managed.Chemistry
         Explosion = 0,
         Gas = 1,
         Fire = 2,
+        Freeze = 3,
     }
 
     /// <summary>
@@ -31,7 +32,7 @@ namespace MidManStudio.Gtg.Managed.Chemistry
         public float Duration;
         public float GrowDuration;
 
-        /// <summary>True when Alembic reported bond formation for the recipe.</summary>
+        /// <summary>True when Alembic confirmed the reaction for the recipe.</summary>
         public bool AlembicConfirmed;
     }
 
@@ -41,14 +42,17 @@ namespace MidManStudio.Gtg.Managed.Chemistry
         public bool NativeUsed;
         public bool Confirmed;
         public int FormedBonds;
+        public int BrokenBonds;
         public int Steps;
         public float TemperatureK;
 
-        public ManagedReactionResult(bool nativeUsed, bool confirmed, int formedBonds, int steps, float temperatureK)
+        public ManagedReactionResult(
+            bool nativeUsed, bool confirmed, int formedBonds, int brokenBonds, int steps, float temperatureK)
         {
             NativeUsed = nativeUsed;
             Confirmed = confirmed;
             FormedBonds = formedBonds;
+            BrokenBonds = brokenBonds;
             Steps = steps;
             TemperatureK = temperatureK;
         }

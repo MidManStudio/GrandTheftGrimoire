@@ -12,14 +12,12 @@ using UnityEngine;
 namespace MidManStudio.Gtg.Managed.Chemistry
 {
     /// <summary>
-    /// Runs the short Alembic simulation for a recipe and counts formed bonds as the
-    /// confirmation. If the native library is missing or reports nothing, the result is
-    /// unconfirmed and the caller decides what to do with it.
+    /// Runs the short Alembic simulation for a recipe and counts formed and broken bonds.
+    /// If the native library is missing or reports nothing, the result is unconfirmed and
+    /// the caller decides what to do with it.
     /// </summary>
     public sealed class ManagedChemistryReactor : IDisposable
     {
-        private const byte BondEventFormed = 0;
-
         private readonly List<AtomHandle> _handles = new List<AtomHandle>();
         private IntPtr _context;
         private bool _nativeChecked;
@@ -29,14 +27,16 @@ namespace MidManStudio.Gtg.Managed.Chemistry
         {
             if (!EnsureNative())
             {
-                return new ManagedReactionResult(false, false, 0, 0, 0f);
+                return new ManagedReactionResult(false, false, 0, 0, 0, 0f);
             }
 
             _handles.Clear();
             try
             {
                 // Drain events left over from an earlier reaction.
-                CountFormedBonds();
+                int ignoredFormed;
+                int ignoredBroken;
+                CountBondEvents(out ignoredFormed, out ignoredBroken);
 
                 float rOh = ChemistryLib.chem_bond_r_min(8, 1) * recipe.SpawnSpacingFactor;
                 float angle = 104.5f * Mathf.Deg2Rad;
@@ -51,21 +51,29 @@ namespace MidManStudio.Gtg.Managed.Chemistry
                 ChemistryLib.chem_init(_context, recipe.TemperatureK, recipe.Seed);
 
                 int formed = 0;
+                int broken = 0;
                 int steps = 0;
-                while (steps < recipe.MaxSteps && formed < recipe.MinFormedBonds)
+                while (steps < recipe.MaxSteps && (recipe.RunFullBudget || formed < recipe.MinFormedBonds))
                 {
                     ChemistryLib.chem_step(_context, recipe.DtFemtoseconds, recipe.CutoffAngstrom);
                     steps++;
-                    formed += CountFormedBonds();
+
+                    int stepFormed;
+                    int stepBroken;
+                    CountBondEvents(out stepFormed, out stepBroken);
+                    formed += stepFormed;
+                    broken += stepBroken;
                 }
 
+                bool holds = recipe.MaxBrokenBonds < 0 || broken <= recipe.MaxBrokenBonds;
+                bool confirmed = formed >= recipe.MinFormedBonds && holds;
                 float temperature = ChemistryLib.chem_temperature(_context);
-                return new ManagedReactionResult(true, formed >= recipe.MinFormedBonds, formed, steps, temperature);
+                return new ManagedReactionResult(true, confirmed, formed, broken, steps, temperature);
             }
             catch (Exception exception)
             {
                 Debug.LogError("[GTG Chemistry] Alembic reaction failed: " + exception.Message);
-                return new ManagedReactionResult(true, false, 0, 0, 0f);
+                return new ManagedReactionResult(true, false, 0, 0, 0, 0f);
             }
             finally
             {
@@ -94,26 +102,31 @@ namespace MidManStudio.Gtg.Managed.Chemistry
             _handles.Add(ChemistryLib.chem_spawn_atom(_context, atomicNumber, x, y, z));
         }
 
-        private int CountFormedBonds()
+        private void CountBondEvents(out int formed, out int broken)
         {
-            IntPtr events = ChemistryLib.chem_take_bond_events(_context, out int count);
+            formed = 0;
+            broken = 0;
+
+            int count;
+            IntPtr events = ChemistryLib.chem_take_bond_events(_context, out count);
             if (events == IntPtr.Zero || count <= 0)
             {
-                return 0;
+                return;
             }
 
             int size = Marshal.SizeOf<BondEvent>();
-            int formed = 0;
             for (int i = 0; i < count; i++)
             {
                 BondEvent bondEvent = Marshal.PtrToStructure<BondEvent>(IntPtr.Add(events, i * size));
-                if (bondEvent.Kind == BondEventFormed)
+                if (bondEvent.Type == BondEvent.EventKind.Formed)
                 {
                     formed++;
                 }
+                else if (bondEvent.Type == BondEvent.EventKind.Broken)
+                {
+                    broken++;
+                }
             }
-
-            return formed;
         }
 
         // The native library is probed once. A failed probe is not retried, so a missing

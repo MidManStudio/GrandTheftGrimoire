@@ -17,6 +17,20 @@ first entry in Fixes and Problems and `generalprobs.md`. Gameplay is built on th
 Managed stack now, and the ECS stack stays ready for hardware that can run it.
 The ECS folder moved with its `.meta` files, so script GUIDs did not change.
 
+### Working rule for both stacks
+
+- A feature is built and tested on the Managed stack first, because that is the
+  stack that runs on the development machine.
+- The ECS sources stay frozen. They are edited only for a trivial, low risk
+  change, and every such edit is listed in the parity table and in the Fixes and
+  Problems section of the ECS doc that covers the file. The ECS packages are not
+  installed in the project, so nothing under `ECS/` is compiled or run.
+- Every other feature goes into the ECS backlog in the parity table. The backlog is
+  ported in one pass when the ECS packages come back and the code can be compiled.
+- A Managed feature is documented here, with a `Modules` section per file. Rules and
+  numbers that both stacks share, such as the chemistry recipes, are documented once
+  in the shared doc and linked from both.
+
 ### Namespaces and names
 
 Managed code lives under `MidManStudio.Gtg.Managed.<System>`, and every public type
@@ -57,6 +71,24 @@ missing script. Delete it, or switch the define back.
    the rig's `GTG Camera Target`.
 4. Delete the old SubScene, `CharacterAuthoring` and `CharacterCameraBridge` objects.
 
+Controls: move with WASD or the arrow keys, look with the mouse, the right stick or
+the keys J and L (turn) and I and K (up and down), jump with Space, cast with the
+left mouse button, F or the right trigger. Pick a spell with 1 or 2, Tab, or the
+d-pad. V switches the view, Escape frees the cursor.
+
+Shots leave the `GTG Shot Point` child of the character and fly to whatever the
+screen center looks at. A white crosshair marks that point. Move the shot point in
+the Scene view, or assign a staff or hand bone to the caster.
+
+Draw path: shots and hazards are drawn with `Graphics.DrawMeshInstanced` when the
+GPU supports instancing and `MidManStudio/Gtg/SphereUnlit` compiled, otherwise as
+one combined mesh. The Console prints the chosen path at Play start, one line for
+shots and one for hazards. The `Force Combined Mesh` option on the caster and the
+hazard field tests the fallback on any machine.
+
+For a player build, add `MidManStudio/Gtg/SphereUnlit` under Project Settings,
+Graphics, Always Included Shaders. The Editor finds it without that.
+
 Unity creates `.meta` files for the new scripts on first import. Commit them.
 
 ### Parity with the ECS stack
@@ -64,11 +96,22 @@ Unity creates `.meta` files for the new scripts on first import. Commit them.
 | System | ECS | Managed |
 |---|---|---|
 | Look, walk, jump, gravity | one `ISystem` per module, Burst jobs | one component, same order and same tuning values |
+| Move keys | WASD and arrows | WASD and arrows |
+| Keyboard look (J, L, I, K) | backlog | done |
 | Collision | own capsule sweep through Unity Physics | `UnityEngine.CharacterController` |
 | Camera | `CharacterCameraBridge` copies the entity to GameObjects | `ManagedCameraRig` reads the component directly |
-| Fireball | entities, command buffers, presentation system | list of shots stepped with raycasts, pooled views |
-| Chemistry | impact entity, hazard entity, presentation system | static event, hazard objects, pooled views |
+| Crosshair aim and shot point | backlog | done |
+| Fireball | entities, command buffers, presentation system | list of shots swept with a sphere cast, one draw call |
+| Ice spell and spell slots | backlog | done |
+| Explosion at range end | backlog | done |
+| Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
+| Ice recipe and Freeze hazard | backlog | done |
+| Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
 | NPC | present | not built yet |
+
+The ECS backlog items need the ECS packages installed, so they are ported together.
+The arrow keys are the one ECS edit since the split, two lines per axis in
+`CharacterInputSystem.cs`.
 
 Networking differs. Netcode for Entities needs the ECS stack. The Managed stack has
 no prediction or rollback, and networked play on it would need Netcode for
@@ -94,6 +137,13 @@ Gravity, Cast, plus `All`.
 - Devices are read directly, as in the ECS input system.
 - Mouse look and mouse fire count only while the cursor is locked, so the click that
   captures the cursor does not also fire.
+- Move accepts WASD and the arrow keys at the same time. Opposite keys cancel, and
+  the vector is clamped to length 1 so a diagonal is not faster.
+- J and L turn, I and K look up and down, at `_keyboardLookDegreesPerSecond`. This is
+  the way to aim without a mouse. Arrow keys are not used for look, because they
+  move.
+- The frame also carries the picked spell slot (keys 1 and 2) and a cycle step (Tab,
+  d-pad left and right), which the caster reads.
 
 ### `ManagedCharacter.cs`
 
@@ -116,31 +166,110 @@ frame it reads the input and runs look, walk, jump and gravity, then calls `Move
 
 ### `ManagedSpellTypes.cs`
 
-**What it does:** `ManagedSpellKind` and the `ManagedSpellImpact` struct.
+**What it does:** `ManagedSpellKind` (Fireball, Ice) and the `ManagedSpellImpact`
+struct.
+
+### `ManagedSpellDefinition.cs`
+
+**What it does:** One tuning record per spell: cooldown, speed, lifetime, sweep
+radius, drawn diameter and color. The slot order is the table order, so key 1 picks
+the first entry. The values live in code and move to an mdix table later, like the
+chemistry recipes.
+
+**Decisions:**
+- The sweep radius is a size of its own and is not the drawn diameter. A sphere of
+  0.15 m catches a thin collider that a plain ray misses, and the shot still looks
+  small.
 
 ### `ManagedSpellVfxMaterials.cs`
 
 **What it does:** Builds unlit placeholder materials. It tries the URP Unlit shader,
-then `Sprites/Default`, then `Unlit/Color`, and returns null if none exists.
+then `Sprites/Default`, then `Unlit/Color`, and returns null if none exists. Spell
+drawing no longer uses it, see `ManagedSphereBatch.cs`. It stays for placeholder
+objects.
 
 ### `ManagedSpellCaster.cs`
 
-**What it does:** Fires fireballs. It spawns a shot when the fire button goes down,
-the Cast module is on and the cooldown is over. Each step raycasts from the old
-position to the new one and raises `Impact` on a hit.
+**What it does:** Casts the selected spell. A cast leaves the shot point and flies to
+the crosshair target. Each step sweeps a sphere from the old position to the new one
+and raises `Impact` on a hit. Shots are drawn through one `ManagedSphereBatch`, with
+no GameObject per shot.
 
 **Decisions:**
-- Hits on the caster's own colliders are skipped, like the ECS "ignore owner" ray.
+- The aim ray goes through the screen center of the main camera. The first collider
+  on that ray gives the target point, or a point `_aimMaxDistance` away if nothing is
+  hit. The shot flies from the shot point to that target, so it lands on the
+  crosshair although it leaves the hand. This is the usual third person rule, and it
+  works with Cinemachine because the main camera is the one that renders.
+- Two cases fall back to the camera direction: a target nearer than
+  `_minAimDistance` and a target behind the shot point. Without a main camera the
+  caster aims by the character's yaw and pitch.
+- The shot point is a child object named `GTG Shot Point`, created in `Awake` at
+  `_shotPointOffset` when no transform is assigned. It can be moved in the Scene view
+  or replaced by a bone.
+- The sweep skips the caster's own colliders. A hit on the caster restarts the sweep
+  just past it, up to four times, so the result is the closest foreign collider and
+  the character's capsule never swallows a shot.
+- A shot point inside a collider cannot sweep correctly, so that cast detonates at
+  once.
+- A shot that reaches the end of its lifetime detonates where it is
+  (`_detonateAtRangeEnd`). This makes a miss visible and also shows the chemistry
+  working on open ground. Turn it off for shots that should fizzle out.
+- Impact times, positions and the collider name are logged (`_logImpacts`). This
+  tells apart "the shot hit nothing" from "the shot hit but nothing was drawn".
 - `Impact` is a static event, so the chemistry field needs no reference to the
   caster. It is cleared at `SubsystemRegistration`, because static state survives a
   play session when domain reload is off.
-- Views are pooled spheres with a point light. The root object is created in `Awake`.
+- The batch is filled and drawn in `LateUpdate`.
+
+### `ManagedIcosphere.cs`
+
+**What it does:** Builds the vertices and triangles of a sphere with diameter 1.
+Subdivision 1 gives 42 vertices and 80 triangles. Every vertex is on the radius 0.5
+and every edge is shared by exactly two triangles.
+
+### `ManagedSphereBatch.cs`
+
+**What it does:** Draws many spheres without a GameObject each. Call `Clear`, `Add`
+for each sphere, then `Draw`, once per frame.
+
+**Decisions:**
+- This follows the two render paths of `ProjectileRenderer2D` in
+  `com.midmanstudio.projectilesystem`: instanced drawing when the hardware supports
+  it, one combined mesh otherwise. The package itself is not used, because it
+  depends on Netcode for GameObjects, the utilities and netcode packages and the
+  Rust simulation.
+- The instanced path draws one shared mesh with `Graphics.DrawMeshInstanced`, in
+  batches of 1023, with the color per instance from a `MaterialPropertyBlock`.
+- The combined path writes every sphere into the vertex array of one dynamic mesh,
+  with the color in the vertex color, and draws it with one `Graphics.DrawMesh`.
+  Indices are filled once. The bounds are set huge so the mesh is never culled. A
+  batch of more than 65535 vertices switches the mesh to 32 bit indices.
+- The instanced path needs `SystemInfo.supportsInstancing`, the custom shader and the
+  absence of the force flag. Anything else takes the combined path. A custom shader
+  that failed to compile is detected with `Shader.isSupported`.
+- The fallback shader is `Sprites/Default`. It multiplies by vertex color, so the
+  combined path works with it.
+- The class logs its path once at construction.
+
+### `ManagedSphereUnlit.shader`
+
+**What it does:** Unlit transparent URP shader with an instanced `_Color`. The
+instanced draw reads the color from the property block, and the combined mesh draw
+reads the vertex color, the same split as `InstancedProjectile_URP.shader`.
+
+**Decisions:**
+- Blend is `SrcAlpha OneMinusSrcAlpha`, ZWrite is off and culling is off, so the
+  shell and the core of a hazard blend. Draw order inside a batch is the order the
+  spheres were added.
+- It targets the Universal pipeline. In another pipeline the shader draws nothing,
+  and the batch uses `Sprites/Default` only if this shader is reported unsupported.
 
 ### `ManagedCameraRig.cs`
 
 **What it does:** Owns the cursor and the view mode. Moves the follow target to the
-eye point with yaw and pitch, switches the two camera objects, and draws the debug
-overlay with the module toggles.
+eye point with yaw and pitch, switches the two camera objects, draws the crosshair
+and draws the debug overlay with the module toggles and the selected spell.
 
 **Decisions:**
 - With no camera objects assigned, the rig drives the main camera itself, and in
@@ -149,11 +278,14 @@ overlay with the module toggles.
 - Execution order is 100 and the work is in `LateUpdate`, after the character.
 - The overlay drops the ECS world, physics and command buffer lines, because there
   is no world.
+- The crosshair is a small white cross at the screen center. It marks the point that
+  the caster aims at, so it must stay at the center.
 
 ### `ManagedChemistryTypes.cs`
 
-**What it does:** `ManagedHazardType`, `ManagedChemicalHazard` and
-`ManagedReactionResult`.
+**What it does:** `ManagedHazardType` (Explosion, Gas, Fire, Freeze),
+`ManagedChemicalHazard` and `ManagedReactionResult`, which now also carries the count
+of broken bonds.
 
 **Decisions:**
 - `CurrentRadius` stays the authoritative footprint for later damage checks. The
@@ -161,13 +293,21 @@ overlay with the module toggles.
 
 ### `ManagedChemistryRecipe.cs`
 
-**What it does:** Same recipe values as the ECS `ChemistryRecipe`, with `Mathf`
-instead of `Unity.Mathematics`.
+**What it does:** Same fireball values as the ECS `ChemistryRecipe`, with `Mathf`
+instead of `Unity.Mathematics`, plus the Ice recipe. How a recipe turns into a
+reaction and a hazard is described in `chemistry-simulation.md`.
+
+**Decisions:**
+- `MaxBrokenBonds` and `RunFullBudget` are new. The fireball leaves both at their
+  neutral values, so its behavior is unchanged.
+- The Ice recipe uses three water groups at 150 K, runs the whole step budget and
+  asks that no bond breaks. Its hazard is a Freeze zone of 3.5 m that grows for half
+  a second and lasts six seconds.
 
 ### `ManagedChemistryReactor.cs`
 
-**What it does:** Runs the short Alembic simulation and counts formed bonds. The
-calls are the same as in the ECS `ChemistryReactionSystem`.
+**What it does:** Runs the short Alembic simulation and counts formed and broken
+bonds. The calls are the same as in the ECS `ChemistryReactionSystem`.
 
 **Decisions:**
 - The native library is probed once. A missing library logs one warning, and every
@@ -178,12 +318,18 @@ calls are the same as in the ECS `ChemistryReactionSystem`.
 ### `ManagedChemicalHazardField.cs`
 
 **What it does:** Subscribes to `ManagedSpellCaster.Impact`, runs the reaction,
-creates a hazard, grows it, expires it and draws it as a translucent sphere.
+creates a hazard, grows it, expires it and draws it through one `ManagedSphereBatch`.
 
 **Decisions:**
 - `Count` and `Get(index)` expose the live hazards for damage checks.
 - Subscription happens in `OnEnable` and `OnDisable`, so a disabled field takes no
   impacts.
+- Each hazard draws two spheres, a shell at the authoritative radius and a brighter
+  core inside it. The fire core fades faster than the shell, which reads as a flash.
+  Ice is pale blue, and grey blue when Alembic did not confirm it. Fire is orange,
+  and yellow when unconfirmed.
+- The field holds at most `_maxHazards` hazards. A new one drops the oldest.
+- No GameObject is created. Hazards are plain objects, drawn from `LateUpdate`.
 
 ## CI and Workflows
 
@@ -213,3 +359,31 @@ creates a hazard, grows it, expires it and draws it as a translucent sphere.
 
 - `CharacterController.isGrounded` is not used, because it reflects only the last
   move. The `CollisionFlags` of the current move give the ground state.
+
+### `ManagedSpellCaster.cs`
+
+- Reported: the fireball did not collide, there was no explosion, and shots only left
+  at one angle. The first version raycast along a path that started at a fixed
+  offset in the character's yaw space and ended only in an impact event. A shot that
+  flew into open space was removed without a trace, which looked like a missing
+  collision. The aim also depended on the character's angles alone, so a camera that
+  did not follow them, or a missing mouse, left one direction.
+- Now: shots leave the shot point and fly to the crosshair target, a sphere is swept
+  instead of a ray, a shot that reaches its range detonates, and every impact is
+  logged with the collider name. The keyboard keys J, L, I and K turn and look.
+- Not verified in the Editor: the sweep and the aim were tested against a simulated
+  physics world, not against Unity Physics.
+- The shots were pooled GameObjects with a light each. They are now drawn through one
+  `ManagedSphereBatch`, and the light is gone.
+
+### `ManagedChemicalHazardField.cs`
+
+- Hazards were one GameObject each with their own material. They are drawn through
+  one `ManagedSphereBatch` now.
+
+### `ManagedChemistryRecipe.cs`
+
+- The Ice recipe is untested against the real Alembic library. Whether three water
+  groups at 150 K keep every bond for 32 steps is unknown, and the first Ice impact
+  line in the Console shows it. The hazard spawns either way, because
+  `RequireConfirmation` is off.

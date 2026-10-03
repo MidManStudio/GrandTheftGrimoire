@@ -9,9 +9,9 @@ using UnityEngine;
 namespace MidManStudio.Gtg.Managed.Chemistry
 {
     /// <summary>
-    /// Game side description of one reaction. Alembic runs the atoms, and the
-    /// hazard numbers here decide the footprint. Values live in code for now
-    /// and move to an mdix table later.
+    /// Game side description of one reaction. Alembic runs the atoms, and the hazard
+    /// numbers here decide the footprint. Values live in code for now and move to an
+    /// mdix table later.
     /// </summary>
     public sealed class ManagedChemistryRecipe
     {
@@ -30,6 +30,19 @@ namespace MidManStudio.Gtg.Managed.Chemistry
         public float CutoffAngstrom = 10f;
         public int MaxSteps = 32;
         public int MinFormedBonds = 1;
+
+        /// <summary>
+        /// Most broken bonds that still count as confirmed. A negative value turns the
+        /// check off. Zero asks that every bond that formed also holds.
+        /// </summary>
+        public int MaxBrokenBonds = -1;
+
+        /// <summary>
+        /// When true the run uses its whole step budget even after the bond goal is met,
+        /// so a bond that breaks late is still seen.
+        /// </summary>
+        public bool RunFullBudget;
+
         public ulong Seed = 1234UL;
 
         /// <summary>When false, an unconfirmed reaction still spawns its hazard.</summary>
@@ -51,11 +64,37 @@ namespace MidManStudio.Gtg.Managed.Chemistry
             return BaseRadiusMeters * Mathf.Sqrt(Mathf.Max(1f, quantity));
         }
 
+        /// <summary>Hot hydrogen and oxygen groups. Bonds forming is the confirmation.</summary>
         public static readonly ManagedChemistryRecipe Fireball = new ManagedChemistryRecipe();
+
+        /// <summary>
+        /// Cold water groups. Confirmed when bonds form and none of them break, so the
+        /// cluster holds together at low temperature. The zone grows over half a second.
+        /// </summary>
+        public static readonly ManagedChemistryRecipe Ice = new ManagedChemistryRecipe
+        {
+            Id = "ice",
+            Molecules = 3,
+            TemperatureK = 150f,
+            MinFormedBonds = 1,
+            MaxBrokenBonds = 0,
+            RunFullBudget = true,
+            Seed = 4321UL,
+            Hazard = ManagedHazardType.Freeze,
+            BaseRadiusMeters = 3.5f,
+            HazardDurationSeconds = 6f,
+            GrowSeconds = 0.5f,
+        };
 
         public static ManagedChemistryRecipe ForSpell(ManagedSpellKind kind)
         {
-            return Fireball;
+            switch (kind)
+            {
+                case ManagedSpellKind.Ice:
+                    return Ice;
+                default:
+                    return Fireball;
+            }
         }
     }
 }

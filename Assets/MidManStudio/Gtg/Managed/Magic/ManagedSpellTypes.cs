@@ -10,6 +10,7 @@ namespace MidManStudio.Gtg.Managed.Magic
     public enum ManagedSpellKind : byte
     {
         Fireball = 0,
+        Ice = 1,
     }
 
     /// <summary>One spell hit. The caster raises it and the chemistry field consumes it.</summary>
