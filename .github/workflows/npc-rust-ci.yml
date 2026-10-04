@@ -12,14 +12,18 @@ on:
     paths:
       - 'rust/**'
       - 'Assets/NPC/**'
-      - 'Assets/MidManStudio/Gtg/NPC/**'
+      - 'Assets/MidManStudio/Gtg/ECS/NPC/**'
+      - 'Assets/MidManStudio/Gtg/Managed/NPC/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Health/**'
       - 'scripts/check_npc_enum_sync.py'
       - '.github/workflows/npc-rust-ci.yml'
   pull_request:
     paths:
       - 'rust/**'
       - 'Assets/NPC/**'
-      - 'Assets/MidManStudio/Gtg/NPC/**'
+      - 'Assets/MidManStudio/Gtg/ECS/NPC/**'
+      - 'Assets/MidManStudio/Gtg/Managed/NPC/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Health/**'
       - 'scripts/check_npc_enum_sync.py'
 
 permissions:
@@ -105,4 +109,48 @@ jobs:
             echo '```text'
             head -c 20000 ci-out/csharp-abi.txt 2>/dev/null || echo '(no output captured)'
             echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  managed-npc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build native library
+        working-directory: rust
+        run: cargo build -p gtg-npc-ffi
+
+      - name: Managed NPC checks on the managed fallback
+        run: |
+          set -o pipefail
+          mkdir -p ci-out
+          dotnet run --project rust/npc/managed-npc-test -c Release -- fallback 2>&1 | tee ci-out/managed-npc-fallback.txt
+
+      - name: Managed NPC checks on the real native library
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/debug
+        run: |
+          set -o pipefail
+          dotnet run --project rust/npc/managed-npc-test -c Release -- native 2>&1 | tee ci-out/managed-npc-native.txt
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          {
+            echo '## GTG Managed NPC checks'
+            echo
+            echo 'Managed NPC code compiled with plain .NET (C# 9) against hand written Unity stubs. The stub raycast is a callback, so real colliders and layers are not covered. No Unity is involved.'
+            for f in managed-npc-fallback managed-npc-native; do
+              echo "### $f"
+              echo '```text'
+              head -c 20000 "ci-out/$f.txt" 2>/dev/null || echo '(no output captured)'
+              echo '```'
+            done
           } >> "$GITHUB_STEP_SUMMARY"
