@@ -37,7 +37,7 @@ To add an archetype, add one `createArchetype(...)` line to the group array. Add
 
 ## Enums in C# and the sync check
 
-`Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs` defines `NpcRole`, `DecisionBackend`, `LearningMode` (all `byte`) and `NpcAction` (`int`) with the same numbers as the MDIX enums and the Rust ABI. `NPCAuthoring`, `NPCIdentity`, `NPCDecision` and `NPCDecisionSystem` use them in place of raw integers, so the Inspector shows dropdowns. Unity stores enums as integers, so existing scene and prefab values are kept.
+`Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs` (shared by the ECS and Managed stacks) defines `NpcRole`, `DecisionBackend`, `LearningMode` (all `byte`) and `NpcAction` (`int`) with the same numbers as the MDIX enums and the Rust ABI. `NPCAuthoring`, `NPCIdentity`, `NPCDecision` and `NPCDecisionSystem` use them in place of raw integers, so the Inspector shows dropdowns. Unity stores enums as integers, so existing scene and prefab values are kept.
 
 The native structs in `NPCNativeTypes.cs` stay raw `uint`/`int` on purpose: they mirror the C ABI byte for byte, and the decision system converts explicitly at that boundary. Their sizes and offsets were read against `npc-ffi` (32 and 16 bytes; offsets 0/8/12/16/20/24/28 and 0/8/12) and match. `NPCNativeLib` also checks the sizes at runtime.
 

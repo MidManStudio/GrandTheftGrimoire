@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- CI-only harness: compiles the Managed NPC code without Unity, against UnityStubs.cs. Never part of the game
+       build, and Unity does not see this directory. LangVersion 9 matches Unity 2022.3, so a newer language
+       feature in the game code fails here instead of in the Editor. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <UseAppHost>false</UseAppHost>
+    <RootNamespace>MidManStudio.Gtg.Managed.NPC.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs;Tests.cs;UnityStubs.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Health/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/*.cs" />
+    <!-- Shared with the ECS stack, no ECS dependency. -->
+    <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Native/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />
+  </ItemGroup>
+</Project>

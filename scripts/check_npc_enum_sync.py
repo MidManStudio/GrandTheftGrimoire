@@ -5,7 +5,7 @@ CI tooling only: it never runs in the game and is not part of the NPC ML pipelin
 
 Compares names and numeric values of NpcRole, DecisionBackend, LearningMode and NpcAction across:
   Assets/NPC/Archetypes/archetypes.mdix                          (@ENUMS)
-  Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs             (C# enums)
+  Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs         (C# enums, shared by both stacks)
   rust/npc/crates/npc-ffi/src/lib.rs                             (parse() and action_code())
   rust/npc/crates/npc-ml/src/lib.rs                              (LearningMode declaration order)
 
@@ -18,7 +18,12 @@ import sys
 from pathlib import Path
 
 MDIX = "Assets/NPC/Archetypes/archetypes.mdix"
-CS = "Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs"
+# The folder moved under ECS/ when the Managed stack was added. The old location is still tried, so
+# the check also works on a checkout from before the move.
+CS_CANDIDATES = (
+    "Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs",
+    "Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs",
+)
 FFI = "rust/npc/crates/npc-ffi/src/lib.rs"
 ML = "rust/npc/crates/npc-ml/src/lib.rs"
 # NpcAction is not authored in MDIX (it is a runtime result), so it is compared as C# vs Rust only.
@@ -31,6 +36,13 @@ def norm(name):
 
 def read(root, rel):
     return (root / rel).read_text(encoding="utf-8")
+
+
+def find_cs(root):
+    for rel in CS_CANDIDATES:
+        if (root / rel).is_file():
+            return rel
+    return CS_CANDIDATES[0]
 
 
 def parse_mdix(text):
@@ -74,10 +86,11 @@ def parse_rust(ffi, ml):
 
 def main(argv):
     root = Path(argv[1]) if len(argv) > 1 else Path(".")
+    cs = find_cs(root)
     try:
         sources = {
             "mdix": parse_mdix(read(root, MDIX)),
-            "csharp": parse_cs(read(root, CS)),
+            "csharp": parse_cs(read(root, cs)),
             "rust": parse_rust(read(root, FFI), read(root, ML)),
         }
     except OSError as err:
@@ -88,7 +101,7 @@ def main(argv):
     for enum, in_mdix in ENUMS.items():
         expected = sources["csharp"].get(enum)
         if not expected:
-            problems.append(f"{enum}: not found in {CS}")
+            problems.append(f"{enum}: not found in {cs}")
             continue
         for label in ("rust", "mdix"):
             if label == "mdix" and not in_mdix:

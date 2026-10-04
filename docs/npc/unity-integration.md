@@ -1,18 +1,35 @@
 # NPC Unity integration: status and audit
 
-Status (2026-09-29): the native boundary is verified from C# against the real Rust library. The ECS loop around it is **not closed**, and nothing has been built or run inside Unity.
+Status (2026-10-04): the native boundary is verified from C# against the real Rust library. Two stacks now sit on top of it, and the ECS stack does not run on the development machine, see `../GrandTheftGrimoire/managed.md`. The Managed stack closes the observation side of the loop (health, line of sight, observation) and delivers decisions as an event. **Nothing acts on a decision yet** on either stack, and nothing has been built or run inside Unity.
 
 ## What exists
 
-| File (`Assets/MidManStudio/Gtg/NPC/`) | Role |
+### ECS stack and shared files (`Assets/MidManStudio/Gtg/ECS/NPC/`)
+
+The four files marked shared have no ECS dependency and are compiled by both stacks.
+
+| File | Role |
 |---|---|
-| `Components/NPCEnums.cs` | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction` (ABI v2 numbers) |
+| `Components/NPCEnums.cs` (shared) | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction` (ABI v2 numbers) |
 | `Components/NPCComponents.cs` | `NPCTag`, `NPCIdentity`, `NPCObservation`, `NPCDecision` |
 | `Authoring/NPCAuthoring.cs` | Baker that adds the four components with default values |
-| `Native/NPCNativeTypes.cs` | 32-byte observation and 16-byte decision structs, explicit layout |
-| `Native/NPCNativeLib.cs` | P/Invoke, ABI version and size check, pinned-array batch call, warn-once fallback signal |
-| `Native/NPCManagedFallback.cs` | Managed copy of the Rust decision, used when the native library is missing or rejects a batch (no Unity dependencies) |
+| `Native/NPCNativeTypes.cs` (shared) | 32-byte observation and 16-byte decision structs, explicit layout |
+| `Native/NPCNativeLib.cs` (shared) | P/Invoke, ABI version and size check, pinned-array batch call, warn-once fallback signal |
+| `Native/NPCManagedFallback.cs` (shared) | Managed copy of the Rust decision, used when the native library is missing or rejects a batch (no Unity dependencies) |
 | `Systems/NPCDecisionSystem.cs` | Every 0.1 s: up to 256 NPCs, one native batch call, writes `NPCDecision` |
+
+### Managed stack (`Assets/MidManStudio/Gtg/Managed/NPC/` and `Managed/Health/`)
+
+| File | Role |
+|---|---|
+| `Health/ManagedHealth.cs` | Hit points as a component of its own, `Fraction` 0 to 1, `Damaged` and `Died` events |
+| `Health/IManagedDamageable.cs` | One-method contract for anything that takes damage |
+| `NPC/ManagedNpcThreatSource.cs` | Marks what NPCs can see, normally the player. Several visible points on the body |
+| `NPC/ManagedNpcSight.cs` | View cone test, then one `Physics.Raycast` from the eye to the point |
+| `NPC/ManagedNpcBrain.cs` | One NPC: settings, sight, observation, last action, `ActionChanged` event |
+| `NPC/ManagedNpcDirector.cs` | Batches the brains, one native call per tick, ray budget, rotation for large populations |
+
+Each Managed tick (every 0.1 s): take up to 256 brains from a rotating cursor, run sight for the living ones within a ray budget (128 per tick by default), build the observations, make one `gtg_npc_decide_batch` call (managed fallback if the library is missing), and apply each action to its brain. Threat visibility is a cone plus line of sight: an NPC sees a threat when one of its visible points is inside range and the cone and the first thing the ray meets is that threat. Seeing lingers for 0.5 s after the last ray that saw it. Health comes from `ManagedHealth.Fraction`, or 1 when the NPC has none.
 
 ## What one decision tick does
 
@@ -42,18 +59,29 @@ The ABI test runs on plain .NET 8. It proves the boundary code and the P/Invoke 
 
 ## Gaps that keep the loop open
 
-1. **Nothing writes `NPCObservation`.** The baker sets `ThreatVisible = 0` and `HealthFraction = 1`, and no system changes them. Every NPC therefore sees no threat and full health, so the merchant always trades and the enemy always patrols.
-2. **Nothing reads `NPCDecision`.** No system turns Idle/Trade/Patrol/Attack/Retreat into movement, animation, trading or combat.
-3. **No health source exists.** The repository has no health or damage component outside the NPC folder, so `HealthFraction` has nothing to read.
-4. **No native plugin is in the Unity project.** `Assets/` contains no `.so`, `.dll`, `.dylib` or `Plugins` folder, so in Unity today every call takes the managed fallback path after one warning. CI builds only Linux x86-64 debug and release libraries. Windows, macOS, Android arm64 and iOS builds and their Unity import settings do not exist yet.
-5. **`NPCIdentity.Id` is always 0 from the baker.** Ids come from entity index and version, so they are not stable across sessions and cannot key persisted memory.
-6. **`LearningMode` is stored but read by nothing.** **`archetypes.mdix` is not read by `NPCAuthoring`**, so archetype data does not reach entities.
+| Gap | ECS stack | Managed stack |
+|---|---|---|
+| Something writes the observation | no, the baker sets `ThreatVisible = 0` and `HealthFraction = 1` and nothing changes them | yes, sight and `ManagedHealth` (not run in Unity) |
+| A health component exists | no | yes, `ManagedHealth` |
+| Something reads the decision | no | only as the `ActionChanged` event and the `Action` property, no component subscribes yet |
+| Anything deals damage | no | no. Fireball impacts and chemical hazards do not call `TakeDamage` |
+| A native plugin is in `Assets/` | no | no. Every batch takes the managed fallback after one warning until a build is imported |
+| NPC ids stable across sessions | no, entity index and version | no, a per-session counter |
+| `archetypes.mdix` read by the game | no | no. Settings are typed in the Inspector |
+| `LearningMode` read by anything | no | no |
 
-## Decisions needed before closing the loop
+Native plugin builds: CI builds Linux x86-64 and the benchmark workflow builds Linux ARM64 and macOS arm64. There is no Windows build, no Intel macOS build (the development machine is an Intel MacBook Pro) and no Android arm64 build for Unity. The Rust library is not affected by the Burst `Illegal instruction` abort that stopped the ECS stack, because that abort comes from Burst code generation. Whether the library runs on the development machine is untested.
 
-These are game-design choices, not implementation details, so they are left open rather than guessed:
+## Decided and still open
 
-- **What makes `ThreatVisible` true?** Options include distance to the `CharacterTag` entity, line of sight through Unity Physics (`CharacterMovementSystem` already uses `PhysicsWorldSingleton`), or faction hostility. The character controller uses `LocalTransform`, so position is available.
-- **Where does health come from?** A new health component, or the future combat system.
-- **How does each action execute?** Trade needs a dialogue and shop interaction, Patrol needs a path or waypoint source, Attack and Retreat need the combat and navigation systems. Unity keeps authority over all of them; Rust only chooses.
-- **Native library build and delivery.** Which targets first (Windows/macOS editor for development, Android arm64 for the A13), and whether CI publishes them as artifacts to copy into `Assets/Plugins/`.
+Decided (2026-10-04):
+- `ThreatVisible` is line of sight, in the style of the Assassin's Creed games: a view cone plus a raycast. It is not distance only and not faction hostility.
+- Health is its own component. The Managed stack has `ManagedHealth`. The ECS stack still has none, and it is on the ECS backlog.
+- Gameplay is built on the Managed stack first, the ECS stack stays frozen.
+
+Still open, game-design choices that were not guessed:
+- **Detection model.** The current model is binary and instant, with a short lingering. A suspicion meter that fills while the player is seen, as in the Assassin's Creed games, would need a new ABI field or a Unity-side filter before the observation. It is not built.
+- **Factions.** Every threat source is a threat to every NPC.
+- **How each action executes.** Trade needs dialogue and a shop interaction, Patrol needs waypoints or a navigation source, Attack and Retreat need combat and navigation. Unity keeps authority over all of them, Rust only chooses.
+- **Damage sources.** What deals damage first: the fireball impact, a hazard, or melee.
+- **Native library targets.** Which targets first for Unity, and whether CI publishes them as artifacts to copy into `Assets/Plugins/`. An Intel macOS build is needed for the development machine.

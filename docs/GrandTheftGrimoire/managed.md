@@ -33,6 +33,8 @@ The ECS folder moved with its `.meta` files, so script GUIDs did not change.
 
 ### Namespaces and names
 
+The NPC enums and the native Rust bridge are shared by both stacks. They have no ECS dependency, so `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction`, `NPCNativeLib`, `NPCNativeTypes` and `NPCManagedFallback` live in `ECS/NPC/` in the namespaces `MidManStudio.Gtg.NPC.Components` and `MidManStudio.Gtg.NPC.Native`, and the Managed NPC code uses them directly. The one ECS edit this needed is listed in Fixes and Problems.
+
 Managed code lives under `MidManStudio.Gtg.Managed.<System>`, and every public type
 carries a `Managed` prefix. Both stacks can therefore compile in one assembly
 without a name clash. Inside these namespaces the simple names `Camera` and
@@ -58,6 +60,14 @@ ECS and Managed together, or ECS only:
 
 A scene object that carries a component from a stack that is not compiled shows a
 missing script. Delete it, or switch the define back.
+
+### Scene setup (NPC)
+
+1. On the player object add `ManagedNpcThreatSource`. Add `ManagedHealth` to it as well if the player can die, so a dead player stops being seen.
+2. On each NPC add `ManagedNpcBrain`, plus `ManagedHealth` if it can be hurt. Pick the role and backend. A merchant uses role Merchant, backend StateMachine and Can Move off. A goblin uses Enemy and Utility. Put the NPC's forward direction along its local Z axis, because the view cone points along it.
+3. Nothing else is needed. The first brain creates a `GTG NPC Director` object. Add a `ManagedNpcDirector` to the scene yourself to change the tick rate or batch limits, or to turn the overlay on.
+4. Select an NPC in the Scene view to see its view cone and eye. The cone is yellow while idle and red while it sees a threat.
+5. Check the Console at Play start. A missing native library logs one warning and the managed decision takes over. The director overlay says `native` or `managed fallback`.
 
 ### Scene setup (Managed)
 
@@ -107,7 +117,8 @@ Unity creates `.meta` files for the new scripts on first import. Commit them.
 | Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
 | Ice recipe and Freeze hazard | backlog | done |
 | Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
-| NPC | present | not built yet |
+| Health | backlog | done, `ManagedHealth` |
+| NPC | decision system only, nothing feeds it and nothing reads it | brain, sight, director done, nothing acts on the decision yet |
 
 The ECS backlog items need the ECS packages installed, so they are ported together.
 The arrow keys are the one ECS edit since the split, two lines per axis in
@@ -331,6 +342,70 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - The field holds at most `_maxHazards` hazards. A new one drops the oldest.
 - No GameObject is created. Hazards are plain objects, drawn from `LateUpdate`.
 
+### `IManagedDamageable.cs`
+
+**What it does:** One-method contract for anything that can take damage: `IsAlive` and `TakeDamage(amount, source)`.
+
+**Decisions:**
+- Spells, melee and hazards call the interface, so none of them needs to know whether the target is an NPC or the player. Nothing calls it yet, because the fireball and the hazards do not deal damage in this repo today.
+
+### `ManagedHealth.cs`
+
+**What it does:** Hit points as a component of its own, on the player, an NPC or anything else that can be hurt. `Fraction` (0 to 1) is the value the NPC observation carries.
+
+**Decisions:**
+- Health is its own component, as asked, and it implements `IManagedDamageable`. Systems read it and subscribe to `Damaged` and `Died`, they do not write the value.
+- Damage that is zero, negative or NaN is ignored, and so is damage while invulnerable or dead. The hit that kills removes only the health that was left, and `Died` fires once.
+- A dead object does not heal. `ResetToFull` is the way back, for a respawn.
+- The events are plain C# events, not static, because several NPCs have one each.
+
+### `ManagedNpcThreatSource.cs`
+
+**What it does:** Marks an object that NPCs can see, normally the player. It keeps a static list of active sources and a few local visible points, by default head and chest of a 2 m character.
+
+**Decisions:**
+- The NPC checks several points, not one. Seeing any one point is enough, so a half hidden target is still seen, which is the Assassin's Creed behavior of being spotted by an exposed arm.
+- Every registered source is a threat to every NPC. Factions are not modelled yet, so a guard and a bandit see the player alike.
+- A source with a `ManagedHealth` that is dead is not seen. A source that is disabled is not seen.
+- The static list is cleared at `SubsystemRegistration`, as in `ManagedSpellCaster`.
+
+### `ManagedNpcSight.cs`
+
+**What it does:** The two tests behind sight. `InView` checks range and the view cone with arithmetic only. `HasLineOfSight` casts one `Physics.Raycast` from the eye to the point.
+
+**Decisions:**
+- The cone test runs first, so an NPC that cannot face the player costs no ray. Out of range and behind both skip the physics call.
+- The ray ignores triggers. It succeeds when the first thing it meets belongs to the source's transform hierarchy, or when it meets nothing.
+- A ray that starts inside a collider does not hit it, so the NPC's own capsule does not block its sight. The mask should still leave the NPC's layer out where possible.
+- A ray stops a small margin past the target point. A target point inside a collider is found by the surface hit well before that.
+
+### `ManagedNpcBrain.cs`
+
+**What it does:** One NPC. It holds role, backend, can-move, learning mode and the sight settings. It builds the 32 byte observation for the Rust decision and stores the action that comes back. It raises `ActionChanged` when the action changes. It does not move, fight or trade.
+
+**Decisions:**
+- Movement, combat, animation and trading stay out of this file on purpose. Rust chooses, other components act, as in the ECS design.
+- A threat lingers for `_loseSightDelay` seconds after the last ray that saw it, so a guard does not flicker between attack and patrol when the player steps behind a pillar for one frame.
+- Each ray costs one from a per-tick budget. An NPC that runs out keeps its previous result, see the director.
+- A dead brain is left out of the batch and reports Idle.
+- The id is a counter that is unique among live NPCs in one play session. It is not stable between sessions, so it cannot key saved memory.
+- `LearningMode` is stored and exposed. Nothing reads it yet.
+- A threat source on the NPC itself, or on one of its parents or children, is ignored.
+
+### `ManagedNpcDirector.cs`
+
+**What it does:** Drives every brain. Each tick takes a bounded batch, runs sight for the living NPCs, makes one native call for the whole batch and hands the actions back. A brain creates the director when the scene has none.
+
+**Decisions:**
+- One native call per tick, never one per NPC. The tick is 0.1 s and the batch is capped at 256, the same numbers as the ECS decision system. A larger population is served in turns through a rotating cursor.
+- Sight rays have their own cap per tick, 128 by default, so a crowd cannot spend an unbounded number of raycasts in one frame. When the cap is hit, the NPC that ran out leads the next tick, so every NPC is served in turn and none starves.
+- The tick works in three phases. Phase 1 copies the batch out of the list. Phase 2 runs sight and builds observations. Phase 3 applies actions. `ActionChanged` listeners run only in phase 3, so a listener that disables or destroys an NPC cannot change the list under the loop.
+- A decision is applied only if its NPC id matches the row it was made for and the action is in range, the same guard as the ECS system.
+- A scene director is reused even when it is disabled, because a disabled director is the scene's choice. A second enabled director disables itself with one warning.
+- With no `ManagedNpcThreatSource` in the scene the director warns once, because that is the usual reason for NPCs that never see anything.
+- `Brains` and the id counter are static and cleared at `SubsystemRegistration`.
+- Tick cost is about one managed array fill, one pinned native call and at most the ray cap, all on the main thread.
+
 ## CI and Workflows
 
 - `.github/workflows/run-patch.yml` - runs `.mdix/patches/patch.mdix`. The current
@@ -339,6 +414,12 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   reports an error for every file that is already wrapped, and repeats the doc notes.
 - `.github/workflows/apply-replacements.yml` - applies the replacements archive that
   added the `Managed/` folder and this file.
+- `.github/workflows/npc-rust-ci.yml` - checks the shared NPC layer. The `csharp-abi` job
+  compiles `NPCNativeLib`, `NPCNativeTypes`, `NPCManagedFallback` and `NPCEnums` with
+  plain .NET and runs them against the real Rust library. The `managed-npc` job compiles
+  `Managed/Health` and `Managed/NPC` (C# 9, as in Unity 2022.3) against hand written
+  `UnityEngine` stand-ins in `rust/npc/managed-npc-test/` and runs 52 checks, once on the
+  managed fallback and once on the real library.
 
 ## Fixes and Problems
 
@@ -353,7 +434,8 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   the character reproduce it. The cause is not confirmed, and the working theory is
   Burst code generation for this CPU. The decision is to keep the ECS sources
   frozen behind `GTG_ECS` and build gameplay on the Managed stack.
-- Not done: a Managed NPC. The NPC decision system and its Rust bridge stay ECS only.
+- The Managed NPC was added afterwards, see the NPC modules above. It does not move,
+  fight or trade yet, it only decides.
 
 ### `ManagedCharacter.cs`
 
@@ -387,3 +469,27 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   groups at 150 K keep every bond for 32 steps is unknown, and the first Ice impact
   line in the Console shows it. The hazard spawns either way, because
   `RequireConfirmation` is off.
+
+### NPC files (`ManagedHealth.cs`, `ManagedNpcBrain.cs`, `ManagedNpcDirector.cs`, `ManagedNpcSight.cs`, `ManagedNpcThreatSource.cs`)
+
+- ECS edit: `ECS/NPC/Native/NPCManagedFallback.cs` lost its `#if GTG_ECS` wrapper. The file has no ECS or
+  Unity dependency, and the Managed director needs it when the native library is missing. The ECS decision
+  system still uses it unchanged. The alternative was a second copy of the decision, which the Rust parity
+  test would not cover. `NPCNativeLib.cs`, `NPCNativeTypes.cs` and `NPCEnums.cs` were already unwrapped.
+- Not verified in the Editor, not compiled by Unity. The files compile with .NET 8 (C# 9) against hand
+  written stubs of the `UnityEngine` types, and 52 checks pass there on both the managed fallback and the
+  real Rust library. CI job `managed-npc` repeats this on every push. The stub raycast is a callback, so the checks prove the logic around the ray (cone, budget,
+  lingering, dead and self sources, rotation) and not real colliders, layers or `Physics.Raycast` behavior.
+- Sight is a cone plus one ray per visible point. There is no suspicion meter, no hearing and no faction
+  logic. An NPC either sees a threat or does not.
+- The sight ray starts at the eye offset, 1.6 m above the NPC pivot by default. An NPC whose own collider
+  contains that point, or whose layer is in the sight mask, can block itself on some setups. The scene setup
+  names the two ways around it.
+- Nothing calls `TakeDamage` yet. Fireball impacts and chemical hazards do not hurt anything in the repo
+  today, so an NPC's health cannot change in play until a damage source is connected.
+- Nothing acts on the decision. Subscribe to `ManagedNpcBrain.ActionChanged` or read `Action` to drive
+  movement, combat and trade.
+- The native library is still not in `Assets/`. Until a build is imported as a plugin, every batch takes the
+  managed fallback after one warning. Rust itself is not affected by the Burst `Illegal instruction` abort,
+  because that comes from Burst code generation. Whether the Rust library runs on the 2010 MacBook is
+  untested: the CI macOS leg is arm64, and no Intel macOS build exists yet.

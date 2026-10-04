@@ -1,4 +1,3 @@
-#if GTG_ECS
 using MidManStudio.Gtg.NPC.Components;
 
 namespace MidManStudio.Gtg.NPC.Native
@@ -29,4 +28,3 @@ namespace MidManStudio.Gtg.NPC.Native
         }
     }
 }
-#endif

@@ -13,7 +13,9 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="UnityDebugStub.cs" />
-    <Compile Include="../../../Assets/MidManStudio/Gtg/NPC/Native/*.cs" />
-    <Compile Include="../../../Assets/MidManStudio/Gtg/NPC/Components/NPCEnums.cs" />
+    <!-- The NPC code sits under ECS/ since the Managed stack was added. These four files have no ECS dependency and
+         compile in both stacks, so no GTG_ECS define is needed here. -->
+    <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Native/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />
   </ItemGroup>
 </Project>

@@ -2,7 +2,7 @@
 
 The Rust FFI uses `gtg_npc_decide_batch` ABI v2, with 32-byte observation and 16-byte decision structs. Rust validates every observation before writing any output; `count` is capped at 4096. Both buffers belong to the caller. Do not pass overlapping buffers. No Rust-owned memory crosses the boundary.
 
-Unity `NPCDecisionSystem` currently processes up to 256 NPCs every 0.1 seconds, rotating through the entity query when more are present. The managed fallback produces equivalent actions when no native library is installed, but **does not benchmark native FFI**. The action component is an intent only: navigation, animations, combat and trade execution are not yet implemented. A scene and actual device profiling are still needed.
+The decision loop runs on two stacks. The ECS `NPCDecisionSystem` and the Managed `ManagedNpcDirector` each process up to 256 NPCs every 0.1 seconds, rotating through the population when more are present. The managed fallback produces equivalent actions when no native library is installed, but **does not benchmark native FFI**. The action component is an intent only: navigation, animations, combat and trade execution are not yet implemented. A scene and actual device profiling are still needed.
 
 Roles: 0 merchant, 1 civilian, 2 guard, 3 enemy, 4 boss. Backends: 0 FSM, 1 utility, 2 hybrid ML (currently deterministic fallback). Actions: 0 idle, 1 trade, 2 patrol, 3 attack, 4 retreat. The merchant never patrols. Existing `Assets/game_enemies.mdix` AIType remains unchanged.
 
@@ -21,8 +21,9 @@ Only ordinary repo-relative files are in the payload tarball. Keep `replacements
 - **Added, awaiting its first CI run:** a `mixed` benchmark scenario with warm-up and median-of-9 timing in the Rust and C benchmarks, and the `csharp-abi` job that runs the Unity-side C# native layer against the real library. Both were run in the authoring sandbox (Rust 1.85, .NET 8) and passed, including negative controls; they have not run on GitHub yet.
 - **Verified by reading:** the C# structs match `npc-ffi` byte for byte (also checked at runtime by the ABI test once CI runs).
 - **Not verified:** a real Unity build, the Unity ECS loop, native plugin packaging for any Unity target, Android/macOS builds, and any device timing.
-- **Known open ends:** nothing writes `NPCObservation` and nothing reads `NPCDecision`; no health source exists; no native plugin is in `Assets/`, so Unity would use the managed fallback today. Details and the decisions needed are in `unity-integration.md`.
-- **Next:** decide the perception, health and action questions in `unity-integration.md`, then NPC memory and decision scheduling.
+- **Managed stack (2026-10-04):** health, line of sight, brain and director are written and pass 52 checks against Unity stubs on both the managed fallback and the real Rust library. Not compiled by Unity, not run in a scene. CI job `managed-npc` runs the same checks on every push.
+- **Known open ends:** nothing acts on a decision on either stack; nothing deals damage; no native plugin is in `Assets/`, so Unity would use the managed fallback today; no Intel macOS build exists for the development machine. Details are in `unity-integration.md`.
+- **Next:** a Unity compile and a scene test of the Managed NPC, a first action executor (Patrol and Attack), a damage source, and the native plugin builds.
 
 ## Enum use in C# (2026-09-29)
 

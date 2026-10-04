@@ -1,8 +1,8 @@
-# GTG NPC architecture — initial scaffold
+# GTG NPC architecture: initial scaffold
 
-> Code location: `Assets/MidManStudio/Gtg/ECS/NPC/`. The ECS sources compile only when `GTG_ECS` is defined. There is no Managed NPC version yet, see `../GrandTheftGrimoire/managed.md`.
+> Code location: `Assets/MidManStudio/Gtg/ECS/NPC/`. The ECS sources compile only when `GTG_ECS` is defined. A Managed version of the NPC loop (health, sight, brain and director) lives in `Assets/MidManStudio/Gtg/Managed/NPC/` and `Managed/Health/`, see `../GrandTheftGrimoire/managed.md`. The enums and the native bridge are shared by both stacks and stay under `ECS/NPC/`.
 
-Unity ECS owns authoritative world state, physics, navigation, animation, inventory, damage and dialogue. Rust provides a deterministic baseline and future optional ML policies. The native ABI is deliberately minimal. `NPCDecisionSystem` calls it in batches, but nothing yet feeds it real observations or acts on its decisions; see `unity-integration.md`. Keep stationary merchant NPCs on FSMs; use utility AI for common combatants; benchmark learned policies before enabling them for selected important NPCs. Online updates must be explicitly opt-in and time-budgeted. No Python is used for core ML.
+Unity owns authoritative world state, physics, navigation, animation, inventory, damage and dialogue, through ECS on the ECS stack and through MonoBehaviours on the Managed stack. Rust provides a deterministic baseline and future optional ML policies. The native ABI is deliberately minimal. `NPCDecisionSystem` calls it in batches, but nothing yet feeds it real observations or acts on its decisions; see `unity-integration.md`. Keep stationary merchant NPCs on FSMs; use utility AI for common combatants; benchmark learned policies before enabling them for selected important NPCs. Online updates must be explicitly opt-in and time-budgeted. No Python is used for core ML.
 
 This is a scaffold, not a production-ready NPC implementation. Follow-up: benchmark SoA batches, native binary packaging and actual Galaxy A13 performance.
 
