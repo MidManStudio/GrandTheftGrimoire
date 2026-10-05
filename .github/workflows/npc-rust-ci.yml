@@ -15,6 +15,7 @@ on:
       - 'Assets/MidManStudio/Gtg/ECS/NPC/**'
       - 'Assets/MidManStudio/Gtg/Managed/NPC/**'
       - 'Assets/MidManStudio/Gtg/Managed/Health/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Magic/**'
       - 'scripts/check_npc_enum_sync.py'
       - '.github/workflows/npc-rust-ci.yml'
   pull_request:
@@ -24,6 +25,7 @@ on:
       - 'Assets/MidManStudio/Gtg/ECS/NPC/**'
       - 'Assets/MidManStudio/Gtg/Managed/NPC/**'
       - 'Assets/MidManStudio/Gtg/Managed/Health/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Magic/**'
       - 'scripts/check_npc_enum_sync.py'
 
 permissions:
