@@ -13,9 +13,14 @@
     <RootNamespace>MidManStudio.Gtg.Managed.NPC.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;Tests.cs;UnityStubs.cs" />
+    <Compile Include="Program.cs;Tests.cs;UnityStubs.cs;EditorStubs.cs;CasterStub.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Health/*.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/Editor/*.cs" />
+    <!-- Only the spell files that have no camera or rendering dependency. The caster itself is stubbed. -->
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellTypes.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDefinition.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDamage.cs" />
     <!-- Shared with the ECS stack, no ECS dependency. -->
     <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Native/*.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />

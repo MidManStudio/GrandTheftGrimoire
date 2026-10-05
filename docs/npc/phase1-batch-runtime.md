@@ -22,8 +22,9 @@ Only ordinary repo-relative files are in the payload tarball. Keep `replacements
 - **Verified by reading:** the C# structs match `npc-ffi` byte for byte (also checked at runtime by the ABI test once CI runs).
 - **Not verified:** a real Unity build, the Unity ECS loop, native plugin packaging for any Unity target, Android/macOS builds, and any device timing.
 - **Managed stack (2026-10-04):** health, line of sight, brain and director are written and pass 52 checks against Unity stubs on both the managed fallback and the real Rust library. Not compiled by Unity, not run in a scene. CI job `managed-npc` runs the same checks on every push.
-- **Known open ends:** nothing acts on a decision on either stack; nothing deals damage; no native plugin is in `Assets/`, so Unity would use the managed fallback today; no Intel macOS build exists for the development machine. Details are in `unity-integration.md`.
-- **Next:** a Unity compile and a scene test of the Managed NPC, a first action executor (Patrol and Attack), a damage source, and the native plugin builds.
+- **Managed actor, fireball damage and debugger (2026-10-05):** `ManagedNpcActor` carries out Patrol, Attack (chase and melee) and Retreat with a `NavMeshAgent`, the fireball damages anything with a `ManagedHealth`, and an editor window draws movement and sight. 156 checks pass against Unity stubs, 23 deliberate breaks were caught. Not compiled by Unity, not run on a NavMesh.
+- **Known open ends:** the ECS stack acts on nothing; no NavMesh is baked in any scene; Trade has no shop; ice and the hazards do not hurt; no native plugin is in `Assets/`, so Unity would use the managed fallback today; no Intel macOS build exists for the development machine. Details are in `unity-integration.md`, `navigation.md` and `rust-roadmap.md`.
+- **Next:** open the project in Unity and fix whatever the compiler finds, bake a NavMesh and try the loop, then the native plugin builds, then the observation version 3 design on the Rust roadmap.
 
 ## Enum use in C# (2026-09-29)
 

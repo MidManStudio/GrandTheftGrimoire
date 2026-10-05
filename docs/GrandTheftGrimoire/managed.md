@@ -65,9 +65,11 @@ missing script. Delete it, or switch the define back.
 
 1. On the player object add `ManagedNpcThreatSource`. Add `ManagedHealth` to it as well if the player can die, so a dead player stops being seen.
 2. On each NPC add `ManagedNpcBrain`, plus `ManagedHealth` if it can be hurt. Pick the role and backend. A merchant uses role Merchant, backend StateMachine and Can Move off. A goblin uses Enemy and Utility. Put the NPC's forward direction along its local Z axis, because the view cone points along it.
-3. Nothing else is needed. The first brain creates a `GTG NPC Director` object. Add a `ManagedNpcDirector` to the scene yourself to change the tick rate or batch limits, or to turn the overlay on.
-4. Select an NPC in the Scene view to see its view cone and eye. The cone is yellow while idle and red while it sees a threat.
-5. Check the Console at Play start. A missing native library logs one warning and the managed decision takes over. The director overlay says `native` or `managed fallback`.
+3. To make the NPC move and fight, add `ManagedNpcActor`. It brings a `NavMeshAgent` with it. Bake a NavMesh for the scene (a `NavMeshSurface` from the AI Navigation package, installed at 1.1.5) and place the NPC on it. Give the NPC a collider, otherwise the player's fireball passes through it. For a patrol route, drag transforms into the Waypoints list, or leave it empty to wander near the start. A merchant needs no actor.
+4. Fireballs hurt anything with a `ManagedHealth` inside the explosion, with no scene setup. The values are in `ManagedSpellDefinition`.
+5. The first brain creates a `GTG NPC Director` object. Add a `ManagedNpcDirector` to the scene yourself to change the tick rate or batch limits, or to turn the overlay on.
+6. Select an NPC in the Scene view to see its view cone and eye. The cone is yellow while idle and red while it sees a threat.
+7. Check the Console at Play start. A missing native library logs one warning and the managed decision takes over. The director overlay says `native` or `managed fallback`. An NPC that is not on the NavMesh logs one warning and stands still.
 
 ### Scene setup (Managed)
 
@@ -118,7 +120,8 @@ Unity creates `.meta` files for the new scripts on first import. Commit them.
 | Ice recipe and Freeze hazard | backlog | done |
 | Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
 | Health | backlog | done, `ManagedHealth` |
-| NPC | decision system only, nothing feeds it and nothing reads it | brain, sight, director done, nothing acts on the decision yet |
+| NPC | decision system only, nothing feeds it and nothing reads it | brain, sight, director and actor done: patrol, chase and melee, retreat |
+| Fireball damage | backlog | done, `ManagedSpellDamage` |
 
 The ECS backlog items need the ECS packages installed, so they are ported together.
 The arrow keys are the one ECS edit since the split, two lines per axis in
@@ -180,6 +183,10 @@ frame it reads the input and runs look, walk, jump and gravity, then calls `Move
 **What it does:** `ManagedSpellKind` (Fireball, Ice) and the `ManagedSpellImpact`
 struct.
 
+**Decisions:**
+- The impact carries `Source`, the GameObject that cast the spell, so damage can skip
+  the caster. Existing consumers ignore the field.
+
 ### `ManagedSpellDefinition.cs`
 
 **What it does:** One tuning record per spell: cooldown, speed, lifetime, sweep
@@ -191,6 +198,11 @@ chemistry recipes.
 - The sweep radius is a size of its own and is not the drawn diameter. A sphere of
   0.15 m catches a thin collider that a plain ray misses, and the shot still looks
   small.
+- `ImpactDamage`, `ImpactRadius` and `ImpactEdgeFraction` describe the explosion. The
+  fireball does 40 damage at the center, 3 m radius, and 25 percent of that at the
+  edge. Ice has no damage. These are placeholder tuning numbers, chosen so three direct
+  hits kill a 100 health NPC, and they move to the mdix table with the rest.
+- `For(kind)` looks a definition up by kind, because the slot order is not a stable key.
 
 ### `ManagedSpellVfxMaterials.cs`
 
@@ -228,10 +240,24 @@ no GameObject per shot.
   working on open ground. Turn it off for shots that should fizzle out.
 - Impact times, positions and the collider name are logged (`_logImpacts`). This
   tells apart "the shot hit nothing" from "the shot hit but nothing was drawn".
+- The impact raised on a hit carries `Source`, the caster's GameObject, set in
+  `Detonate`. Nothing else about the caster changed for damage.
 - `Impact` is a static event, so the chemistry field needs no reference to the
   caster. It is cleared at `SubsystemRegistration`, because static state survives a
   play session when domain reload is off.
 - The batch is filled and drawn in `LateUpdate`.
+
+### `ManagedSpellDamage.cs`
+
+**What it does:** Turns a spell impact into damage. It subscribes to `ManagedSpellCaster.Impact` by itself, so no scene object is needed. It hurts every `IManagedDamageable` inside the explosion radius, once each, with less damage toward the edge.
+
+**Decisions:**
+- The subscription happens at `BeforeSceneLoad`, which runs after the `SubsystemRegistration` reset of the caster's static event, so it is not wiped.
+- A body with several colliders is hurt once, using its nearest collider. Distance is measured to the collider bounds, not to the pivot, so a direct hit on a large body does full damage.
+- The caster is not hurt by its own spell unless `HurtCaster` is set. `Enabled` turns all spell damage off.
+- The overlap buffer holds 32 colliders. A crowd larger than that is not fully hurt by one explosion, which is a known limit.
+- The explosion does not check line of sight, so it also hurts targets behind a wall.
+- Ice does nothing here, because its definition has no damage. The chemical hazards do not call `TakeDamage` either.
 
 ### `ManagedIcosphere.cs`
 
@@ -368,6 +394,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - Every registered source is a threat to every NPC. Factions are not modelled yet, so a guard and a bandit see the player alike.
 - A source with a `ManagedHealth` that is dead is not seen. A source that is disabled is not seen.
 - The static list is cleared at `SubsystemRegistration`, as in `ManagedSpellCaster`.
+- `Damageable` is the `IManagedDamageable` on the object or a parent. An NPC melee hit uses it, so a source without health can be seen but not hurt.
 
 ### `ManagedNpcSight.cs`
 
@@ -391,6 +418,43 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - The id is a counter that is unique among live NPCs in one play session. It is not stable between sessions, so it cannot key saved memory.
 - `LearningMode` is stored and exposed. Nothing reads it yet.
 - A threat source on the NPC itself, or on one of its parents or children, is ignored.
+- `Threat` and `LastKnownThreatPosition` record what was seen and where. The memory ends with the lingering time, so an NPC chases the last seen position and not the live one.
+
+### `ManagedNpcActor.cs`
+
+**What it does:** Carries out the action Rust chose, driving a `NavMeshAgent`. Patrol walks the waypoints in order, or wanders near where the NPC began. Attack chases the last seen position and hits the target in melee. Retreat runs directly away. Idle and Trade stand still. It raises `Attacked` for every hit.
+
+**Decisions:**
+- The actor never decides. It listens to `ManagedNpcBrain.ActionChanged`, so the Rust decision stays the single source of what an NPC does.
+- Movement uses a `NavMeshAgent`, because the AI Navigation package is installed. The scene needs a baked NavMesh. An NPC that is not on it logs one warning, sends nothing to the agent, and is configured as soon as it is on the NavMesh.
+- A chase goes to `LastKnownThreatPosition`, not to the live position of the target, so stepping out of sight works as hiding. The destination is refreshed every 0.25 s.
+- Melee has a range (1.8 m), a damage (10) and a cooldown (1.2 s), all placeholders in the Inspector. The agent stops at 80 percent of the range and the NPC turns to face the target, so its view cone keeps pointing at it.
+- A hit goes through `ManagedNpcThreatSource.Damageable`. It is skipped when the target is already dead, which matters when two attackers are ready in the same frame.
+- A patrol stop lasts `_pauseSeconds`. A wander point must be on the NavMesh, otherwise the NPC stays where it is until the next try.
+- A chase target that is off the NavMesh gives no destination, so the NPC stands. A dead NPC stops. It is destroyed after `_removeAfterDeathSeconds`, and zero leaves the body.
+- Every NPC with an actor runs a small `Update`. The work per frame is a few comparisons, and the agent does the movement.
+
+### `ManagedNpcDebugView.cs`
+
+**What it does:** Editor-only drawing and text for the NPC debugger, in `Managed/NPC/Editor/` so it compiles into `Assembly-CSharp-Editor` and never reaches a build. It draws one NPC in the Scene view: a label, the path to the destination, a marker on the destination, the patrol route with numbered stops, the wander, attack or retreat range, the sight cone, and a cross where the threat was last seen. Colors follow the action: grey Idle, cyan Trade, green Patrol, red Attack, amber Retreat.
+
+**Decisions:**
+- It reads public state only and changes nothing in the game. The brain, the actor and the director gained read-only accessors for it (`Current`, `GetBrain`, `ViewRange`, `FieldOfViewDegrees`, `Home`, `AttackRange`, `WanderRadius`, `RetreatDistance`, waypoints, `HasPath`, `Destination`, `GetPathCorners`). No game code reads them.
+- The visualization lives in editor code and uses `Handles`, so the runtime components carry no `UnityEditor` references and no `#if UNITY_EDITOR`.
+- The path comes from `NavMeshAgent.path`, which allocates inside Unity on every read. That is acceptable in the Editor and is the reason the call exists only for the debugger.
+- At most 300 NPCs are drawn per repaint, so a crowd stays usable. The list shows the same cap.
+- Switches: scene drawing (off, selected only, all), an action filter, only NPCs that see a threat, labels, paths, ranges and sight cones. Sight cones start off, because they are noisy with many NPCs.
+
+### `ManagedNpcDebuggerWindow.cs`
+
+**What it does:** The window behind it, opened from the menu GTG, NPC Debugger. It shows the director line (NPC count, batch size, rays this tick, native library or managed fallback), the switches above, and a live list of NPCs. A click on a row selects the NPC and frames it in the Scene view. It subscribes to `SceneView.duringSceneGui` while it is open and unsubscribes when it closes.
+
+**Decisions:**
+- Nothing is drawn in Edit mode, and the window says so. The registry of brains only fills in Play mode.
+- The window repaints ten times a second through `OnInspectorUpdate`, and repaints the Scene view only while drawing is on and the game is running.
+- Scene drawing needs the window open. Closing it removes every overlay.
+- "Selected only" matches the selected root object. Selecting a child of the NPC does not count.
+- Waypoints are shown but not editable here. Moving them is still done with the transforms in the Scene view.
 
 ### `ManagedNpcDirector.cs`
 
@@ -403,7 +467,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - A decision is applied only if its NPC id matches the row it was made for and the action is in range, the same guard as the ECS system.
 - A scene director is reused even when it is disabled, because a disabled director is the scene's choice. A second enabled director disables itself with one warning.
 - With no `ManagedNpcThreatSource` in the scene the director warns once, because that is the usual reason for NPCs that never see anything.
-- `Brains` and the id counter are static and cleared at `SubsystemRegistration`.
+- `Brains` and the id counter are static and cleared at `SubsystemRegistration`. `Current` and `GetBrain(index)` are public for the NPC debugger.
 - Tick cost is about one managed array fill, one pinned native call and at most the ray cap, all on the main thread.
 
 ## CI and Workflows
@@ -417,9 +481,11 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - `.github/workflows/npc-rust-ci.yml` - checks the shared NPC layer. The `csharp-abi` job
   compiles `NPCNativeLib`, `NPCNativeTypes`, `NPCManagedFallback` and `NPCEnums` with
   plain .NET and runs them against the real Rust library. The `managed-npc` job compiles
-  `Managed/Health` and `Managed/NPC` (C# 9, as in Unity 2022.3) against hand written
-  `UnityEngine` stand-ins in `rust/npc/managed-npc-test/` and runs 52 checks, once on the
-  managed fallback and once on the real library.
+  `Managed/Health`, `Managed/NPC` (including its `Editor/` folder) and the spell damage files (C# 9, as in Unity 2022.3)
+  against hand written `UnityEngine`, `UnityEditor` and `NavMeshAgent` stand-ins in
+  `rust/npc/managed-npc-test/` and runs 156 checks, once on the managed fallback and
+  once on the real library. The spell caster itself is replaced by a stub that has only
+  the `Impact` event.
 
 ## Fixes and Problems
 
@@ -477,18 +543,32 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   system still uses it unchanged. The alternative was a second copy of the decision, which the Rust parity
   test would not cover. `NPCNativeLib.cs`, `NPCNativeTypes.cs` and `NPCEnums.cs` were already unwrapped.
 - Not verified in the Editor, not compiled by Unity. The files compile with .NET 8 (C# 9) against hand
-  written stubs of the `UnityEngine` types, and 52 checks pass there on both the managed fallback and the
-  real Rust library. CI job `managed-npc` repeats this on every push. The stub raycast is a callback, so the checks prove the logic around the ray (cone, budget,
-  lingering, dead and self sources, rotation) and not real colliders, layers or `Physics.Raycast` behavior.
+  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 156 checks pass there on
+  both the managed fallback and the real Rust library. CI job `managed-npc` repeats this on every push. The
+  stub raycast is a callback, the NavMesh is a callback and the agent moves in a straight line, so the checks
+  prove the logic around them (cone, budget, lingering, memory, patrol, chase, cooldown, retreat, damage
+  falloff, debugger filters and drawing) and not real colliders, layers, NavMesh pathing or `Physics.Raycast`
+  behavior. Twenty-three deliberate breaks of that logic were each caught by a failing check.
+- The `UnityEditor` stubs were written from knowledge of the API and prove that the editor files are
+  consistent with them, not with the real `UnityEditor`. An editor file that does not compile in Unity blocks
+  Play mode for the whole project, so after importing, look at the Console first. The calls used are
+  `Handles.Label`, `DrawLine`, `DrawDottedLine`, `DrawWireDisc`, `DrawWireArc`, `DrawSolidDisc`,
+  `SceneView.duringSceneGui`, `SceneView.RepaintAll`, `SceneView.FrameSelected`, `Selection.activeGameObject`,
+  `EditorWindow.GetWindow<T>(string)`, `OnInspectorUpdate` and the `EditorGUILayout` popup, toggle, help box and
+  scroll view calls.
 - Sight is a cone plus one ray per visible point. There is no suspicion meter, no hearing and no faction
   logic. An NPC either sees a threat or does not.
 - The sight ray starts at the eye offset, 1.6 m above the NPC pivot by default. An NPC whose own collider
   contains that point, or whose layer is in the sight mask, can block itself on some setups. The scene setup
   names the two ways around it.
-- Nothing calls `TakeDamage` yet. Fireball impacts and chemical hazards do not hurt anything in the repo
-  today, so an NPC's health cannot change in play until a damage source is connected.
-- Nothing acts on the decision. Subscribe to `ManagedNpcBrain.ActionChanged` or read `Action` to drive
-  movement, combat and trade.
+- Damage sources: only the fireball and NPC melee call `TakeDamage`. Ice and the chemical hazards do not.
+  The fireball explosion ignores walls and its overlap buffer holds 32 colliders.
+- The actor needs a baked NavMesh. Nothing in the repo bakes one, so a scene needs a `NavMeshSurface`.
+  Trade is not carried out: a merchant only stands still, and there is no shop or dialogue system yet.
+- The NPC does not animate, die visibly or drop anything. A dead NPC stops and optionally is destroyed.
+- Edit to existing Managed files for damage: `ManagedSpellTypes.cs` gained `Source`, `ManagedSpellDefinition.cs`
+  gained the damage fields and `For`, and `ManagedSpellCaster.cs` sets `Source` in `Detonate`. No other
+  caster behavior changed. Not verified in the Editor, the caster is stubbed in the harness.
 - The native library is still not in `Assets/`. Until a build is imported as a plugin, every batch takes the
   managed fallback after one warning. Rust itself is not affected by the Burst `Illegal instruction` abort,
   because that comes from Burst code generation. Whether the Rust library runs on the 2010 MacBook is

@@ -44,6 +44,8 @@ namespace MidManStudio.Gtg.Managed.NPC
         private ManagedHealth _health;
         private float _lastSeenTime = float.NegativeInfinity;
         private bool _threatVisible;
+        private ManagedNpcThreatSource _threat;
+        private Vector3 _lastKnownThreatPosition;
         private NpcAction _action = NpcAction.Idle;
 
         /// <summary>(this, old action, new action). Raised on the main thread inside the director tick.</summary>
@@ -62,11 +64,24 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         public bool ThreatVisible { get { return _threatVisible; } }
 
+        /// <summary>
+        /// The threat seen last, or null when none has been seen or the memory has run out. It stays
+        /// set while the lingering time runs, so an NPC keeps chasing a target that just stepped
+        /// behind cover.
+        /// </summary>
+        public ManagedNpcThreatSource Threat { get { return _threat; } }
+
+        /// <summary>Where the threat was when it was last seen. Only meaningful while Threat is set.</summary>
+        public Vector3 LastKnownThreatPosition { get { return _lastKnownThreatPosition; } }
+
         public bool IsAlive { get { return _health == null || _health.IsAlive; } }
 
         public float HealthFraction { get { return _health != null ? _health.Fraction : 1f; } }
 
         public Vector3 EyePosition { get { return transform.TransformPoint(_eyeOffset); } }
+
+        public float ViewRange { get { return _viewRange; } }
+        public float FieldOfViewDegrees { get { return _fieldOfViewDegrees; } }
 
         private void Awake()
         {
@@ -101,6 +116,7 @@ namespace MidManStudio.Gtg.Managed.NPC
             int mask = _sightMask;
             bool seen = false;
             bool outOfBudget = false;
+            ManagedNpcThreatSource seenSource = null;
 
             for (int s = 0; s < ManagedNpcThreatSource.Count && !seen && !outOfBudget; s++)
             {
@@ -128,6 +144,7 @@ namespace MidManStudio.Gtg.Managed.NPC
                     if (ManagedNpcSight.HasLineOfSight(eye, point, source.transform, mask))
                     {
                         seen = true;
+                        seenSource = source;
                         break;
                     }
                 }
@@ -137,10 +154,16 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 _lastSeenTime = now;
                 _threatVisible = true;
+                _threat = seenSource;
+                _lastKnownThreatPosition = seenSource.transform.position;
             }
             else if (!outOfBudget)
             {
                 _threatVisible = now - _lastSeenTime <= _loseSightDelay;
+                if (!_threatVisible || (_threat != null && !_threat.IsActive))
+                {
+                    _threat = null;
+                }
             }
 
             return !outOfBudget;

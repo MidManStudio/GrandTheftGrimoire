@@ -1,6 +1,6 @@
 # NPC Unity integration: status and audit
 
-Status (2026-10-04): the native boundary is verified from C# against the real Rust library. Two stacks now sit on top of it, and the ECS stack does not run on the development machine, see `../GrandTheftGrimoire/managed.md`. The Managed stack closes the observation side of the loop (health, line of sight, observation) and delivers decisions as an event. **Nothing acts on a decision yet** on either stack, and nothing has been built or run inside Unity.
+Status (2026-10-04): the native boundary is verified from C# against the real Rust library. Two stacks now sit on top of it, and the ECS stack does not run on the development machine, see `../GrandTheftGrimoire/managed.md`. The Managed stack now closes the whole loop: health, line of sight, observation, decision, and an actor that patrols, chases, hits and retreats, plus fireball damage and an editor debugger. The ECS stack acts on nothing. Nothing has been built or run inside Unity.
 
 ## What exists
 
@@ -28,6 +28,9 @@ The four files marked shared have no ECS dependency and are compiled by both sta
 | `NPC/ManagedNpcSight.cs` | View cone test, then one `Physics.Raycast` from the eye to the point |
 | `NPC/ManagedNpcBrain.cs` | One NPC: settings, sight, observation, last action, `ActionChanged` event |
 | `NPC/ManagedNpcDirector.cs` | Batches the brains, one native call per tick, ray budget, rotation for large populations |
+| `NPC/ManagedNpcActor.cs` | Carries out the decision with a `NavMeshAgent`: patrol, chase and melee, retreat, stand still |
+| `Magic/ManagedSpellDamage.cs` | Fireball explosion damage with falloff, through `IManagedDamageable` |
+| `NPC/Editor/ManagedNpcDebugView.cs`, `ManagedNpcDebuggerWindow.cs` | Editor-only live list and Scene view drawing of paths, routes, ranges and sight |
 
 Each Managed tick (every 0.1 s): take up to 256 brains from a rotating cursor, run sight for the living ones within a ray budget (128 per tick by default), build the observations, make one `gtg_npc_decide_batch` call (managed fallback if the library is missing), and apply each action to its brain. Threat visibility is a cone plus line of sight: an NPC sees a threat when one of its visible points is inside range and the cone and the first thing the ray meets is that threat. Seeing lingers for 0.5 s after the last ray that saw it. Health comes from `ManagedHealth.Fraction`, or 1 when the NPC has none.
 
@@ -63,8 +66,8 @@ The ABI test runs on plain .NET 8. It proves the boundary code and the P/Invoke 
 |---|---|---|
 | Something writes the observation | no, the baker sets `ThreatVisible = 0` and `HealthFraction = 1` and nothing changes them | yes, sight and `ManagedHealth` (not run in Unity) |
 | A health component exists | no | yes, `ManagedHealth` |
-| Something reads the decision | no | only as the `ActionChanged` event and the `Action` property, no component subscribes yet |
-| Anything deals damage | no | no. Fireball impacts and chemical hazards do not call `TakeDamage` |
+| Something reads the decision | no | yes, `ManagedNpcActor` carries out Patrol, Attack and Retreat; Idle and Trade stand still; there is no shop or dialogue |
+| Anything deals damage | no | yes, the fireball (`ManagedSpellDamage`) and NPC melee. Ice and the chemical hazards do not |
 | A native plugin is in `Assets/` | no | no. Every batch takes the managed fallback after one warning until a build is imported |
 | NPC ids stable across sessions | no, entity index and version | no, a per-session counter |
 | `archetypes.mdix` read by the game | no | no. Settings are typed in the Inspector |
@@ -74,14 +77,16 @@ Native plugin builds: CI builds Linux x86-64 and the benchmark workflow builds L
 
 ## Decided and still open
 
-Decided (2026-10-04):
+Decided (2026-10-04 and 2026-10-05):
 - `ThreatVisible` is line of sight, in the style of the Assassin's Creed games: a view cone plus a raycast. It is not distance only and not faction hostility.
 - Health is its own component. The Managed stack has `ManagedHealth`. The ECS stack still has none, and it is on the ECS backlog.
 - Gameplay is built on the Managed stack first, the ECS stack stays frozen.
+- Patrol and Attack are wired through `ManagedNpcActor`, and fireballs damage anything with a `ManagedHealth`.
+- The movement engine is Unity's NavMesh for now, see `navigation.md`.
 
 Still open, game-design choices that were not guessed:
 - **Detection model.** The current model is binary and instant, with a short lingering. A suspicion meter that fills while the player is seen, as in the Assassin's Creed games, would need a new ABI field or a Unity-side filter before the observation. It is not built.
-- **Factions.** Every threat source is a threat to every NPC.
-- **How each action executes.** Trade needs dialogue and a shop interaction, Patrol needs waypoints or a navigation source, Attack and Retreat need combat and navigation. Unity keeps authority over all of them, Rust only chooses.
-- **Damage sources.** What deals damage first: the fireball impact, a hazard, or melee.
+- **Factions and companions.** Every threat source is a threat to every NPC. Companions need their own handling, see `rust-roadmap.md`.
+- **Trade.** A merchant only stands still. A shop and dialogue system does not exist.
+- **Damage sources.** Ice and the chemical hazards do not hurt yet, and the fireball ignores walls.
 - **Native library targets.** Which targets first for Unity, and whether CI publishes them as artifacts to copy into `Assets/Plugins/`. An Intel macOS build is needed for the development machine.

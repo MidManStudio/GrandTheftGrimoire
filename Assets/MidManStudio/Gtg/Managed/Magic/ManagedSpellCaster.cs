@@ -326,6 +326,7 @@ namespace MidManStudio.Gtg.Managed.Magic
                     Position = position,
                     Normal = normal,
                     Kind = spell.Kind,
+                    Source = gameObject,
                 });
             }
         }

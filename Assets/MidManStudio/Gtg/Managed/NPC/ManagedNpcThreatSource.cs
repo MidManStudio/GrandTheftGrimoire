@@ -29,12 +29,20 @@ namespace MidManStudio.Gtg.Managed.NPC
         [Tooltip("Optional. A dead source is not seen. Left empty, the component on this object is used.")]
         [SerializeField] private ManagedHealth _health;
 
+        private IManagedDamageable _damageable;
+
         public static int Count { get { return Sources.Count; } }
 
         public static ManagedNpcThreatSource Get(int index)
         {
             return Sources[index];
         }
+
+        /// <summary>
+        /// What an NPC melee attack hurts. Found on this object or a parent, null when the
+        /// source cannot take damage.
+        /// </summary>
+        public IManagedDamageable Damageable { get { return _damageable; } }
 
         public int PointCount { get { return _visiblePoints != null ? _visiblePoints.Length : 0; } }
 
@@ -61,6 +69,8 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 _health = GetComponent<ManagedHealth>();
             }
+
+            _damageable = GetComponentInParent<IManagedDamageable>();
         }
 
         private void OnEnable()

@@ -44,6 +44,15 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         public static int RegisteredCount { get { return Brains.Count; } }
 
+        /// <summary>The active director, or null when none is running. For debug tools.</summary>
+        public static ManagedNpcDirector Current { get { return _instance; } }
+
+        /// <summary>The registered brain at an index below RegisteredCount. For debug tools.</summary>
+        public static ManagedNpcBrain GetBrain(int index)
+        {
+            return Brains[index];
+        }
+
         /// <summary>NPCs sent to the decision in the last tick.</summary>
         public int LastBatchCount { get; private set; }
 

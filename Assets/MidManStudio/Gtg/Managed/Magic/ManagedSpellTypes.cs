@@ -13,11 +13,14 @@ namespace MidManStudio.Gtg.Managed.Magic
         Ice = 1,
     }
 
-    /// <summary>One spell hit. The caster raises it and the chemistry field consumes it.</summary>
+    /// <summary>One spell hit. The caster raises it. The chemistry field and the spell damage consume it.</summary>
     public struct ManagedSpellImpact
     {
         public Vector3 Position;
         public Vector3 Normal;
         public ManagedSpellKind Kind;
+
+        /// <summary>The object that cast the spell, so damage can skip the caster. Null for an unknown source.</summary>
+        public GameObject Source;
     }
 }

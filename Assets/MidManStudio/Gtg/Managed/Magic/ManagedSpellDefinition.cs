@@ -28,6 +28,15 @@ namespace MidManStudio.Gtg.Managed.Magic
 
         public Color Color;
 
+        /// <summary>Damage at the center of the explosion. Zero means the spell hurts nothing by itself.</summary>
+        public float ImpactDamage;
+
+        /// <summary>Radius of the damaging explosion in meters.</summary>
+        public float ImpactRadius;
+
+        /// <summary>Share of the damage that remains at the edge of the radius, from 0 to 1.</summary>
+        public float ImpactEdgeFraction;
+
         public static readonly ManagedSpellDefinition Fireball = new ManagedSpellDefinition
         {
             Kind = ManagedSpellKind.Fireball,
@@ -38,6 +47,9 @@ namespace MidManStudio.Gtg.Managed.Magic
             SweepRadius = 0.15f,
             VisualDiameter = 0.4f,
             Color = new Color(1f, 0.45f, 0.1f, 1f),
+            ImpactDamage = 40f,
+            ImpactRadius = 3f,
+            ImpactEdgeFraction = 0.25f,
         };
 
         public static readonly ManagedSpellDefinition Ice = new ManagedSpellDefinition
@@ -59,6 +71,20 @@ namespace MidManStudio.Gtg.Managed.Magic
         public static ManagedSpellDefinition At(int index)
         {
             return Slots[index];
+        }
+
+        /// <summary>The definition of a kind, or null when the table has none.</summary>
+        public static ManagedSpellDefinition For(ManagedSpellKind kind)
+        {
+            for (int i = 0; i < Slots.Length; i++)
+            {
+                if (Slots[i].Kind == kind)
+                {
+                    return Slots[i];
+                }
+            }
+
+            return null;
         }
     }
 }
