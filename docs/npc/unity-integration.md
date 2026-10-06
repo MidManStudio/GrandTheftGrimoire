@@ -10,10 +10,10 @@ The four files marked shared have no ECS dependency and are compiled by both sta
 
 | File | Role |
 |---|---|
-| `Components/NPCEnums.cs` (shared) | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction` (ABI v2 numbers) |
+| `Components/NPCEnums.cs` (shared) | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction`, plus `NpcDisposition` and `NpcOrder` (ABI v3 numbers) |
 | `Components/NPCComponents.cs` | `NPCTag`, `NPCIdentity`, `NPCObservation`, `NPCDecision` |
 | `Authoring/NPCAuthoring.cs` | Baker that adds the four components with default values |
-| `Native/NPCNativeTypes.cs` (shared) | 32-byte observation and 16-byte decision structs, explicit layout |
+| `Native/NPCNativeTypes.cs` (shared) | 64-byte observation and 16-byte decision structs, explicit layout |
 | `Native/NPCNativeLib.cs` (shared) | P/Invoke, ABI version and size check, pinned-array batch call, warn-once fallback signal |
 | `Native/NPCManagedFallback.cs` (shared) | Managed copy of the Rust decision, used when the native library is missing or rejects a batch (no Unity dependencies) |
 | `Systems/NPCDecisionSystem.cs` | Every 0.1 s: up to 256 NPCs, one native batch call, writes `NPCDecision` |
@@ -26,9 +26,9 @@ The four files marked shared have no ECS dependency and are compiled by both sta
 | `Health/IManagedDamageable.cs` | One-method contract for anything that takes damage |
 | `NPC/ManagedNpcThreatSource.cs` | Marks what NPCs can see, normally the player. Several visible points on the body |
 | `NPC/ManagedNpcSight.cs` | View cone test, then one `Physics.Raycast` from the eye to the point |
-| `NPC/ManagedNpcBrain.cs` | One NPC: settings, sight, observation, last action, `ActionChanged` event |
+| `NPC/ManagedNpcBrain.cs` | One NPC: settings, disposition, level, order, provoked, leader, sight, observation, last action, `ActionChanged` and `OrderRefused` events |
 | `NPC/ManagedNpcDirector.cs` | Batches the brains, one native call per tick, ray budget, rotation for large populations |
-| `NPC/ManagedNpcActor.cs` | Carries out the decision with a `NavMeshAgent`: patrol, chase and melee, retreat, stand still |
+| `NPC/ManagedNpcActor.cs` | Carries out the decision with a `NavMeshAgent`: patrol, chase and melee, retreat, follow the leader, hold, stand still |
 | `Magic/ManagedSpellDamage.cs` | Fireball explosion damage with falloff, through `IManagedDamageable` |
 | `NPC/Editor/ManagedNpcDebugView.cs`, `ManagedNpcDebuggerWindow.cs` | Editor-only live list and Scene view drawing of paths, routes, ranges and sight |
 
@@ -39,13 +39,13 @@ Each Managed tick (every 0.1 s): take up to 256 brains from a rotating cursor, r
 1. Every 0.1 s, `ToEntityArray` on the NPC query, then take up to 256 entities starting at a rotating cursor.
 2. Copy identity and observation into a reused managed array. Health is clamped to 0..1 (NaN becomes 1). The NPC id is `Identity.Id`, or entity version and index when that is 0.
 3. One `gtg_npc_decide_batch` call. If the library is missing, the ABI differs, or the batch is rejected, the managed fallback decides instead (one warning per session).
-4. A decision is written only if its id matches the observation's and its action is 0..4.
+4. A decision is written only if its id matches the observation's and its action is 0..7.
 
 ## Verified, and how
 
 | Claim | How it was checked | Where it runs |
 |---|---|---|
-| C# struct sizes (32/16) and every field offset match the Rust ABI | `Marshal.SizeOf` and `Marshal.OffsetOf` in the ABI test, plus the runtime size check in `NPCNativeLib` | CI job `csharp-abi` |
+| C# struct sizes (64/16) and every field offset match the Rust ABI | `Marshal.SizeOf` and `Marshal.OffsetOf` in the ABI test, plus the runtime size check in `NPCNativeLib` | CI job `csharp-abi` |
 | `NPCNativeLib` can load the real `gtg_npc_ffi`, pass the ABI check, pin arrays and get correct results | 16384 mixed NPCs sent in batches of 256 through the real library | CI job `csharp-abi` |
 | The managed fallback makes the same decision as Rust for valid input | Native and fallback compared on all 16384 NPCs, zero differences allowed | CI job `csharp-abi` |
 | Rust, C and C# agree on the mixed workload | Same generator in all three; action histogram and FNV-1a hash of all decisions compared (`0xef210c5c4e3c6198` in the authoring sandbox) | Rust and C in the bench workflow; C# in `csharp-abi` |
@@ -72,6 +72,7 @@ The ABI test runs on plain .NET 8. It proves the boundary code and the P/Invoke 
 | NPC ids stable across sessions | no, entity index and version | no, a per-session counter |
 | `archetypes.mdix` read by the game | no | no. Settings are typed in the Inspector |
 | `LearningMode` read by anything | no | no |
+| Companion orders and levels | no | yes, `SetOrder`, level and refusal. No order UI, and no factions, so a companion sees no enemy |
 
 Native plugin builds: CI builds Linux x86-64 and the benchmark workflow builds Linux ARM64 and macOS arm64. There is no Windows build, no Intel macOS build (the development machine is an Intel MacBook Pro) and no Android arm64 build for Unity. The Rust library is not affected by the Burst `Illegal instruction` abort that stopped the ECS stack, because that abort comes from Burst code generation. Whether the library runs on the development machine is untested.
 

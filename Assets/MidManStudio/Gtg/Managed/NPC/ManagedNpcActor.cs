@@ -13,7 +13,8 @@ namespace MidManStudio.Gtg.Managed.NPC
 {
     /// <summary>
     /// Carries out the action the Rust decision chose. Patrol walks waypoints or wanders, Attack
-    /// chases the threat and hits it in melee, Retreat runs away from it, Idle and Trade stand still.
+    /// chases the threat and hits it in melee, Retreat runs away from it, Follow walks to the brain's
+    /// Leader and stays near, and Idle, Trade, Hold and RefuseOrder stand still.
     /// It moves the NPC with a NavMeshAgent, so the scene needs a baked NavMesh. It listens to the
     /// brain and never decides anything itself.
     /// </summary>
@@ -26,6 +27,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         [SerializeField] private float _patrolSpeed = 1.8f;
         [SerializeField] private float _chaseSpeed = 3.8f;
         [SerializeField] private float _retreatSpeed = 4.2f;
+        [SerializeField] private float _followSpeed = 3.4f;
 
         [Header("Patrol")]
         [Tooltip("Visited in order, then from the start. Empty means wandering around where the NPC began.")]
@@ -44,6 +46,10 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         [Header("Retreat")]
         [SerializeField] private float _retreatDistance = 12f;
+
+        [Header("Follow")]
+        [Tooltip("A follower stops this close to its leader and starts walking again beyond this plus one meter.")]
+        [SerializeField] private float _followDistance = 3f;
 
         [Header("Death")]
         [Tooltip("Seconds until a dead NPC is destroyed. Zero leaves the body in the scene.")]
@@ -74,6 +80,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         public float AttackRange { get { return _attackRange; } }
         public float WanderRadius { get { return _wanderRadius; } }
         public float RetreatDistance { get { return _retreatDistance; } }
+        public float FollowDistance { get { return _followDistance; } }
         public int WaypointCount { get { return _waypoints != null ? _waypoints.Length : 0; } }
         public int NextWaypointIndex { get { return WaypointCount > 0 ? _nextWaypoint % WaypointCount : 0; } }
 
@@ -129,6 +136,8 @@ namespace MidManStudio.Gtg.Managed.NPC
             _patrolSpeed = Mathf.Max(0f, _patrolSpeed);
             _chaseSpeed = Mathf.Max(0f, _chaseSpeed);
             _retreatSpeed = Mathf.Max(0f, _retreatSpeed);
+            _followSpeed = Mathf.Max(0f, _followSpeed);
+            _followDistance = Mathf.Max(0.5f, _followDistance);
             _wanderRadius = Mathf.Max(0f, _wanderRadius);
             _attackRange = Mathf.Max(0.1f, _attackRange);
             _attackCooldownSeconds = Mathf.Max(0f, _attackCooldownSeconds);
@@ -183,6 +192,10 @@ namespace MidManStudio.Gtg.Managed.NPC
                     _agent.speed = _retreatSpeed;
                     _agent.stoppingDistance = 0.3f;
                     break;
+                case NpcAction.Follow:
+                    _agent.speed = _followSpeed;
+                    _agent.stoppingDistance = _followDistance * 0.8f;
+                    break;
                 default:
                     Stop();
                     break;
@@ -191,7 +204,7 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         private void Update()
         {
-            if (_dead || _mode == NpcAction.Idle || _mode == NpcAction.Trade)
+            if (_dead || _mode == NpcAction.Idle || _mode == NpcAction.Trade || _mode == NpcAction.Hold || _mode == NpcAction.RefuseOrder)
             {
                 if (!_stopped && AgentReady())
                 {
@@ -222,6 +235,9 @@ namespace MidManStudio.Gtg.Managed.NPC
                     break;
                 case NpcAction.Retreat:
                     UpdateRetreat(now);
+                    break;
+                case NpcAction.Follow:
+                    UpdateFollow(now);
                     break;
             }
         }
@@ -403,6 +419,46 @@ namespace MidManStudio.Gtg.Managed.NPC
             if (TrySample(transform.position + away.normalized * _retreatDistance, 4f, out destination))
             {
                 Go(destination);
+            }
+        }
+
+        private void UpdateFollow(float now)
+        {
+            Transform leader = _brain.Leader;
+            if (leader == null)
+            {
+                if (!_stopped)
+                {
+                    Stop();
+                }
+
+                return;
+            }
+
+            Vector3 toLeader = leader.position - transform.position;
+            toLeader.y = 0f;
+            float distance = toLeader.magnitude;
+
+            // Stop inside the follow distance. Once stopped, wait until the leader is a meter farther, so a
+            // follower does not shuffle back and forth at the edge.
+            if (distance <= _followDistance || (_stopped && distance <= _followDistance + 1f))
+            {
+                if (!_stopped)
+                {
+                    Stop();
+                }
+
+                return;
+            }
+
+            if (!_hasDestination || _stopped || now >= _nextRepathTime)
+            {
+                _nextRepathTime = now + _repathIntervalSeconds;
+                Vector3 destination;
+                if (TrySample(leader.position, 3f, out destination))
+                {
+                    Go(destination);
+                }
             }
         }
 

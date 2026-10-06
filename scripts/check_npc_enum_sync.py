@@ -3,7 +3,7 @@
 
 CI tooling only: it never runs in the game and is not part of the NPC ML pipeline.
 
-Compares names and numeric values of NpcRole, DecisionBackend, LearningMode and NpcAction across:
+Compares names and numeric values of NpcRole, DecisionBackend, LearningMode, NpcDisposition, NpcOrder and NpcAction across:
   Assets/NPC/Archetypes/archetypes.mdix                          (@ENUMS)
   Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs         (C# enums, shared by both stacks)
   rust/npc/crates/npc-ffi/src/lib.rs                             (parse() and action_code())
@@ -27,7 +27,14 @@ CS_CANDIDATES = (
 FFI = "rust/npc/crates/npc-ffi/src/lib.rs"
 ML = "rust/npc/crates/npc-ml/src/lib.rs"
 # NpcAction is not authored in MDIX (it is a runtime result), so it is compared as C# vs Rust only.
-ENUMS = {"NpcRole": True, "DecisionBackend": True, "LearningMode": True, "NpcAction": False}
+ENUMS = {
+    "NpcRole": True,
+    "DecisionBackend": True,
+    "LearningMode": True,
+    "NpcDisposition": True,
+    "NpcOrder": True,
+    "NpcAction": False,
+}
 
 
 def norm(name):
@@ -69,8 +76,8 @@ def parse_cs(text):
 
 
 def parse_rust(ffi, ml):
-    out = {"NpcRole": {}, "DecisionBackend": {}, "NpcAction": {}, "LearningMode": {}}
-    for enum in ("NpcRole", "DecisionBackend"):
+    out = {name: {} for name in ENUMS}
+    for enum in ("NpcRole", "DecisionBackend", "NpcDisposition", "NpcOrder"):
         for num, name in re.findall(r"(\d+)\s*=>\s*%s::(\w+)" % enum, ffi):
             out[enum][norm(name)] = int(num)
     m = re.search(r"fn action_code[^{]*\{(.*?)\n\}", ffi, re.S)
@@ -79,7 +86,9 @@ def parse_rust(ffi, ml):
             out["NpcAction"][norm(name)] = int(num)
     m = re.search(r"enum\s+LearningMode\s*\{([^}]*)\}", ml)
     if m:
-        names = [n for n in re.findall(r"[A-Za-z_]\w*", m.group(1))]
+        # Doc comments sit inside the enum body now, so drop them before reading the variant names.
+        body = re.sub(r"//[^\n]*", "", m.group(1))
+        names = re.findall(r"[A-Za-z_]\w*", body)
         out["LearningMode"] = {norm(n): i for i, n in enumerate(names)}
     return out
 

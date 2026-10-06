@@ -26,6 +26,16 @@ namespace MidManStudio.Gtg.Managed.NPC
         [SerializeField] private bool _canMove = true;
         [Tooltip("Stored for the archetype data. Nothing reads it yet.")]
         [SerializeField] private LearningMode _learningMode = LearningMode.Disabled;
+        [Tooltip("How a guard, enemy or boss reacts to a threat. Hostile attacks on sight, Retaliatory only after being attacked, Peaceful never fights and runs.")]
+        [SerializeField] private NpcDisposition _disposition = NpcDisposition.Hostile;
+        [Tooltip("The NPC's level. A companion refuses an order whose level is more than 5 above this.")]
+        [SerializeField] private int _level = 1;
+        [Tooltip("Seconds after being hit by something with a source that the NPC counts as provoked.")]
+        [SerializeField] private float _provokedMemorySeconds = 20f;
+
+        [Header("Companion")]
+        [Tooltip("What a companion follows and never sees as a threat. Normally the player.")]
+        [SerializeField] private Transform _leader;
 
         [Header("Sight")]
         [SerializeField] private float _viewRange = 20f;
@@ -47,9 +57,17 @@ namespace MidManStudio.Gtg.Managed.NPC
         private ManagedNpcThreatSource _threat;
         private Vector3 _lastKnownThreatPosition;
         private NpcAction _action = NpcAction.Idle;
+        private NpcOrder _order = NpcOrder.None;
+        private int _orderLevel;
+        private float _provokedUntil = float.NegativeInfinity;
+        private GameObject _lastAttacker;
+        private bool _warnedNoLeader;
 
         /// <summary>(this, old action, new action). Raised on the main thread inside the director tick.</summary>
         public event Action<ManagedNpcBrain, NpcAction, NpcAction> ActionChanged;
+
+        /// <summary>(this, the order that was refused, its level). Raised when a companion declines an order. The order is cleared before this fires.</summary>
+        public event Action<ManagedNpcBrain, NpcOrder, int> OrderRefused;
 
         /// <summary>Unique among live NPCs of this play session. Not stable between sessions.</summary>
         public ulong Id { get; internal set; }
@@ -58,6 +76,35 @@ namespace MidManStudio.Gtg.Managed.NPC
         public DecisionBackend Backend { get { return _backend; } }
         public bool CanMove { get { return _canMove; } }
         public LearningMode LearningMode { get { return _learningMode; } }
+        public NpcDisposition Disposition { get { return _disposition; } set { _disposition = value; } }
+
+        /// <summary>The NPC's level. Negative values count as zero.</summary>
+        public int Level { get { return _level; } set { _level = Mathf.Max(0, value); } }
+
+        /// <summary>What a companion follows and never sees as a threat.</summary>
+        public Transform Leader { get { return _leader; } set { _leader = value; } }
+
+        /// <summary>The standing order. Only a companion acts on it.</summary>
+        public NpcOrder Order { get { return _order; } }
+
+        /// <summary>How hard the order is, as a level.</summary>
+        public int OrderLevel { get { return _orderLevel; } }
+
+        /// <summary>True for a while after the NPC was hit by something with a source.</summary>
+        public bool Provoked { get { return Time.time < _provokedUntil; } }
+
+        /// <summary>What hit the NPC last, or null.</summary>
+        public GameObject LastAttacker { get { return _lastAttacker; } }
+
+        /// <summary>
+        /// Gives a companion an order. The level is how hard the order is, 0 for one with no difficulty.
+        /// The companion may refuse on the next decision, see OrderRefused. Other roles ignore orders.
+        /// </summary>
+        public void SetOrder(NpcOrder order, int orderLevel)
+        {
+            _order = order;
+            _orderLevel = order == NpcOrder.None ? 0 : Mathf.Max(0, orderLevel);
+        }
 
         /// <summary>The last decision. Idle until the first tick, and again once dead.</summary>
         public NpcAction Action { get { return _action; } }
@@ -90,18 +137,43 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         private void OnEnable()
         {
+            if (_health != null)
+            {
+                _health.Damaged += OnDamaged;
+            }
+
             ManagedNpcDirector.Register(this);
         }
 
         private void OnDisable()
         {
+            if (_health != null)
+            {
+                _health.Damaged -= OnDamaged;
+            }
+
             ManagedNpcDirector.Unregister(this);
+        }
+
+        // Damage with a source provokes. Damage with none, such as a hazard, does not. Hits from itself or
+        // from its own leader do not either, so friendly fire does not turn a companion on the player.
+        private void OnDamaged(ManagedHealth health, float amount, GameObject source)
+        {
+            if (source == null || IsSelf(source.transform) || IsLeader(source.transform))
+            {
+                return;
+            }
+
+            _lastAttacker = source;
+            _provokedUntil = Time.time + _provokedMemorySeconds;
         }
 
         private void OnValidate()
         {
             _viewRange = Mathf.Max(0f, _viewRange);
             _loseSightDelay = Mathf.Max(0f, _loseSightDelay);
+            _level = Mathf.Max(0, _level);
+            _provokedMemorySeconds = Mathf.Max(0f, _provokedMemorySeconds);
         }
 
         /// <summary>
@@ -110,6 +182,12 @@ namespace MidManStudio.Gtg.Managed.NPC
         /// </summary>
         internal bool UpdateSight(float now, ref int rayBudget)
         {
+            if (_role == NpcRole.Companion && _leader == null && !_warnedNoLeader)
+            {
+                _warnedNoLeader = true;
+                Debug.LogWarning("[GTG NPC] " + name + " is a companion with no Leader, so it sees every threat source, the player included, as a threat. Set its Leader.");
+            }
+
             Vector3 eye = EyePosition;
             Vector3 forward = transform.forward;
             float cosHalfFov = ManagedNpcSight.CosHalfFieldOfView(_fieldOfViewDegrees);
@@ -121,7 +199,7 @@ namespace MidManStudio.Gtg.Managed.NPC
             for (int s = 0; s < ManagedNpcThreatSource.Count && !seen && !outOfBudget; s++)
             {
                 ManagedNpcThreatSource source = ManagedNpcThreatSource.Get(s);
-                if (!source.IsActive || IsSelf(source.transform))
+                if (!source.IsActive || IsSelf(source.transform) || IsLeader(source.transform))
                 {
                     continue;
                 }
@@ -179,11 +257,43 @@ namespace MidManStudio.Gtg.Managed.NPC
                 ThreatVisible = _threatVisible ? 1u : 0u,
                 HealthFraction = HealthFraction,
                 CanMove = _canMove ? 1u : 0u,
-                Reserved = 0
+                Reserved = 0,
+                Disposition = (byte)_disposition,
+                Order = (byte)_order,
+                Provoked = Provoked ? (byte)1 : (byte)0,
+                Level = ClampLevel(_level),
+                OrderLevel = ClampLevel(_orderLevel)
             };
         }
 
+        private static ushort ClampLevel(int level)
+        {
+            return (ushort)Mathf.Clamp(level, 0, ushort.MaxValue);
+        }
+
         internal void ApplyAction(NpcAction action)
+        {
+            // A refusal always clears the order, even when the last action was a refusal too, otherwise a
+            // second refused order given from a listener would stay in place.
+            if (action == NpcAction.RefuseOrder)
+            {
+                NpcOrder refused = _order;
+                int refusedLevel = _orderLevel;
+                SetOrder(NpcOrder.None, 0);
+                SetActionAndNotify(action);
+                Action<ManagedNpcBrain, NpcOrder, int> declined = OrderRefused;
+                if (declined != null && refused != NpcOrder.None)
+                {
+                    declined(this, refused, refusedLevel);
+                }
+
+                return;
+            }
+
+            SetActionAndNotify(action);
+        }
+
+        private void SetActionAndNotify(NpcAction action)
         {
             if (action == _action)
             {
@@ -202,6 +312,12 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 changed(this, previous, action);
             }
+        }
+
+        // A threat source on the leader or on one of its parents or children is never a threat to a companion.
+        private bool IsLeader(Transform sourceTransform)
+        {
+            return _leader != null && (sourceTransform.IsChildOf(_leader) || _leader.IsChildOf(sourceTransform));
         }
 
         // A threat source on this NPC or on one of its parents is not a threat to itself.

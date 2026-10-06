@@ -235,7 +235,7 @@ namespace MidManStudio.Gtg.Managed.NPC
                 _owners[i] = null;
 
                 // A decision that does not belong to this row, or is out of range, is dropped.
-                if (decision.NpcId != _observations[i].NpcId || decision.Action < 0 || decision.Action > (int)NpcAction.Retreat)
+                if (decision.NpcId != _observations[i].NpcId || decision.Action < 0 || decision.Action > (int)NpcAction.RefuseOrder)
                 {
                     continue;
                 }

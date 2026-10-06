@@ -1,61 +1,69 @@
 # NPC Rust side: what is done and what is left
 
-Status (2026-10-05). Facts below come from the repository unless marked as a design source. Items marked **decision** need an answer from the project owner before anyone builds them.
+Status (2026-10-05, after observation version 3). Facts below come from the repository unless marked as a design source or an owner decision. Items marked **decision** need an answer from the project owner before anyone builds them.
 
 ## What exists
 
-| Crate | Lines | Tests | What it holds |
-|---|---|---|---|
-| `npc-core` | 37 | 0 | `NpcRole` (5), `DecisionBackend` (3), `NpcAction` (5), `Observation`, `Decision` |
-| `npc-behavior` | 113 | 5 | `decide()`: merchant state machine, civilian rules, and a utility rule for guards, enemies and bosses |
-| `npc-ml` | 19 | 0 | `LearningMode`, a `Policy` trait and `PolicyError`. No model, no framework, no weights |
-| `npc-ffi` | 245 | 7 | ABI version 2, `gtg_npc_decide_batch` (up to 4096 per call, atomic validation), size and version getters, and the older one-NPC stub |
+| Crate | Tests | What it holds |
+|---|---:|---|
+| `npc-core` | 0 | `NpcRole` (6), `DecisionBackend` (3), `NpcDisposition` (3), `NpcOrder` (4), `NpcAction` (8), `Observation`, `Decision` |
+| `npc-behavior` | 20 | `decide()`: merchant, civilian, combatant (guard, enemy, boss) and companion rules, disposition, orders, the level refusal |
+| `npc-ml` | 0 | `LearningMode`, a `Policy` trait and `PolicyError`. No model, no framework, no weights |
+| `npc-ffi` | 19 | ABI version 3, `gtg_npc_decide_batch` (up to 4096 per call, atomic validation, overlap rejection), size and version getters, and the older one-NPC stub |
 
-An NPC decision today has seven inputs: id, role, backend, threat visible, health fraction, can move and the reserved field. It returns one of five actions. There is no memory, no schedule, no faction, no distance, no orders and no learning. The decision runs at about 5 to 10 ns per NPC on hosted runners, see `benching-standards.md`.
+Every crate follows `RUST_RUST_CRATE_GUIDE.md` now: version 0.0.1, the workspace lint table, `SAFETY` comments on every `unsafe` block, a source notice and a doc per crate. The decision has 11 inputs (see `observation-v3.md`) and returns one of eight actions. It runs at about 5 to 10 ns per NPC on hosted runners with the version 2 layout. The version 3 cost is not measured.
 
-## What the decision cannot know yet
+## Decided by the owner
 
-This is the biggest functional gap, ahead of machine learning. The utility rule for combat uses health and nothing else, because the observation carries nothing else. Missing inputs that the game design already needs:
+- The crate guide applies to the GTG Rust crates.
+- NPC data lives in Unity. Rust is given a snapshot and returns an action, and keeps no state. Data that is completely static and predictable can live in Rust in a hash map or a `match`.
+- A companion has a level. It refuses an order that is far above its level.
+- Betrayals are both scripted and emergent. Some are scripted story events, others arise from the companion's state.
+- A companion can be caught or killed on a raid.
+- Native plugin builds wait, because the development charger is out. Work continues without them.
 
-- **Distance to the threat**, so an NPC can choose to close in, hold or kite.
-- **Whether it was attacked**, and by whom. The design says some humanoids "only fight if attacked", and mobs "always attack like animals" (project notes). That is a disposition: always hostile, retaliatory, or friendly.
+## What the decision still cannot know
+
+- **Distance to the threat**, so an NPC can choose to close in, hold or kite. It needs rules and actions that act on range.
 - **Allies and enemies nearby**, for morale and group tactics.
 - **Time of day**, for routines.
 - **Crown Heat and Local Favor**, which the design reference makes the basis of guard reactions (the guard who is secretly loyal to the late King, the bribable one, the one on the Uncle's payroll, and the "Do you know who I am?" outcome).
-- **Orders**, for companions (below).
+- **Loyalty and pay**, for emergent betrayal.
+- **A random number**, for a chance in a rule that stays reproducible. Unity would supply it.
 
-Each new field is an ABI change. The change process already exists: bump `ABI_VERSION`, update the C header, the C# structs and the layout tests, and the enum sync script covers the enums. The risk is doing it field by field. Better to design one observation version 3 with all of the above, with the sizes and offsets written down first.
+These are the planned uses of the reserved space in the observation. Adding any of them changes the ABI version.
 
 ## Backlog
 
-| # | Item | Depends on | Notes |
+| # | Item | Status | Notes |
 |---|---|---|---|
-| 1 | Crate guide conformance | nothing | `RUST_RUST_CRATE_GUIDE.md` asks for version `0.0.1` (the crates are `0.1.0`), a `[workspace.lints]` table (`unsafe_code` deny, `missing_docs` warn, clippy `undocumented_unsafe_blocks`), `#![allow(unsafe_code)]` in `npc-ffi`, and a `// SAFETY:` comment on each `unsafe` block. `npc-ffi` has a `# Safety` doc already and two unsafe blocks without comments. Per-crate docs and source notices are also missing. The guide was written for mid-engine, so **decision:** confirm it applies here |
-| 2 | Observation and action version 3 | design below | Distance, attacked-by, disposition, allies, time of day, heat and favor, order. New actions are needed for companions (follow, hold, assist). Unity validates actions 0 to 4 today and must change with it |
-| 3 | Disposition and faction | 2 | Mobs always hostile, humanoids hostile, retaliatory or friendly, per race and per individual. Pure rules, easy to test |
-| 4 | NPC memory | 2 | Last attacker, grudges, relationship to the player, loyalty. **Decision:** keep memory in Unity as a small fixed block passed in and out of each call (Rust stays stateless, saves are Unity's job), or in Rust keyed by NPC id (needs a save format and a lifetime). The first fits the current batch ABI and keeps decisions reproducible |
-| 5 | Utility AI with considerations and curves | 2 | Replaces the hard-coded `utility_combat`. Scoring tables belong in `.mdix` data |
-| 6 | Combat tactics and morale | 5 | Flank, kite, hold a chokepoint, break and run. Group tactics need allies in the observation |
-| 7 | Schedules and routines | 2 | Time of day to activity: work, sleep, patrol, socialize. Unity still picks where |
-| 8 | Decision scheduling and level of detail | nothing | Today the director rotates through 256 NPCs per 0.1 s tick. Which NPCs deserve a decision, and how often, depends on distance to the player. Unity owns this, and the Rust side can offer a cheap "needs decision" test |
-| 9 | Headless simulation (`npc-simulation`) | 2 | A small world with no Unity, for tests, balance and training data |
-| 10 | Small ML policy | 9 | Tiny network with fixed weights first, batch inference, a weight file format and validation, a deterministic fallback, and a benchmark against the utility rule on the same workload. No Python anywhere |
-| 11 | Selective online learning | 10 | Only for designated NPCs, with a hard time budget per update. Last in the list |
-| 12 | Persistence | 4, 10 | Save and load of memory and weights |
-| 13 | Robustness tests | nothing | Property tests (any input, no panic, same input same output), fuzzing the batch entry with random bytes, and a Miri pass on the unsafe code |
-| 14 | Native builds | nothing | See below |
-
-Companions have their own section next.
+| 1 | Crate guide conformance | done | Clippy has not run on it yet |
+| 2 | Observation and action version 3 | done for disposition, provoked, level, order | Distance, allies, time, heat and favor, loyalty and noise are reserved, not built |
+| 3 | Disposition | done | Hostile, retaliatory, peaceful. "Good humanoids never fight back" is an interpretation to confirm |
+| 4 | NPC memory | decided | In Unity. The Managed brain holds level, order, provoked and the last attacker. Persistence (save and load) is not built |
+| 5 | Utility AI with considerations and curves | open | Replaces the hard-coded `utility_combat`. Scoring tables belong in `.mdix` data |
+| 6 | Combat tactics and morale | open | Flank, kite, hold a chokepoint, break and run. Needs allies and distance in the observation |
+| 7 | Schedules and routines | open | Time of day to activity. Unity still picks where |
+| 8 | Decision scheduling and level of detail | open | The director rotates through 256 NPCs per 0.1 s tick. Which NPCs deserve a decision, and how often, depends on distance to the player. Unity owns it |
+| 9 | Headless simulation (`npc-simulation`) | open | A small world with no Unity, for tests and balance |
+| 10 | Small ML policy | open | Tiny network with fixed weights first, batch inference, a deterministic fallback, a benchmark against the utility rules. No Python |
+| 11 | Selective online learning | open | Designated NPCs only, with a hard time budget per update |
+| 12 | Persistence | open | Save and load of NPC memory and weights, in Unity |
+| 13 | Robustness tests | open | Property tests, fuzzing the batch entry with random bytes, a Miri pass on the unsafe code |
+| 14 | Native builds | paused | See below |
+| 15 | Factions | open | Which sources are threats to which NPC. Companions need it before they can fight anything |
+| 16 | Emergent betrayal rule | open, needs input | See the companion section |
+| 17 | Generated C header and C# bindings | open | The header is written by hand today, and tests cover the layout |
 
 ## Native builds
 
-CI builds Linux x86-64 and the benchmark workflow builds Linux ARM64 and macOS arm64. Unity needs a library per target, and none is in `Assets/` yet:
+Paused until the charger is back. What is needed:
 
 - **Intel macOS** for the development MacBook Pro. `macos-latest` is arm64, so this needs a cross build. The deployment target must be set low enough for macOS Catalina, and the Rust version used by CI may have raised its own minimum, which has not been checked.
 - **Windows x86-64**, **Android arm64** (the Galaxy A13), and **iOS** (a static library) if iOS is a target.
 - A step that publishes the libraries as artifacts, and an import step into `Assets/Plugins/`, with the Unity import settings per platform.
-- The Rust library is not touched by the Burst `Illegal instruction` abort that stopped the ECS stack, since that comes from Burst. It must not be built with `-C target-cpu=native`, because the build machine's CPU would then decide which instructions the library needs. The default x86-64 target needs only SSE2. Whether it runs on the 2010 machine is untested.
-- The C header is written by hand today. Generating it (cbindgen) and the C# bindings (csbindgen) would remove a class of drift, and the enum sync script and the layout tests cover part of that already.
+- The library must not be built with `-C target-cpu=native`, because the build machine's CPU would then decide which instructions it needs. The default x86-64 target needs only SSE2. The Burst `Illegal instruction` abort that stopped the ECS stack comes from Burst code generation and does not touch this library. Whether it runs on the 2010 machine is untested.
+- Until then Unity uses the managed fallback, which the C# test proves equal to the Rust decision on 16,384 NPCs.
 
 ## Companions
 
@@ -64,24 +72,28 @@ What the design and project notes say:
 - Companions are special NPCs who do tasks for Arthur. Bartholomew can be directed to attack enemies in combat and to permanently deal with problem NPCs in town (design reference).
 - Most companions are mercenaries who take a profit split and are not loyal. Some betray Arthur. One is a "definitely not undercover" cop, Ditter. The mule companion is Clarence (project notes).
 - Richard skims profits and leaks intel through the Enchanted Scroll's transaction logs, and his betrayal follows a fixed nine-step story sequence ending with Bartholomew saving Arthur (design reference).
+- Owner answers (2026-10-05): companions have levels and refuse an order that is far above their level. Betrayals are both scripted and emergent. A companion can be caught or killed on a raid.
 
-What that means for the Rust side:
+What is built:
 
-1. **Two kinds of behavior.** Task execution and loyalty drift can be decided by rules. The big betrayals are scripted story events and must not be overridden by a rule. So a companion needs a way for the story to force an action or a state, and for the rules to stand down while it does.
-2. **A role and states.** A `Companion` role in `NpcRole`, plus a small set of numbers that change over time: loyalty, greed or profit expectation, suspicion that Arthur knows. That is a deterministic model with memory, a good fit for item 4 and for tests, and it needs no machine learning.
-3. **Orders.** The player or the Enchanted Scroll gives an order (follow, hold, attack this target, deal with this NPC, guard this place, haul or fetch). Unity keeps the task queue and the execution, and Rust receives the current order in the observation and returns the action. New actions are needed: follow, hold position, assist.
-4. **Pay and profit split.** Whether a companion stays, complains, skims or leaves depends on money events in the economy. The economy is not built, so the model should take a small "pay satisfaction" input that Unity computes.
-5. **Disobedience.** A mercenary who refuses an order, or does it badly, is a design choice. **Decision:** may companions refuse orders, and is betrayal ever emergent, or only scripted?
-6. **A mule is not a fighter.** Clarence needs carrying and following, and no combat at all. The role set may need a non-combatant follower, or `can_move` and an order set that excludes attacks.
-7. **Combat help.** Companions are also combatants, so they use the same combat rules as other NPCs, with their own threat sources (enemies, not the player). The threat source in the Managed code treats everything registered as a threat to every NPC today. Companions need factions for that to work, which is item 3.
+- Role `Companion`, orders follow, hold and attack, the level refusal (5 levels above its own is accepted, 6 is refused), and the actions follow, hold and refuse order. A companion without an order follows its leader.
+- In Unity: `ManagedNpcBrain` holds level, order, leader and the refusal event, and `ManagedNpcActor` walks to the leader, holds, and stands still on a refusal.
 
-Not done and not guessed: the task list for the demo, who the companions are beyond the names above, and whether companions are part of the first demo at all.
+What is not built, and why:
+
+1. **Faction handling.** Only the player is a threat source, and a companion never sees its leader as one, so a companion sees no enemy at all. Companion combat waits for item 15.
+2. **The refusal gap.** "Way above their level" is a placeholder of 5 levels. **Decision:** the real rule. It could be a fixed gap, a ratio, or depend on the order type.
+3. **Emergent betrayal.** It needs loyalty and an opportunity as inputs, and a rule that turns them into a betrayal. **Decision:** which conditions cause one. The pay model and the economy are not built, so a "pay satisfaction" input from Unity is the likely shape. A scripted betrayal is a story event and must be able to override the rules.
+4. **Missions and raids.** A raid is a mission that the game resolves, and the companion may be caught or killed. That is a game event, not an action choice. If the resolution should be deterministic and testable it can be a separate Rust export that takes the companion's level, the mission level, equipment and a random number from Unity. **Decision:** whether raids are resolved off screen with a formula or played out.
+5. **Task execution beyond follow, hold and attack.** "Deal with a problem NPC", guard a place, haul or fetch need new orders and the systems behind them (shops, inventory, the economy).
+6. **A mule is not a fighter.** Clarence needs carrying and following, and no combat. A non-combatant companion role, or an order set without attack, may be needed.
+7. **Pay and profit split** feed loyalty and are not built.
 
 ## Suggested order
 
-1. Crate guide conformance (item 1), after the owner confirms the guide applies. Small and safe.
-2. One design pass for observation and action version 3, written as a table of fields, sizes and offsets before any code (items 2 and 3, with the companion order field).
-3. Memory model decision, then memory and companions (items 4 and the companion section).
-4. Native builds, in parallel, because nothing runs in Unity on the target devices without them.
-5. Utility AI, tactics and schedules (items 5 to 7).
-6. Simulation, then the small ML policy (items 9 and 10). The utility rule is the baseline the policy must beat.
+1. Factions (item 15), so companions and enemies can see each other, then a first companion scene in Unity.
+2. The betrayal and refusal decisions above, then the loyalty fields in version 4.
+3. Memory persistence and the companion mission resolution, both in Unity, with the mission formula in Rust if wanted.
+4. Utility AI, tactics and schedules (items 5 to 7).
+5. Native builds, when the charger is back.
+6. Simulation, then the small ML policy (items 9 and 10). The utility rules are the baseline the policy must beat.

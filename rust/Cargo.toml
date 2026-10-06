@@ -10,3 +10,12 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "MIT"
+
+# Shared lint table, see docs/RUST_RUST_CRATE_GUIDE.md section 3. A crate opts in with `[lints] workspace = true`.
+# A crate that really needs unsafe opts back out with `#![allow(unsafe_code)]` at its root.
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"

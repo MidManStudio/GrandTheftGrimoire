@@ -10,6 +10,7 @@ using MidManStudio.Gtg.Managed.Health;
 using MidManStudio.Gtg.Managed.Magic;
 using MidManStudio.Gtg.Managed.NPC;
 using MidManStudio.Gtg.NPC.Components;
+using MidManStudio.Gtg.NPC.Native;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -690,11 +691,249 @@ internal static class Tests
         UnityEngine.Application.isPlaying = false;
     }
 
+
+    // ---------- observation version 3: disposition, provoked, level, orders, companions ----------
+
+    static Fighter Companion(string name, Vector3 pos, Transform leader, int level)
+    {
+        Fighter f = Fight(name, pos, NpcRole.Companion, DecisionBackend.Utility, true, null);
+        f.Brain.Leader = leader; f.Brain.Level = level;
+        return f;
+    }
+
+    static void ObservationV3()
+    {
+        ResetWorld();
+        GameObject g = new GameObject("g"); g.AddComponent<ManagedHealth>();
+        ManagedNpcBrain b = g.AddComponent<ManagedNpcBrain>();
+        NPCNativeObservation o = b.BuildObservation();
+        Check(o.Disposition == 0 && o.Order == 0 && o.Provoked == 0 && o.Level == 1 && o.OrderLevel == 0 && o.ReservedByte == 0 && o.ReservedTail0 == 0 && o.ReservedTail1 == 0 && o.ReservedTail2 == 0, "defaults are hostile, no order, not provoked, level 1");
+        b.Disposition = NpcDisposition.Peaceful; b.Level = 7; b.SetOrder(NpcOrder.Attack, 9);
+        o = b.BuildObservation();
+        Check(o.Disposition == 2 && o.Level == 7 && o.Order == 3 && o.OrderLevel == 9, "the settings reach the observation");
+        b.Level = 70000; b.SetOrder(NpcOrder.Attack, 123456);
+        o = b.BuildObservation();
+        Check(o.Level == 65535 && o.OrderLevel == 65535, "levels are clamped to 16 bits");
+        b.Level = -4; b.SetOrder(NpcOrder.Hold, -3);
+        o = b.BuildObservation();
+        Check(o.Level == 0 && o.OrderLevel == 0 && b.Level == 0, "negative levels count as zero");
+        b.SetOrder(NpcOrder.None, 50);
+        Check(b.Order == NpcOrder.None && b.OrderLevel == 0, "no order carries no level");
+        Check(b.BuildObservation().Order == 0, "the observation says no order");
+    }
+
+    static void Provocation()
+    {
+        ResetWorld();
+        GameObject player = Player(10f, true); Clear(player);
+        Fighter r = Goblin(Vector3.zero);
+        r.Brain.Disposition = NpcDisposition.Retaliatory;
+        Set(r.Brain, "_provokedMemorySeconds", 2f);
+        Advance(0.4f);
+        Check(r.Brain.ThreatVisible && !r.Brain.Provoked, "it sees the player and is not provoked");
+        Check(r.Brain.Action == NpcAction.Patrol, "a retaliatory NPC ignores a threat that has not attacked, got " + r.Brain.Action);
+
+        r.Health.TakeDamage(1f, null);
+        Check(!r.Brain.Provoked, "damage with no source does not provoke");
+        r.Health.TakeDamage(1f, r.Go);
+        Check(!r.Brain.Provoked, "damage from itself does not provoke");
+        r.Health.TakeDamage(1f, player);
+        Check(r.Brain.Provoked && ReferenceEquals(r.Brain.LastAttacker, player), "damage from the player provokes and is remembered");
+        Check(r.Brain.BuildObservation().Provoked == 1, "the observation says provoked");
+        Advance(0.3f);
+        Check(r.Brain.Action == NpcAction.Attack, "once attacked it fights back, got " + r.Brain.Action);
+        Advance(3f);
+        Check(!r.Brain.Provoked && r.Brain.BuildObservation().Provoked == 0, "provocation runs out");
+        Check(r.Brain.Action != NpcAction.Attack, "and it stops fighting, got " + r.Brain.Action);
+        r.Go.GetComponent<ManagedHealth>().ResetToFull();
+
+        ResetWorld();
+        GameObject p2 = Player(10f, true); Clear(p2);
+        Fighter peaceful = Goblin(Vector3.zero);
+        peaceful.Brain.Disposition = NpcDisposition.Peaceful;
+        Advance(0.4f);
+        Check(peaceful.Brain.Action == NpcAction.Retreat, "a peaceful NPC runs from a threat, got " + peaceful.Brain.Action);
+        peaceful.Health.TakeDamage(1f, p2);
+        Advance(0.3f);
+        Check(peaceful.Brain.Action == NpcAction.Retreat && peaceful.Hits == 0, "even when attacked it does not fight back");
+        Advance(2f);
+        Check(peaceful.Go.transform.position.z < -2f, "it runs away");
+
+        ResetWorld();
+        GameObject p3 = Player(10f, true); Clear(p3);
+        Fighter m = Fight("merchant", Vector3.zero, NpcRole.Merchant, DecisionBackend.StateMachine, false, null);
+        m.Health.TakeDamage(5f, p3);
+        Advance(0.4f);
+        Check(m.Brain.Action == NpcAction.Idle, "a merchant that is attacked stays at its stall");
+
+        // The damage event is unsubscribed when the NPC is disabled, so a disabled NPC is not changed.
+        ResetWorld();
+        GameObject p4 = Player(10f, true);
+        Fighter off = Goblin(Vector3.zero);
+        off.Brain.enabled = false;
+        off.Health.TakeDamage(5f, p4);
+        Check(!off.Brain.Provoked, "a disabled brain is not provoked");
+    }
+
+    static void CompanionFollow()
+    {
+        ResetWorld();
+        GameObject player = Player(12f, true); Clear(player);
+        Fighter c = Companion("companion", Vector3.zero, player.transform, 10);
+        Advance(0.4f);
+        Check(!c.Brain.ThreatVisible && ManagedNpcDirector.GetBrain(0).Threat == null, "a companion never sees its leader as a threat");
+        Check(c.Brain.Action == NpcAction.Follow && c.Actor.Mode == NpcAction.Follow, "a companion with no order follows, got " + c.Brain.Action);
+        Check(System.Math.Abs(c.Agent.speed - 3.4f) < 0.001f, "it walks at the follow speed");
+        Advance(6f);
+        float d = Dist(c.Go.transform.position, player.transform.position);
+        Check(d <= 3.1f && d >= 2.0f && c.Agent.isStopped, "it stops near the leader, " + d);
+
+        int calls = c.Agent.SetDestinationCalls;
+        player.transform.position = c.Go.transform.position + new Vector3(0, 0, 3.6f);
+        Advance(1f);
+        Check(c.Agent.isStopped && c.Agent.SetDestinationCalls == calls, "a leader a little farther away does not restart it");
+        player.transform.position = c.Go.transform.position + new Vector3(0, 0, 6f);
+        Advance(0.5f);
+        Check(!c.Agent.isStopped && c.Agent.SetDestinationCalls > calls, "a leader well beyond the distance does");
+
+        ResetWorld();
+        GameObject p2 = Player(12f, true);
+        Fighter lost = Companion("lost", Vector3.zero, null, 10);
+        Advance(0.4f);
+        Check(Debug.Warnings.FindAll(w => w.Contains("no Leader")).Count == 1, "a companion without a leader warns once");
+        ManagedNpcBrain brain = lost.Brain;
+        brain.Leader = p2.transform;
+        Advance(0.4f);
+        Check(brain.Action == NpcAction.Follow, "and follows once given a leader");
+
+        ResetWorld();
+        GameObject p3 = Player(12f, true);
+        Fighter noLeaderNoWalk = Fight("c", Vector3.zero, NpcRole.Companion, DecisionBackend.Utility, true, null);
+        noLeaderNoWalk.Brain.Level = 1;
+        Advance(0.4f);
+        Check(noLeaderNoWalk.Agent.SetDestinationCalls == 0, "a follower with no leader has nowhere to go");
+    }
+
+    static void CompanionOrders()
+    {
+        ResetWorld();
+        GameObject player = Player(12f, true);
+        Fighter c = Companion("c", Vector3.zero, player.transform, 10);
+        Advance(0.3f);
+        c.Brain.SetOrder(NpcOrder.Hold, 0);
+        Vector3 at = c.Go.transform.position;
+        Advance(0.3f);
+        int calls = c.Agent.SetDestinationCalls;
+        Advance(2f);
+        Check(c.Brain.Action == NpcAction.Hold && c.Actor.Mode == NpcAction.Hold, "hold holds, got " + c.Brain.Action);
+        Check(c.Agent.isStopped && c.Agent.SetDestinationCalls == calls && Dist(c.Go.transform.position, at) < 0.5f, "a holding companion stands still");
+        c.Brain.SetOrder(NpcOrder.None, 0);
+        Advance(0.5f);
+        Check(c.Brain.Action == NpcAction.Follow, "clearing the order goes back to following");
+
+        // Refusal.
+        ResetWorld();
+        GameObject p2 = Player(12f, true);
+        Fighter r = Companion("r", Vector3.zero, p2.transform, 10);
+        List<string> refused = new List<string>();
+        r.Brain.OrderRefused += (b, o, lvl) => refused.Add(o + ":" + lvl + ":" + b.Order);
+        r.Brain.SetOrder(NpcOrder.Attack, 15);
+        Advance(0.4f);
+        Check(refused.Count == 0 && r.Brain.Order == NpcOrder.Attack && r.Brain.Action != NpcAction.RefuseOrder, "an order exactly 5 above the level is accepted");
+        r.Brain.SetOrder(NpcOrder.Attack, 16);
+        Advance(0.2f);
+        Check(refused.Count == 1 && refused[0] == "Attack:16:None", "an order 6 above the level is refused, and the order is already cleared: " + string.Join(",", refused));
+        Check(r.Brain.Order == NpcOrder.None && r.Brain.OrderLevel == 0, "the refused order is gone");
+        Advance(0.3f);
+        Check(r.Brain.Action == NpcAction.Follow, "after the refusal it follows, got " + r.Brain.Action);
+        Advance(0.5f);
+        Check(refused.Count == 1, "one refusal, not one per tick");
+
+        // A refusal result for a companion that has no order any more (the game cleared it between the
+        // observation and the answer) clears nothing and raises no event.
+        ResetWorld();
+        GameObject pn = Player(12f, true);
+        Fighter none = Companion("none", Vector3.zero, pn.transform, 1);
+        int noneEvents = 0;
+        none.Brain.OrderRefused += (b, o, lvl) => noneEvents++;
+        none.Brain.ApplyAction(NpcAction.RefuseOrder);
+        Check(noneEvents == 0 && none.Brain.Order == NpcOrder.None && none.Brain.Action == NpcAction.RefuseOrder, "a refusal with no order raises no event");
+
+        // The refusal action is carried out as standing still.
+        ResetWorld();
+        GameObject p3 = Player(12f, true);
+        Fighter s = Companion("s", Vector3.zero, p3.transform, 1);
+        Advance(0.4f);
+        s.Brain.SetOrder(NpcOrder.Hold, 99);
+        Check(s.Agent.SetDestinationCalls >= 1, "it was walking before");
+        UnityEngine.Component.Invoke(Director(), "Update");
+        Time.time += 0.2f; UnityEngine.Component.Invoke(Director(), "Update");
+        Check(s.Actor.Mode == NpcAction.RefuseOrder || s.Actor.Mode == NpcAction.Follow, "the actor takes the refusal");
+
+        // A listener that gives another too-hard order from inside the refusal event is refused again.
+        ResetWorld();
+        GameObject p4 = Player(12f, true);
+        Fighter again = Companion("again", Vector3.zero, p4.transform, 1);
+        int times = 0;
+        again.Brain.OrderRefused += (b, o, lvl) => { times++; if (times < 3) b.SetOrder(NpcOrder.Attack, 40); };
+        again.Brain.SetOrder(NpcOrder.Attack, 40);
+        Advance(1.5f);
+        Check(times == 3 && again.Brain.Order == NpcOrder.None, "every refusal clears the order, even back to back, refused " + times);
+
+        // Orders mean nothing to other roles.
+        ResetWorld();
+        GameObject p5 = Player(12f, true); Clear(p5);
+        Fighter goblin = Goblin(Vector3.zero);
+        goblin.Brain.SetOrder(NpcOrder.Hold, 99);
+        Advance(0.4f);
+        Check(goblin.Brain.Action == NpcAction.Attack, "a goblin ignores a hold order, got " + goblin.Brain.Action);
+    }
+
+    static void DebugViewV3()
+    {
+        ResetWorld();
+        GameObject player = Player(12f, true);
+        Fighter c = Companion("comp", Vector3.zero, player.transform, 10);
+        c.Brain.SetOrder(NpcOrder.Attack, 9);
+        Advance(0.3f);
+        string line = ManagedNpcDebugView.Describe(c.Brain);
+        Check(line.Contains("Companion") && line.Contains("lvl 10") && line.Contains("order Attack lvl 9"), "a companion line shows its level and order: " + line);
+        Check(ManagedNpcDebugView.Describe(c.Brain).Contains("Follow") || ManagedNpcDebugView.Describe(c.Brain).Contains("Attack"), "and its action");
+        Fighter peaceful = Goblin(new Vector3(1, 0, 0));
+        peaceful.Brain.Disposition = NpcDisposition.Peaceful;
+        Check(ManagedNpcDebugView.Describe(peaceful.Brain).Contains("Peaceful"), "a non-hostile disposition is shown");
+        Check(!ManagedNpcDebugView.Describe(Goblin(new Vector3(2, 0, 0)).Brain).Contains("Hostile"), "a hostile one is not noise");
+        peaceful.Health.TakeDamage(1f, player);
+        Check(ManagedNpcDebugView.Describe(peaceful.Brain).Contains("provoked"), "provoked is shown");
+
+        HashSet<string> colors = new HashSet<string>();
+        foreach (NpcAction a in new[] { NpcAction.Idle, NpcAction.Trade, NpcAction.Patrol, NpcAction.Attack, NpcAction.Retreat, NpcAction.Follow, NpcAction.Hold, NpcAction.RefuseOrder })
+        { Color col = ManagedNpcDebugView.ColorFor(a); colors.Add(col.r + "," + col.g + "," + col.b); }
+        Check(colors.Count == 8, "all eight actions have their own color, got " + colors.Count);
+
+        ManagedNpcDrawOptions o = new ManagedNpcDrawOptions();
+        foreach (NpcAction a in new[] { NpcAction.Follow, NpcAction.Hold, NpcAction.RefuseOrder })
+        {
+            o.Filter = (ManagedNpcActionFilter)System.Enum.Parse(typeof(ManagedNpcActionFilter), a.ToString());
+            Check((int)a == (int)o.Filter - 1, "filter " + a + " lines up with the action");
+        }
+
+        UnityEditor.Handles.Reset();
+        List<Vector3> scratch = new List<Vector3>();
+        Advance(0.5f);
+        Fighter f = Companion("follower", Vector3.zero, player.transform, 10);
+        Advance(0.5f);
+        UnityEditor.Handles.Reset();
+        ManagedNpcDebugView.Draw(f.Brain, new ManagedNpcDrawOptions(), true, scratch);
+        Check(Count("Dotted") >= 1 && Count("WireDisc:3.00") == 1, "a follower shows a line to its leader and the follow distance around the leader");
+    }
+
     internal static int Run(string expectPath)
     {
         MathTests(); HealthRules(); Basic(); CheapRejects(); Budget(); DeadAndSelf(); DirectorRules();
         ThreatMemory(); ActorPatrol(); ActorAttack(); ActorLostTarget(); ActorRetreat(); ActorIdleTrade(); ActorNavMeshAndDeath(); SpellDamage();
         DebugView(); DebugFilter(); DebugRoute(); DebugDraw(); DebugWindow();
+        ObservationV3(); Provocation(); CompanionFollow(); CompanionOrders(); DebugViewV3();
         Console.WriteLine("decision path in director batches: " + (sawNative && sawFallback ? "mixed" : sawNative ? "native" : sawFallback ? "managed fallback" : "none"));
         if (expectPath == "native") Check(sawNative && !sawFallback, "every batch used the native library");
         else if (expectPath == "fallback") Check(sawFallback && !sawNative, "every batch used the managed fallback");

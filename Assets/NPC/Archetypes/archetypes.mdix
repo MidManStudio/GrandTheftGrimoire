@@ -7,12 +7,14 @@
 )
 
 // Numeric values are the Rust ABI v2 values (rust/npc/crates/npc-ffi). Do not renumber
-// without bumping the ABI version. NpcRole and DecisionBackend match the C ABI exactly;
+// without bumping the ABI version. NpcRole, DecisionBackend, NpcDisposition and NpcOrder match the C ABI exactly;
 // LearningMode is authoring metadata only and is not an ABI field.
 @ENUMS(
-  NpcRole         { MERCHANT = 0, CIVILIAN = 1, GUARD = 2, ENEMY = 3, BOSS = 4 }
+  NpcRole         { MERCHANT = 0, CIVILIAN = 1, GUARD = 2, ENEMY = 3, BOSS = 4, COMPANION = 5 }
   DecisionBackend { STATE_MACHINE = 0, UTILITY = 1, HYBRID_ML = 2 }
   LearningMode    { DISABLED = 0, FIXED_WEIGHTS = 1, ONLINE_UPDATES = 2 }
+  NpcDisposition  { HOSTILE = 0, RETALIATORY = 1, PEACEFUL = 2 }
+  NpcOrder        { NONE = 0, FOLLOW = 1, HOLD = 2, ATTACK = 3 }
 )
 
 @QUICKFUNCS(

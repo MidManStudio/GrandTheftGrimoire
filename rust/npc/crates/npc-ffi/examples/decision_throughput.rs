@@ -1,9 +1,19 @@
+// ============================================================================
+// NOTICE: Full documentation, design decisions, and fix history for this file
+// live in docs/gtg-npc-ffi.md, section "decision_throughput.rs"
+// ============================================================================
+
+// A benchmark that calls the exported C function through raw pointers, like a host does.
+#![allow(unsafe_code)]
+
 //! Throughput of the batched decision ABI, called directly from Rust.
 //!
 //! Two scenarios, both through `gtg_npc_decide_batch`:
 //! - `uniform`: every NPC has identical input (best case for branch prediction and caches).
-//! - `mixed`: a deterministic town-like population (15% merchants, 45% civilians, 15% guards,
-//!   20% enemies, 5% bosses; ~25% see a threat; random health; ~10% of non-merchants immobile).
+//! - `mixed`: a deterministic town-like population (12% merchants, 38% civilians, 12% guards,
+//!   20% enemies, 8% bosses, 10% companions; ~25% see a threat; random health; ~10% of
+//!   non-merchants immobile; combatants split 60/25/15 between hostile, retaliatory and peaceful;
+//!   20% provoked; levels 1 to 30; companions get a random order and order level).
 //!   The batch window slides across a 16384-NPC pool every call, so successive calls see
 //!   different data and the branch predictor cannot memorize one batch.
 //!
@@ -20,6 +30,8 @@ use std::time::Instant;
 
 const POOL: usize = 16384;
 const SEED: u64 = 0x4754_4700;
+const SEED2: u64 = 0x4754_4701;
+const ACTIONS: usize = 8;
 const COUNTS: [usize; 4] = [10, 100, 500, 1000];
 const WINDOW_STEP: usize = 977;
 const REPS: usize = 9;
@@ -50,29 +62,41 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
     (0..POOL)
         .map(|i| {
             let r = mix(SEED + i as u64);
+            let r2 = mix(SEED2 + i as u64);
             let pct = r % 100;
-            let role: u32 = if pct < 15 {
+            let role: u32 = if pct < 12 {
                 0
-            } else if pct < 60 {
+            } else if pct < 50 {
                 1
-            } else if pct < 75 {
+            } else if pct < 62 {
                 2
-            } else if pct < 95 {
+            } else if pct < 82 {
                 3
-            } else {
+            } else if pct < 90 {
                 4
+            } else {
+                5
             };
             let sel = ((r >> 8) % 2) as u32;
             let backend = match role {
                 0 | 1 => 0,
                 2 => 1,
-                3 => sel,
+                3 | 5 => sel,
                 _ => 1 + sel,
             };
             let can_move = if role == 0 || (r >> 40) % 100 < 10 {
                 0
             } else {
                 1
+            };
+            let disposition = if (2..=4).contains(&role) {
+                match r2 % 100 {
+                    0..=59 => 0,
+                    60..=84 => 1,
+                    _ => 2,
+                }
+            } else {
+                0
             };
             NpcObservationAbi {
                 npc_id: i as u64 + 1,
@@ -81,6 +105,15 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
                 threat_visible: u32::from((r >> 16) % 100 < 25),
                 health_fraction: ((r >> 24) % 1001) as f32 / 1000.0,
                 can_move,
+                disposition,
+                provoked: u8::from((r2 >> 8) % 100 < 20),
+                level: 1 + ((r2 >> 16) % 30) as u16,
+                order: if role == 5 { ((r2 >> 24) % 4) as u8 } else { 0 },
+                order_level: if role == 5 {
+                    ((r2 >> 32) % 40) as u16
+                } else {
+                    0
+                },
                 ..Default::default()
             }
         })
@@ -88,11 +121,13 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
 }
 
 /// Untimed pass over the whole pool: action histogram and FNV-1a hash of the decisions.
-fn verify(pool: &[NpcObservationAbi]) -> ([u64; 5], u64) {
-    let mut hist = [0u64; 5];
+fn verify(pool: &[NpcObservationAbi]) -> ([u64; ACTIONS], u64) {
+    let mut hist = [0u64; ACTIONS];
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
     let mut out = vec![NpcDecisionAbi::default(); 1024];
     for chunk in pool.chunks(1024) {
+        // SAFETY: `chunk` and `out` are valid, aligned, non-overlapping slices that outlive the call, and
+        // `out` has room for at least `chunk.len()` decisions.
         let status = unsafe {
             gtg_npc_decide_batch(
                 chunk.as_ptr(),
@@ -117,6 +152,9 @@ fn bench(scenario: &str, pool: &[NpcObservationAbi], count: usize, step: usize) 
     let mut off = 0usize;
     let mut run = |calls: usize| {
         for _ in 0..calls {
+            // SAFETY: `pool[off..]` holds at least `count` observations because `off` stays below
+            // `pool.len() - count`, and `out` holds exactly `count` decisions. Both are valid, aligned and
+            // do not overlap.
             let status = unsafe {
                 gtg_npc_decide_batch(
                     pool[off..].as_ptr(),
@@ -165,7 +203,7 @@ fn main() {
         bench("mixed", &mixed, count, WINDOW_STEP);
     }
     println!(
-        "# mixed_actions idle={} trade={} patrol={} attack={} retreat={} fnv1a=0x{hash:016x}",
-        hist[0], hist[1], hist[2], hist[3], hist[4]
+        "# mixed_actions idle={} trade={} patrol={} attack={} retreat={} follow={} hold={} refuse={} fnv1a=0x{hash:016x}",
+        hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7]
     );
 }

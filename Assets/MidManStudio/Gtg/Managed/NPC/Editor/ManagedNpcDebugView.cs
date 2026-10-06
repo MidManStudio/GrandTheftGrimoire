@@ -27,6 +27,9 @@ namespace MidManStudio.Gtg.Managed.NPC
         Patrol = 3,
         Attack = 4,
         Retreat = 5,
+        Follow = 6,
+        Hold = 7,
+        RefuseOrder = 8,
     }
 
     /// <summary>The switches of the debugger.</summary>
@@ -61,6 +64,9 @@ namespace MidManStudio.Gtg.Managed.NPC
                 case NpcAction.Patrol: return new Color(0.35f, 0.9f, 0.4f, 1f);
                 case NpcAction.Attack: return new Color(1f, 0.25f, 0.2f, 1f);
                 case NpcAction.Retreat: return new Color(1f, 0.75f, 0.15f, 1f);
+                case NpcAction.Follow: return new Color(0.4f, 0.55f, 1f, 1f);
+                case NpcAction.Hold: return new Color(0.7f, 0.45f, 0.95f, 1f);
+                case NpcAction.RefuseOrder: return new Color(1f, 0.35f, 0.8f, 1f);
                 default: return new Color(0.7f, 0.7f, 0.7f, 1f);
             }
         }
@@ -85,6 +91,20 @@ namespace MidManStudio.Gtg.Managed.NPC
             }
 
             text += "  hp " + Mathf.RoundToInt(brain.HealthFraction * 100f) + "%";
+            if (brain.Role == NpcRole.Companion)
+            {
+                text += "  lvl " + brain.Level + "  order " + brain.Order + (brain.Order == NpcOrder.None ? "" : " lvl " + brain.OrderLevel);
+            }
+            else if (brain.Disposition != NpcDisposition.Hostile)
+            {
+                text += "  " + brain.Disposition;
+            }
+
+            if (brain.Provoked)
+            {
+                text += "  provoked";
+            }
+
             if (brain.ThreatVisible)
             {
                 text += "  sees threat";
@@ -192,12 +212,21 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 Handles.DrawWireDisc(position, Vector3.up, actor.RetreatDistance);
             }
+            else if (actor.Mode == NpcAction.Follow && brain.Leader != null)
+            {
+                Handles.DrawWireDisc(brain.Leader.position, Vector3.up, actor.FollowDistance);
+            }
         }
 
         private static void DrawPath(ManagedNpcBrain brain, ManagedNpcActor actor, Color color, List<Vector3> routeScratch)
         {
             Vector3 position = brain.transform.position;
             Handles.color = color;
+
+            if (actor.Mode == NpcAction.Follow && brain.Leader != null)
+            {
+                Handles.DrawDottedLine(position, brain.Leader.position, 3f);
+            }
 
             int corners = actor.GetPathCorners(Corners);
             for (int i = 1; i < corners; i++)

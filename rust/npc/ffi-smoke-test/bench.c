@@ -1,3 +1,7 @@
+// ============================================================================
+// NOTICE: Full documentation, design decisions, and fix history for this file
+// live in docs/gtg-npc-ffi.md, section "bench.c"
+// ============================================================================
 #define _POSIX_C_SOURCE 200809L
 /* C-to-Rust FFI benchmark of gtg_npc_decide_batch. Mirrors crates/npc-ffi/examples/decision_throughput.rs:
    same two scenarios, same generator, same window sliding, same repetition scheme (REPS timed repetitions after
@@ -9,6 +13,8 @@
 #include <time.h>
 #define POOL 16384u
 #define SEED 0x47544700ull
+#define SEED2 0x47544701ull
+#define ACTIONS 8
 #define WINDOW_STEP 977u
 #define REPS 9
 #define NPC_DECISIONS_PER_REP 4000000u
@@ -24,25 +30,31 @@ static void fill_uniform(GtgNpcObservation *p) {
 }
 static void fill_mixed(GtgNpcObservation *p) {
  for (unsigned i=0;i<POOL;i++) {
-  uint64_t r = mix(SEED + i), pct = r % 100;
-  uint32_t role = pct<15 ? 0 : pct<60 ? 1 : pct<75 ? 2 : pct<95 ? 3 : 4;
+  uint64_t r = mix(SEED + i), r2 = mix(SEED2 + i), pct = r % 100;
+  uint32_t role = pct<12 ? 0 : pct<50 ? 1 : pct<62 ? 2 : pct<82 ? 3 : pct<90 ? 4 : 5;
   uint32_t sel = (uint32_t)((r >> 8) % 2);
   p[i]=(GtgNpcObservation){0};
   p[i].npc_id = i+1; p[i].role = role;
-  p[i].backend = role<=1 ? 0 : role==2 ? 1 : role==3 ? sel : 1+sel;
+  p[i].backend = role<=1 ? 0 : role==2 ? 1 : (role==3 || role==5) ? sel : 1+sel;
   p[i].threat_visible = ((r >> 16) % 100) < 25;
   p[i].health_fraction = (float)((r >> 24) % 1001) / 1000.0f;
   p[i].can_move = (role==0 || ((r >> 40) % 100) < 10) ? 0 : 1;
+  uint64_t d = r2 % 100;
+  p[i].disposition = (role>=2 && role<=4) ? (d<60 ? 0 : d<85 ? 1 : 2) : 0;
+  p[i].provoked = ((r2 >> 8) % 100) < 20;
+  p[i].level = (uint16_t)(1 + (r2 >> 16) % 30);
+  p[i].order = role==5 ? (uint8_t)((r2 >> 24) % 4) : 0;
+  p[i].order_level = role==5 ? (uint16_t)((r2 >> 32) % 40) : 0;
  }
 }
 static int verify(const GtgNpcObservation *pool) {
- uint64_t hist[5]={0}, hash=0xcbf29ce484222325ull; GtgNpcDecision out[1024];
+ uint64_t hist[ACTIONS]={0}, hash=0xcbf29ce484222325ull; GtgNpcDecision out[1024];
  for (unsigned off=0; off<POOL; off+=1024) {
   if (gtg_npc_decide_batch(pool+off,1024,out,1024)) return 6;
-  for (unsigned i=0;i<1024;i++) { if (out[i].action<0||out[i].action>4) return 7; hist[out[i].action]++; hash=(hash ^ ((uint64_t)out[i].action+1)) * 0x100000001b3ull; }
+  for (unsigned i=0;i<1024;i++) { if (out[i].action<0||out[i].action>=ACTIONS) return 7; hist[out[i].action]++; hash=(hash ^ ((uint64_t)out[i].action+1)) * 0x100000001b3ull; }
  }
- for (int a=0;a<5;a++) if (!hist[a]) return 8;
- printf("# mixed_actions idle=%" PRIu64 " trade=%" PRIu64 " patrol=%" PRIu64 " attack=%" PRIu64 " retreat=%" PRIu64 " fnv1a=0x%016" PRIx64 "\n",hist[0],hist[1],hist[2],hist[3],hist[4],hash);
+ for (int a=0;a<ACTIONS;a++) if (!hist[a]) return 8;
+ printf("# mixed_actions idle=%" PRIu64 " trade=%" PRIu64 " patrol=%" PRIu64 " attack=%" PRIu64 " retreat=%" PRIu64 " follow=%" PRIu64 " hold=%" PRIu64 " refuse=%" PRIu64 " fnv1a=0x%016" PRIx64 "\n",hist[0],hist[1],hist[2],hist[3],hist[4],hist[5],hist[6],hist[7],hash);
  return 0;
 }
 static volatile uint64_t sink;

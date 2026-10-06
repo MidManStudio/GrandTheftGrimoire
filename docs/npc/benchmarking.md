@@ -7,7 +7,7 @@ application, results log and known limits.
 
 - `.github/workflows/npc-rust-ci.yml`: on every push/PR touching the NPC paths. Job `test` runs the enum sync check, formatting, tests and Clippy. Job `csharp-abi` compiles the Unity-side native layer with .NET 8 and runs it against the real Rust library (see `docs/npc/unity-integration.md`).
 - `.github/workflows/npc-rust-ffi-bench.yml`: **manual only**. Builds the `gtg-npc-ffi` cdylib in release mode,
-  compiles an independent C caller with GCC, runs the ABI v2 smoke test, and benchmarks 10/100/500/1000 NPC batches
+  compiles an independent C caller with GCC, runs the ABI v3 smoke test, and benchmarks 10/100/500/1000 NPC batches
   through the real shared-library boundary in two scenarios, `uniform` and `mixed`, each timed 9 times and reported as a median with its spread (see `benching-standards.md`). Inputs: `baseline_note` and `platforms` (`ubuntu-only` or `all`). The x86 leg is pinned to `ubuntu-24.04`.
 
 Cargo colour is disabled in the workflow (`CARGO_TERM_COLOR=never`) so raw output has no escape codes. Output: a parsed comparison table in the run's Summary tab (via `scripts/bench_npc_ffi.py`), a diagnostics block,
