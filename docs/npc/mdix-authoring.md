@@ -2,6 +2,8 @@
 
 Status (2026-09-29): **authored and statically checked only.** Nothing in Unity reads these files yet, and the file has not been run through `mdix validate` (DixScript-Rust needs Rust 1.80+, which the authoring environment lacks). The enum values are now guarded by `scripts/check_npc_enum_sync.py` in CI (see below).
 
+Update (2026-10-07): the file has now been run through the real engine, the `libmdix_ffi` that ships in `com.midmanstudio.mdix` and that Unity loads. It did not load. `@CONFIG version` is the DixScript language version, the engine accepts only `"1.0.0"` there, and `"1.1.1"` failed with `CONFIG: Unsupported version: 1.1.1`, so Unity could not have imported the file. It now declares `1.0.0`, loads, and gives the three archetypes below. It also binds cleanly into `NpcArchetypeDatabase` (`Assets/MidManStudio/Gtg/Data/`, see `GrandTheftGrimoire/data.md`), checked outside Unity.
+
 ## Files
 
 | File | Purpose |
@@ -45,12 +47,12 @@ The native structs in `NPCNativeTypes.cs` stay raw `uint`/`int` on purpose: they
 
 ## Changes in this pass
 
-- `town_guard` now uses `LearningMode.DISABLED` (was `FIXED_WEIGHTS`). Only `HYBRID_ML` has a model path, and the architecture plan gives ordinary combatants no ML. `archetypes.mdix` is version 1.1.1.
+- `town_guard` now uses `LearningMode.DISABLED` (was `FIXED_WEIGHTS`). Only `HYBRID_ML` has a model path, and the architecture plan gives ordinary combatants no ML. `archetypes.mdix` declares `version -> "1.0.0"`, the only version the engine accepts. It first said 1.1.1, which fails to load.
 - C# uses the enums above.
 
 ## Still open
 
-- **Two different `Rarity` enums.** `game_enemies.mdix` has four values and `inventory_items.mdix` has five (with `EPIC`). Auto-numbering makes `LEGENDARY` 3 in one and 4 in the other. Harmless while nothing compares the raw integers. Needs a decision on the intended set before either file changes.
+- **Two different `Rarity` enums.** `game_enemies.mdix` has four values and `inventory_items.mdix` has five (with `EPIC`). Auto-numbering makes `LEGENDARY` 3 in one and 4 in the other. Harmless while nothing compares the raw integers. Needs a decision on the intended set before either file changes. The C# side keeps them apart (`EnemyRarity` and `ItemRarity` in `Assets/MidManStudio/Gtg/Data/`), so baked values stay right whichever way this is decided.
 - **Style drift in the two older files.** They lack the signature comment and use unprefixed QuickFunc parameters. `@CONFIG` has no `features` key; the source's default is `"advanced"`, so this should compile, but it was not run.
 - **Candidate enums, not added.** A `Race` or faction enum fits the design docs, but the full race list is still open there. `dialogue_ref` stays a string because dialogue ids are open-ended content, not a fixed set.
 - **`LearningMode` on `NPCIdentity` is stored but not read by any system.** It carries authoring intent until an ML path exists.
