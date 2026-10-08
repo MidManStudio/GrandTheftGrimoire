@@ -28,7 +28,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         [SerializeField] private LearningMode _learningMode = LearningMode.Disabled;
         [Tooltip("How a guard, enemy or boss reacts to a threat. Hostile attacks on sight, Retaliatory only after being attacked, Peaceful never fights and runs.")]
         [SerializeField] private NpcDisposition _disposition = NpcDisposition.Hostile;
-        [Tooltip("The NPC's level. A companion refuses an order whose level is more than 5 above this.")]
+        [Tooltip("The NPC's level. A companion refuses an order whose level is above this by more than the gap for that order type: raid 1, attack 3, follow and hold 5, deliver 6.")]
         [SerializeField] private int _level = 1;
         [Tooltip("Seconds after being hit by something with a source that the NPC counts as provoked.")]
         [SerializeField] private float _provokedMemorySeconds = 20f;
@@ -36,6 +36,15 @@ namespace MidManStudio.Gtg.Managed.NPC
         [Header("Companion")]
         [Tooltip("What a companion follows and never sees as a threat. Normally the player.")]
         [SerializeField] private Transform _leader;
+        [Range(0f, 1f)]
+        [Tooltip("How trustworthy the companion is. A weight in its loyalty, which matters only for betrayal.")]
+        [SerializeField] private float _trustworthiness = 0.5f;
+        [Range(0f, 1f)]
+        [Tooltip("How much the companion likes the player. A weight in its loyalty.")]
+        [SerializeField] private float _affinity = 0.5f;
+        [Range(0f, 1f)]
+        [Tooltip("How satisfied the companion is with its pay. A weight in its loyalty.")]
+        [SerializeField] private float _paySatisfaction = 0.5f;
 
         [Header("Sight")]
         [SerializeField] private float _viewRange = 20f;
@@ -62,12 +71,20 @@ namespace MidManStudio.Gtg.Managed.NPC
         private float _provokedUntil = float.NegativeInfinity;
         private GameObject _lastAttacker;
         private bool _warnedNoLeader;
+        private bool _betrayalOpportunity;
+        private uint _noiseState;
 
         /// <summary>(this, old action, new action). Raised on the main thread inside the director tick.</summary>
         public event Action<ManagedNpcBrain, NpcAction, NpcAction> ActionChanged;
 
         /// <summary>(this, the order that was refused, its level). Raised when a companion declines an order. The order is cleared before this fires.</summary>
         public event Action<ManagedNpcBrain, NpcOrder, int> OrderRefused;
+
+        /// <summary>
+        /// Raised when a companion betrays the player. The opportunity is used up before this fires, so a
+        /// handler that wants another chance has to set it again. What the betrayal does is up to the handler.
+        /// </summary>
+        public event Action<ManagedNpcBrain> Betrayed;
 
         /// <summary>Unique among live NPCs of this play session. Not stable between sessions.</summary>
         public ulong Id { get; internal set; }
@@ -83,6 +100,37 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         /// <summary>What a companion follows and never sees as a threat.</summary>
         public Transform Leader { get { return _leader; } set { _leader = value; } }
+
+        /// <summary>How trustworthy a companion is, from 0 to 1. Values outside that range are clamped.</summary>
+        public float Trustworthiness { get { return _trustworthiness; } set { _trustworthiness = Mathf.Clamp01(value); } }
+
+        /// <summary>How much a companion likes the player, from 0 to 1.</summary>
+        public float Affinity { get { return _affinity; } set { _affinity = Mathf.Clamp01(value); } }
+
+        /// <summary>How satisfied a companion is with its pay, from 0 to 1.</summary>
+        public float PaySatisfaction { get { return _paySatisfaction; } set { _paySatisfaction = Mathf.Clamp01(value); } }
+
+        /// <summary>
+        /// True while the game lets the companion betray the player. The game decides when, for instance when
+        /// the companion is alone with something valuable, and never sets it for a companion the story
+        /// protects. A scripted betrayal does not use this: the story changes the companion directly.
+        /// </summary>
+        public bool BetrayalOpportunity { get { return _betrayalOpportunity; } set { _betrayalOpportunity = value; } }
+
+        /// <summary>The weighted mix of trust, liking and pay, from 0 to 1. A companion at 0.5 or more never betrays.</summary>
+        public float Loyalty
+        {
+            get
+            {
+                NPCNativeObservation mix = new NPCNativeObservation
+                {
+                    Trustworthiness = _trustworthiness,
+                    Affinity = _affinity,
+                    PaySatisfaction = _paySatisfaction
+                };
+                return NPCManagedFallback.Loyalty(mix);
+            }
+        }
 
         /// <summary>The standing order. Only a companion acts on it.</summary>
         public NpcOrder Order { get { return _order; } }
@@ -174,6 +222,9 @@ namespace MidManStudio.Gtg.Managed.NPC
             _loseSightDelay = Mathf.Max(0f, _loseSightDelay);
             _level = Mathf.Max(0, _level);
             _provokedMemorySeconds = Mathf.Max(0f, _provokedMemorySeconds);
+            _trustworthiness = Mathf.Clamp01(_trustworthiness);
+            _affinity = Mathf.Clamp01(_affinity);
+            _paySatisfaction = Mathf.Clamp01(_paySatisfaction);
         }
 
         /// <summary>
@@ -262,8 +313,41 @@ namespace MidManStudio.Gtg.Managed.NPC
                 Order = (byte)_order,
                 Provoked = Provoked ? (byte)1 : (byte)0,
                 Level = ClampLevel(_level),
-                OrderLevel = ClampLevel(_orderLevel)
+                OrderLevel = ClampLevel(_orderLevel),
+                // The companion inputs are sent for companions only. Everyone else sends zeros, which Rust ignores.
+                Trustworthiness = _role == NpcRole.Companion ? _trustworthiness : 0f,
+                Affinity = _role == NpcRole.Companion ? _affinity : 0f,
+                PaySatisfaction = _role == NpcRole.Companion ? _paySatisfaction : 0f,
+                Noise = _role == NpcRole.Companion ? NextNoise() : 0u,
+                BetrayalOpportunity = _role == NpcRole.Companion && _betrayalOpportunity ? (byte)1 : (byte)0
             };
+        }
+
+        // A random number for the next decision. Each brain has its own sequence, seeded from its id, so a run is
+        // reproducible. xorshift32, never zero.
+        private uint NextNoise()
+        {
+            uint x = _noiseState;
+            if (x == 0u)
+            {
+                x = (uint)((Id * 0x9E3779B97F4A7C15UL) >> 32) | 1u;
+            }
+
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            _noiseState = x;
+            return x;
+        }
+
+        /// <summary>
+        /// How an off-screen mission of this type would end for this companion, using its level. The player
+        /// gets a notification and the reward when it is Success. A mission the player joins is played out
+        /// instead and does not use this. False for an order that is not a mission.
+        /// </summary>
+        public bool TryResolveMission(NpcOrder order, int missionLevel, out NpcMissionOutcome outcome)
+        {
+            return ManagedMissionResolver.TryResolve(order, _level, missionLevel, NextNoise(), out outcome);
         }
 
         private static ushort ClampLevel(int level)
@@ -285,6 +369,19 @@ namespace MidManStudio.Gtg.Managed.NPC
                 if (declined != null && refused != NpcOrder.None)
                 {
                     declined(this, refused, refusedLevel);
+                }
+
+                return;
+            }
+
+            if (action == NpcAction.Betray)
+            {
+                _betrayalOpportunity = false;
+                SetActionAndNotify(action);
+                Action<ManagedNpcBrain> betrayed = Betrayed;
+                if (betrayed != null)
+                {
+                    betrayed(this);
                 }
 
                 return;

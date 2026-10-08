@@ -18,7 +18,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         private const int MaxRows = 300;
 
         private static readonly string[] ModeNames = { "Off", "Selected only", "All NPCs" };
-        private static readonly string[] FilterNames = { "Any action", "Idle", "Trade", "Patrol", "Attack", "Retreat", "Follow", "Hold", "Refused an order" };
+        private static readonly string[] FilterNames = { "Any action", "Idle", "Trade", "Patrol", "Attack", "Retreat", "Follow", "Hold", "Refused an order", "Mission", "Betrayal" };
 
         private readonly ManagedNpcDrawOptions _options = new ManagedNpcDrawOptions();
         private readonly List<Vector3> _routeScratch = new List<Vector3>();

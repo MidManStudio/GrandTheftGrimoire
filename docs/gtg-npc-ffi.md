@@ -1,14 +1,14 @@
 # gtg-npc-ffi
 
-The C boundary of the NPC decision. It exports a versioned, batched function, so a host calls Rust once per tick instead of once per NPC. Version 0.0.1, ABI version 3. Builds as a `cdylib` for Unity and as an `rlib` for the tests and the benchmark.
+The C boundary of the NPC decision. It exports a versioned, batched function, so a host calls Rust once per tick instead of once per NPC. Version 0.0.1, ABI version 4. Builds as a `cdylib` for Unity and as an `rlib` for the tests and the benchmark.
 
-The layout and the rules are in `npc/observation-v3.md`.
+The layout and the rules are in `npc/observation.md`.
 
 ## Modules
 
 ### `lib.rs`
 
-**What it does:** Defines the two C structs (`NpcObservationAbi`, 64 bytes, and `NpcDecisionAbi`, 16 bytes), validates and converts them, and exports `gtg_npc_abi_version`, `gtg_npc_observation_size`, `gtg_npc_decision_size`, `gtg_npc_decide_batch` and the older scalar `gtg_npc_decide_stub`.
+**What it does:** Defines the two C structs (`NpcObservationAbi`, 64 bytes, and `NpcDecisionAbi`, 16 bytes), validates and converts them, and exports `gtg_npc_abi_version`, `gtg_npc_observation_size`, `gtg_npc_decision_size`, `gtg_npc_decide_batch`, `gtg_npc_resolve_mission` and the older scalar `gtg_npc_decide_stub`.
 
 **Decisions:**
 - One call per batch, up to 4096 NPCs. All observations are validated before any output is written, so a rejected batch leaves the output buffer as it was.
@@ -17,6 +17,7 @@ The layout and the rules are in `npc/observation-v3.md`.
 - Every field added after version 2 is zero in an old caller, and zero means the old behavior. A test sets only the version 2 fields and checks the old results.
 - Booleans are integers that must be 0 or 1, and a reserved field must be zero. A caller written for a later layout is rejected.
 - The version and both sizes are exported, and the C# bridge refuses a library whose version or sizes differ.
+- `gtg_npc_resolve_mission` is a scalar export, because a mission is resolved rarely and one at a time. It takes the order as the same number the observation uses (4 deliver, 5 raid), so the host needs one set of numbers.
 - `gtg_npc_decide_stub` stays for the first prototype. It builds a hostile, state machine NPC with no order.
 
 ### `gtg_npc.h`
@@ -35,7 +36,7 @@ The layout and the rules are in `npc/observation-v3.md`.
 **What they do:** The Rust and C benchmarks, run by the manual workflow `npc-rust-ffi-bench.yml`. Both generate the same deterministic NPC population, run `uniform` and `mixed` scenarios at four batch sizes, and print a median with a spread over nine repetitions. Both print a `# mixed_actions` line with the action counts and a hash of every decision.
 
 **Decisions:**
-- The mixed workload now includes companions (10%), dispositions, provoked flags, levels and orders. It must produce all eight actions or the program fails.
+- The mixed workload now includes companions (10%) with all six orders, trust, liking, pay, a random number and betrayal opportunities, and dispositions, provoked flags and levels for the others. It must produce all ten actions or the program fails.
 - The generator is duplicated in three places (Rust, C and the C# ABI test) and the hash proves they agree. A change to one must change all three.
 - The population is 1 MiB now (16,384 x 64 bytes), twice the version 2 size, so mixed results from before version 3 are not directly comparable with later ones.
 

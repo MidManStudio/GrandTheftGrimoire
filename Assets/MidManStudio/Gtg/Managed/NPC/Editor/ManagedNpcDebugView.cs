@@ -30,6 +30,8 @@ namespace MidManStudio.Gtg.Managed.NPC
         Follow = 6,
         Hold = 7,
         RefuseOrder = 8,
+        Mission = 9,
+        Betray = 10,
     }
 
     /// <summary>The switches of the debugger.</summary>
@@ -67,6 +69,8 @@ namespace MidManStudio.Gtg.Managed.NPC
                 case NpcAction.Follow: return new Color(0.4f, 0.55f, 1f, 1f);
                 case NpcAction.Hold: return new Color(0.7f, 0.45f, 0.95f, 1f);
                 case NpcAction.RefuseOrder: return new Color(1f, 0.35f, 0.8f, 1f);
+                case NpcAction.Mission: return new Color(0.2f, 0.75f, 0.65f, 1f);
+                case NpcAction.Betray: return new Color(0.6f, 0.05f, 0.1f, 1f);
                 default: return new Color(0.7f, 0.7f, 0.7f, 1f);
             }
         }
@@ -94,6 +98,7 @@ namespace MidManStudio.Gtg.Managed.NPC
             if (brain.Role == NpcRole.Companion)
             {
                 text += "  lvl " + brain.Level + "  order " + brain.Order + (brain.Order == NpcOrder.None ? "" : " lvl " + brain.OrderLevel);
+                text += "  loyalty " + brain.Loyalty.ToString("0.00") + (brain.BetrayalOpportunity ? " (betrayal possible)" : "");
             }
             else if (brain.Disposition != NpcDisposition.Hostile)
             {

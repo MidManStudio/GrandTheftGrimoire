@@ -3,7 +3,7 @@
 
 CI tooling only: it never runs in the game and is not part of the NPC ML pipeline.
 
-Compares names and numeric values of NpcRole, DecisionBackend, LearningMode, NpcDisposition, NpcOrder and NpcAction across:
+Compares names and numeric values of NpcRole, DecisionBackend, LearningMode, NpcDisposition, NpcOrder, NpcAction and NpcMissionOutcome across:
   Assets/NPC/Archetypes/archetypes.mdix                          (@ENUMS)
   Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs         (C# enums, shared by both stacks)
   rust/npc/crates/npc-ffi/src/lib.rs                             (parse() and action_code())
@@ -26,7 +26,7 @@ CS_CANDIDATES = (
 )
 FFI = "rust/npc/crates/npc-ffi/src/lib.rs"
 ML = "rust/npc/crates/npc-ml/src/lib.rs"
-# NpcAction is not authored in MDIX (it is a runtime result), so it is compared as C# vs Rust only.
+# NpcAction and NpcMissionOutcome are not authored in MDIX (they are runtime results), so they are compared as C# vs Rust only.
 ENUMS = {
     "NpcRole": True,
     "DecisionBackend": True,
@@ -34,6 +34,7 @@ ENUMS = {
     "NpcDisposition": True,
     "NpcOrder": True,
     "NpcAction": False,
+    "NpcMissionOutcome": False,
 }
 
 
@@ -84,6 +85,10 @@ def parse_rust(ffi, ml):
     if m:
         for name, num in re.findall(r"NpcAction::(\w+)\s*=>\s*(\d+)", m.group(1)):
             out["NpcAction"][norm(name)] = int(num)
+    m = re.search(r"fn outcome_code[^{]*\{(.*?)\n\}", ffi, re.S)
+    if m:
+        for name, num in re.findall(r"MissionOutcome::(\w+)\s*=>\s*(\d+)", m.group(1)):
+            out["NpcMissionOutcome"][norm(name)] = int(num)
     m = re.search(r"enum\s+LearningMode\s*\{([^}]*)\}", ml)
     if m:
         # Doc comments sit inside the enum body now, so drop them before reading the variant names.

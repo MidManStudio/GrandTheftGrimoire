@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 /* Must equal ABI_VERSION in rust/npc/crates/npc-ffi/src/lib.rs. */
-#define GTG_NPC_ABI_VERSION 3u
+#define GTG_NPC_ABI_VERSION 4u
 #define GTG_NPC_MAX_BATCH 4096u
 
 /* Status codes returned by gtg_npc_decide_batch. */
@@ -33,6 +33,8 @@
 #define GTG_NPC_ORDER_FOLLOW 1
 #define GTG_NPC_ORDER_HOLD 2
 #define GTG_NPC_ORDER_ATTACK 3
+#define GTG_NPC_ORDER_DELIVER 4
+#define GTG_NPC_ORDER_RAID 5
 #define GTG_NPC_ACTION_IDLE 0
 #define GTG_NPC_ACTION_TRADE 1
 #define GTG_NPC_ACTION_PATROL 2
@@ -41,9 +43,15 @@
 #define GTG_NPC_ACTION_FOLLOW 5
 #define GTG_NPC_ACTION_HOLD 6
 #define GTG_NPC_ACTION_REFUSE_ORDER 7
+#define GTG_NPC_ACTION_MISSION 8
+#define GTG_NPC_ACTION_BETRAY 9
+#define GTG_NPC_MISSION_SUCCESS 0
+#define GTG_NPC_MISSION_FAILED 1
+#define GTG_NPC_MISSION_CAUGHT 2
+#define GTG_NPC_MISSION_KILLED 3
 
 /* One NPC, 64 bytes. Booleans are 0 or 1. Every reserved field must be zero. A zero in every field
-   after `reserved` means: hostile, no order, not provoked, level 0. */
+   after `reserved` means: hostile, no order, not provoked, level 0, no betrayal opportunity. */
 typedef struct {
     uint64_t npc_id;
     uint32_t role, backend, threat_visible;
@@ -51,7 +59,11 @@ typedef struct {
     uint32_t can_move, reserved;
     uint8_t disposition, order, provoked, reserved_byte;
     uint16_t level, order_level;
-    uint64_t reserved_tail[3];
+    float trustworthiness, affinity, pay_satisfaction;
+    uint32_t noise;
+    uint8_t betrayal_opportunity, reserved_a;
+    uint16_t reserved_b;
+    uint32_t reserved_c;
 } GtgNpcObservation;
 
 /* One decision, 16 bytes. `reserved` is always zero. */
@@ -60,5 +72,8 @@ typedef struct { uint64_t npc_id; int32_t action; uint32_t reserved; } GtgNpcDec
 uint32_t gtg_npc_abi_version(void);
 uint32_t gtg_npc_observation_size(void);
 uint32_t gtg_npc_decision_size(void);
+/* How a mission that happens off screen ends: a GTG_NPC_MISSION_ value, or GTG_NPC_INVALID for an order that is
+   not a mission (4 deliver or 5 raid) or a level above 65535. `noise` is a random number from the host. */
+int32_t gtg_npc_resolve_mission(uint32_t order, uint32_t companion_level, uint32_t mission_level, uint32_t noise);
 int32_t gtg_npc_decide_batch(const GtgNpcObservation *inputs, uint32_t count, GtgNpcDecision *outputs, uint32_t capacity);
 #endif

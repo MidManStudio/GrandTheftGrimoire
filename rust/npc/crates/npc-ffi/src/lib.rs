@@ -10,10 +10,12 @@
 // `// SAFETY:` comment and every `unsafe fn` a `# Safety` section.
 #![allow(unsafe_code)]
 
-use gtg_npc_core::{DecisionBackend, NpcAction, NpcDisposition, NpcOrder, NpcRole, Observation};
+use gtg_npc_core::{
+    DecisionBackend, MissionOutcome, NpcAction, NpcDisposition, NpcOrder, NpcRole, Observation,
+};
 
 /// Version of the C layout and meaning of every field. The host refuses a library with another version.
-pub const ABI_VERSION: u32 = 3;
+pub const ABI_VERSION: u32 = 4;
 /// Success.
 pub const STATUS_OK: i32 = 0;
 /// A pointer was null or not aligned for its type.
@@ -28,7 +30,7 @@ pub const MAX_BATCH: usize = 4096;
 
 /// One NPC, as C sees it. 64 bytes, 8-byte alignment on supported 64-bit targets. C# uses explicit
 /// offsets. Booleans are integers that must be 0 or 1. A zero in every field added after version 2
-/// means "no information": hostile, no order, not provoked, level 0.
+/// means "no information": hostile, no order, not provoked, level 0, and no betrayal opportunity.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NpcObservationAbi {
@@ -48,7 +50,7 @@ pub struct NpcObservationAbi {
     pub reserved: u32, // 28
     /// `NpcDisposition`: 0 hostile, 1 retaliatory, 2 peaceful.
     pub disposition: u8, // 32
-    /// `NpcOrder`: 0 none, 1 follow, 2 hold, 3 attack. Used by companions only.
+    /// `NpcOrder`: 0 none, 1 follow, 2 hold, 3 attack, 4 deliver, 5 raid. Used by companions only.
     pub order: u8, // 33
     /// 1 when the NPC was attacked recently, otherwise 0.
     pub provoked: u8, // 34
@@ -58,8 +60,22 @@ pub struct NpcObservationAbi {
     pub level: u16, // 36
     /// The difficulty of the current order as a level, 0 for an order with none.
     pub order_level: u16, // 38
-    /// Must be zero. Room for fields that a later version defines.
-    pub reserved_tail: [u64; 3], // 40
+    /// How trustworthy the companion is, 0 to 1. Must be finite. Used for betrayal only.
+    pub trustworthiness: f32, // 40
+    /// How much the companion likes the player, 0 to 1. Must be finite. Used for betrayal only.
+    pub affinity: f32, // 44
+    /// How satisfied the companion is with its pay, 0 to 1. Must be finite. Used for betrayal only.
+    pub pay_satisfaction: f32, // 48
+    /// A random number the host supplies for each decision.
+    pub noise: u32, // 52
+    /// 1 when the companion could betray the player now, otherwise 0. Without it no betrayal happens.
+    pub betrayal_opportunity: u8, // 56
+    /// Must be zero.
+    pub reserved_a: u8, // 57
+    /// Must be zero.
+    pub reserved_b: u16, // 58
+    /// Must be zero. Room for a field that a later version defines.
+    pub reserved_c: u32, // 60
 }
 
 /// One decision, as C sees it. 16 bytes.
@@ -68,7 +84,8 @@ pub struct NpcObservationAbi {
 pub struct NpcDecisionAbi {
     /// The NPC the decision is for.
     pub npc_id: u64,
-    /// 0 idle, 1 trade, 2 patrol, 3 attack, 4 retreat, 5 follow, 6 hold, 7 refuse order.
+    /// 0 idle, 1 trade, 2 patrol, 3 attack, 4 retreat, 5 follow, 6 hold, 7 refuse order, 8 mission,
+    /// 9 betray.
     pub action: i32,
     /// Always zero.
     pub reserved: u32,
@@ -122,15 +139,23 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         1 => NpcOrder::Follow,
         2 => NpcOrder::Hold,
         3 => NpcOrder::Attack,
+        4 => NpcOrder::Deliver,
+        5 => NpcOrder::Raid,
         _ => return None,
     };
     if raw.reserved != 0
         || raw.reserved_byte != 0
-        || raw.reserved_tail != [0; 3]
+        || raw.reserved_a != 0
+        || raw.reserved_b != 0
+        || raw.reserved_c != 0
         || raw.threat_visible > 1
         || raw.can_move > 1
         || raw.provoked > 1
+        || raw.betrayal_opportunity > 1
         || !raw.health_fraction.is_finite()
+        || !raw.trustworthiness.is_finite()
+        || !raw.affinity.is_finite()
+        || !raw.pay_satisfaction.is_finite()
     {
         return None;
     }
@@ -146,6 +171,11 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         provoked: raw.provoked == 1,
         level: raw.level,
         order_level: raw.order_level,
+        trustworthiness: raw.trustworthiness.clamp(0.0, 1.0),
+        affinity: raw.affinity.clamp(0.0, 1.0),
+        pay_satisfaction: raw.pay_satisfaction.clamp(0.0, 1.0),
+        noise: raw.noise,
+        betrayal_opportunity: raw.betrayal_opportunity == 1,
     })
 }
 
@@ -159,6 +189,44 @@ fn action_code(action: NpcAction) -> i32 {
         NpcAction::Follow => 5,
         NpcAction::Hold => 6,
         NpcAction::RefuseOrder => 7,
+        NpcAction::Mission => 8,
+        NpcAction::Betray => 9,
+    }
+}
+
+fn outcome_code(outcome: MissionOutcome) -> i32 {
+    match outcome {
+        MissionOutcome::Success => 0,
+        MissionOutcome::Failed => 1,
+        MissionOutcome::Caught => 2,
+        MissionOutcome::Killed => 3,
+    }
+}
+
+/// How a mission that happens off screen ends. `order` is 4 for a delivery or 5 for a raid, the levels
+/// are the companion's and the mission's, and `noise` is a random number from the host. Returns 0 for
+/// success, 1 failed, 2 caught, 3 killed, or [`STATUS_INVALID`] for an order that is not a mission or a
+/// level above 65535.
+#[unsafe(no_mangle)]
+pub extern "C" fn gtg_npc_resolve_mission(
+    order: u32,
+    companion_level: u32,
+    mission_level: u32,
+    noise: u32,
+) -> i32 {
+    let order = match order {
+        4 => NpcOrder::Deliver,
+        5 => NpcOrder::Raid,
+        _ => return STATUS_INVALID,
+    };
+    let (Ok(companion), Ok(mission)) =
+        (u16::try_from(companion_level), u16::try_from(mission_level))
+    else {
+        return STATUS_INVALID;
+    };
+    match gtg_npc_behavior::resolve_mission(order, companion, mission, noise) {
+        Some(outcome) => outcome_code(outcome),
+        None => STATUS_INVALID,
     }
 }
 
@@ -309,9 +377,22 @@ mod tests {
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_byte), 35);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, level), 36);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, order_level), 38);
-        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_tail), 40);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, trustworthiness), 40);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, affinity), 44);
+        assert_eq!(
+            std::mem::offset_of!(NpcObservationAbi, pay_satisfaction),
+            48
+        );
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, noise), 52);
+        assert_eq!(
+            std::mem::offset_of!(NpcObservationAbi, betrayal_opportunity),
+            56
+        );
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_a), 57);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_b), 58);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_c), 60);
         assert_eq!(std::mem::offset_of!(NpcDecisionAbi, action), 8);
-        assert_eq!(gtg_npc_abi_version(), 3);
+        assert_eq!(gtg_npc_abi_version(), 4);
         assert_eq!(gtg_npc_observation_size(), 64);
         assert_eq!(gtg_npc_decision_size(), 16);
     }
@@ -366,10 +447,12 @@ mod tests {
         o.reserved_byte = 1;
         assert_eq!(call(&[o], &mut out), STATUS_INVALID);
         o.reserved_byte = 0;
-        for slot in 0..3 {
-            let mut t = o;
-            t.reserved_tail[slot] = 1;
-            assert_eq!(call(&[t], &mut out), STATUS_INVALID, "tail slot {slot}");
+        for (name, bad) in [
+            ("reserved_a", NpcObservationAbi { reserved_a: 1, ..o }),
+            ("reserved_b", NpcObservationAbi { reserved_b: 1, ..o }),
+            ("reserved_c", NpcObservationAbi { reserved_c: 1, ..o }),
+        ] {
+            assert_eq!(call(&[bad], &mut out), STATUS_INVALID, "{name}");
         }
         assert_eq!(call(&[o], &mut out), STATUS_OK);
     }
@@ -393,7 +476,35 @@ mod tests {
                     ..raw(3)
                 },
             ),
-            ("order", NpcObservationAbi { order: 4, ..raw(5) }),
+            ("order", NpcObservationAbi { order: 6, ..raw(5) }),
+            (
+                "betrayal_opportunity",
+                NpcObservationAbi {
+                    betrayal_opportunity: 2,
+                    ..raw(5)
+                },
+            ),
+            (
+                "trustworthiness nan",
+                NpcObservationAbi {
+                    trustworthiness: f32::NAN,
+                    ..raw(5)
+                },
+            ),
+            (
+                "affinity infinite",
+                NpcObservationAbi {
+                    affinity: f32::INFINITY,
+                    ..raw(5)
+                },
+            ),
+            (
+                "pay nan",
+                NpcObservationAbi {
+                    pay_satisfaction: f32::NAN,
+                    ..raw(5)
+                },
+            ),
             (
                 "provoked",
                 NpcObservationAbi {
@@ -437,7 +548,7 @@ mod tests {
             };
             assert_eq!(call(&[o], &mut out), STATUS_OK, "disposition {disposition}");
         }
-        for order in 0..=3 {
+        for order in 0..=5 {
             assert_eq!(
                 call(&[companion(order, 1, 0)], &mut out),
                 STATUS_OK,
@@ -487,25 +598,29 @@ mod tests {
         attack.threat_visible = 1;
         assert_eq!(one(attack), 3, "attack order engages");
         assert_eq!(
-            one(companion(3, 10, 15)),
+            one(companion(3, 10, 13)),
             5,
-            "an order exactly at the gap is accepted"
+            "an attack order exactly at its gap of 3 is accepted"
         );
         assert_eq!(
-            one(companion(3, 10, 16)),
+            one(companion(3, 10, 14)),
             7,
-            "an order above the gap is refused"
+            "an attack order above its gap is refused"
         );
     }
 
     #[test]
     fn every_action_code_can_be_produced() {
-        let mut seen = [false; 8];
+        let mut seen = [false; 10];
         let mut hurt_attacker = raw(3);
         hurt_attacker.threat_visible = 1;
         hurt_attacker.health_fraction = 0.1;
         let mut attacker = raw(3);
         attacker.threat_visible = 1;
+        let betrayer = NpcObservationAbi {
+            betrayal_opportunity: 1,
+            ..companion(0, 5, 0)
+        };
         for o in [
             raw(3),
             raw(0),
@@ -518,10 +633,12 @@ mod tests {
             companion(1, 5, 0),
             companion(2, 5, 0),
             companion(3, 5, 99),
+            companion(4, 5, 5),
+            betrayer,
         ] {
             seen[one(o) as usize] = true;
         }
-        assert_eq!(seen, [true; 8]);
+        assert_eq!(seen, [true; 10]);
     }
 
     #[test]
@@ -591,5 +708,166 @@ mod tests {
         assert_eq!(gtg_npc_decide_stub(0, 0, 1.0, 0), 1);
         assert_eq!(gtg_npc_decide_stub(99, 0, 1.0, 1), STATUS_INVALID);
         assert_eq!(gtg_npc_decide_stub(3, 0, f32::NAN, 1), STATUS_INVALID);
+    }
+
+    fn loyal(order: u8, level: u16, order_level: u16) -> NpcObservationAbi {
+        NpcObservationAbi {
+            trustworthiness: 1.0,
+            affinity: 1.0,
+            pay_satisfaction: 1.0,
+            ..companion(order, level, order_level)
+        }
+    }
+
+    #[test]
+    fn the_refusal_gap_depends_on_the_order_type() {
+        // Level 10: a delivery accepts up to 16, an attack up to 13, a raid up to 11.
+        assert_eq!(
+            one(loyal(4, 10, 16)),
+            8,
+            "delivery at its gap is accepted and carried out"
+        );
+        assert_eq!(
+            one(loyal(4, 10, 17)),
+            7,
+            "delivery above its gap is refused"
+        );
+        assert_eq!(
+            one(loyal(3, 10, 13)),
+            5,
+            "an attack order at its gap is accepted"
+        );
+        assert_eq!(one(loyal(3, 10, 14)), 7, "above its gap is refused");
+        assert_eq!(one(loyal(5, 10, 11)), 8, "a raid at its gap is accepted");
+        assert_eq!(one(loyal(5, 10, 12)), 7, "above its gap is refused");
+        assert_eq!(
+            one(loyal(5, 10, 14)),
+            7,
+            "the same difference of 4 refuses a raid"
+        );
+        assert_eq!(one(loyal(4, 10, 14)), 8, "and not a delivery");
+    }
+
+    #[test]
+    fn betrayal_inputs_reach_the_decision() {
+        let mut o = NpcObservationAbi {
+            betrayal_opportunity: 1,
+            ..companion(0, 5, 0)
+        };
+        assert_eq!(one(o), 9, "no loyalty, a good roll, an opportunity");
+        o.noise = u32::MAX;
+        assert_ne!(one(o), 9, "a bad roll");
+        o.noise = 0;
+        o.betrayal_opportunity = 0;
+        assert_ne!(one(o), 9, "no opportunity");
+        o.betrayal_opportunity = 1;
+        o.trustworthiness = 1.0;
+        o.affinity = 1.0;
+        o.pay_satisfaction = 1.0;
+        assert_ne!(one(o), 9, "a loyal companion");
+        o.trustworthiness = 0.5;
+        o.affinity = 0.5;
+        o.pay_satisfaction = 0.5;
+        assert_ne!(one(o), 9, "loyalty exactly at the ceiling");
+        o.affinity = 0.0;
+        assert_eq!(
+            one(o),
+            9,
+            "liking the player less lowers loyalty below the ceiling"
+        );
+    }
+
+    #[test]
+    fn out_of_range_betrayal_numbers_are_clamped_not_rejected() {
+        let mut o = NpcObservationAbi {
+            betrayal_opportunity: 1,
+            trustworthiness: 7.0,
+            affinity: 7.0,
+            pay_satisfaction: 7.0,
+            ..companion(0, 5, 0)
+        };
+        assert_ne!(one(o), 9, "too large counts as 1");
+        o.trustworthiness = -7.0;
+        o.affinity = -7.0;
+        o.pay_satisfaction = -7.0;
+        assert_eq!(one(o), 9, "too small counts as 0");
+    }
+
+    #[test]
+    fn version_three_callers_never_betray() {
+        // The fields of version 3 only. Everything added in version 4 is zero.
+        let o = NpcObservationAbi {
+            role: 5,
+            backend: 1,
+            health_fraction: 1.0,
+            can_move: 1,
+            level: 10,
+            ..Default::default()
+        };
+        assert_eq!(
+            one(o),
+            5,
+            "a companion with no order follows, and never betrays"
+        );
+    }
+
+    #[test]
+    fn the_mission_export_matches_the_rules() {
+        assert_eq!(
+            gtg_npc_resolve_mission(5, 10, 10, 0),
+            0,
+            "raid, lowest roll"
+        );
+        assert_eq!(
+            gtg_npc_resolve_mission(5, 10, 10, u32::MAX),
+            3,
+            "raid, highest roll"
+        );
+        assert_eq!(
+            gtg_npc_resolve_mission(4, 10, 10, 0),
+            0,
+            "delivery, lowest roll"
+        );
+        assert_eq!(
+            gtg_npc_resolve_mission(4, 10, 10, u32::MAX),
+            3,
+            "delivery, highest roll"
+        );
+        for noise in [0u32, 1, 0x8000_0000, 0xDEAD_BEEF, u32::MAX] {
+            for (order, kind) in [(4u32, NpcOrder::Deliver), (5u32, NpcOrder::Raid)] {
+                let expected = gtg_npc_behavior::resolve_mission(kind, 9, 14, noise).unwrap();
+                assert_eq!(
+                    gtg_npc_resolve_mission(order, 9, 14, noise),
+                    outcome_code(expected)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_mission_export_rejects_bad_input() {
+        for order in [0u32, 1, 2, 3, 6, 99] {
+            assert_eq!(
+                gtg_npc_resolve_mission(order, 10, 10, 0),
+                STATUS_INVALID,
+                "order {order}"
+            );
+        }
+        assert_eq!(gtg_npc_resolve_mission(5, 65536, 10, 0), STATUS_INVALID);
+        assert_eq!(gtg_npc_resolve_mission(5, 10, 65536, 0), STATUS_INVALID);
+        assert_eq!(gtg_npc_resolve_mission(5, u32::MAX, 10, 0), STATUS_INVALID);
+        assert_eq!(
+            gtg_npc_resolve_mission(5, 65535, 65535, 0),
+            0,
+            "the largest levels are fine"
+        );
+    }
+
+    #[test]
+    fn mission_outcome_codes_are_distinct_and_stable() {
+        assert_eq!(outcome_code(MissionOutcome::Success), 0);
+        assert_eq!(outcome_code(MissionOutcome::Failed), 1);
+        assert_eq!(outcome_code(MissionOutcome::Caught), 2);
+        assert_eq!(outcome_code(MissionOutcome::Killed), 3);
     }
 }

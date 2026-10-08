@@ -707,7 +707,7 @@ internal static class Tests
         GameObject g = new GameObject("g"); g.AddComponent<ManagedHealth>();
         ManagedNpcBrain b = g.AddComponent<ManagedNpcBrain>();
         NPCNativeObservation o = b.BuildObservation();
-        Check(o.Disposition == 0 && o.Order == 0 && o.Provoked == 0 && o.Level == 1 && o.OrderLevel == 0 && o.ReservedByte == 0 && o.ReservedTail0 == 0 && o.ReservedTail1 == 0 && o.ReservedTail2 == 0, "defaults are hostile, no order, not provoked, level 1");
+        Check(o.Disposition == 0 && o.Order == 0 && o.Provoked == 0 && o.Level == 1 && o.OrderLevel == 0 && o.ReservedByte == 0 && o.ReservedA == 0 && o.ReservedB == 0 && o.ReservedC == 0, "defaults are hostile, no order, not provoked, level 1");
         b.Disposition = NpcDisposition.Peaceful; b.Level = 7; b.SetOrder(NpcOrder.Attack, 9);
         o = b.BuildObservation();
         Check(o.Disposition == 2 && o.Level == 7 && o.Order == 3 && o.OrderLevel == 9, "the settings reach the observation");
@@ -837,12 +837,12 @@ internal static class Tests
         Fighter r = Companion("r", Vector3.zero, p2.transform, 10);
         List<string> refused = new List<string>();
         r.Brain.OrderRefused += (b, o, lvl) => refused.Add(o + ":" + lvl + ":" + b.Order);
-        r.Brain.SetOrder(NpcOrder.Attack, 15);
+        r.Brain.SetOrder(NpcOrder.Attack, 13);
         Advance(0.4f);
-        Check(refused.Count == 0 && r.Brain.Order == NpcOrder.Attack && r.Brain.Action != NpcAction.RefuseOrder, "an order exactly 5 above the level is accepted");
-        r.Brain.SetOrder(NpcOrder.Attack, 16);
+        Check(refused.Count == 0 && r.Brain.Order == NpcOrder.Attack && r.Brain.Action != NpcAction.RefuseOrder, "an attack order exactly 3 above the level is accepted");
+        r.Brain.SetOrder(NpcOrder.Attack, 14);
         Advance(0.2f);
-        Check(refused.Count == 1 && refused[0] == "Attack:16:None", "an order 6 above the level is refused, and the order is already cleared: " + string.Join(",", refused));
+        Check(refused.Count == 1 && refused[0] == "Attack:14:None", "an attack order 4 above the level is refused, and the order is already cleared: " + string.Join(",", refused));
         Check(r.Brain.Order == NpcOrder.None && r.Brain.OrderLevel == 0, "the refused order is gone");
         Advance(0.3f);
         Check(r.Brain.Action == NpcAction.Follow, "after the refusal it follows, got " + r.Brain.Action);
@@ -907,12 +907,12 @@ internal static class Tests
         Check(ManagedNpcDebugView.Describe(peaceful.Brain).Contains("provoked"), "provoked is shown");
 
         HashSet<string> colors = new HashSet<string>();
-        foreach (NpcAction a in new[] { NpcAction.Idle, NpcAction.Trade, NpcAction.Patrol, NpcAction.Attack, NpcAction.Retreat, NpcAction.Follow, NpcAction.Hold, NpcAction.RefuseOrder })
+        foreach (NpcAction a in new[] { NpcAction.Idle, NpcAction.Trade, NpcAction.Patrol, NpcAction.Attack, NpcAction.Retreat, NpcAction.Follow, NpcAction.Hold, NpcAction.RefuseOrder, NpcAction.Mission, NpcAction.Betray })
         { Color col = ManagedNpcDebugView.ColorFor(a); colors.Add(col.r + "," + col.g + "," + col.b); }
-        Check(colors.Count == 8, "all eight actions have their own color, got " + colors.Count);
+        Check(colors.Count == 10, "all ten actions have their own color, got " + colors.Count);
 
         ManagedNpcDrawOptions o = new ManagedNpcDrawOptions();
-        foreach (NpcAction a in new[] { NpcAction.Follow, NpcAction.Hold, NpcAction.RefuseOrder })
+        foreach (NpcAction a in new[] { NpcAction.Follow, NpcAction.Hold, NpcAction.RefuseOrder, NpcAction.Mission, NpcAction.Betray })
         {
             o.Filter = (ManagedNpcActionFilter)System.Enum.Parse(typeof(ManagedNpcActionFilter), a.ToString());
             Check((int)a == (int)o.Filter - 1, "filter " + a + " lines up with the action");
@@ -928,12 +928,175 @@ internal static class Tests
         Check(Count("Dotted") >= 1 && Count("WireDisc:3.00") == 1, "a follower shows a line to its leader and the follow distance around the leader");
     }
 
+
+    // ---------- observation version 4: order types, betrayal, missions ----------
+
+    static void ObservationV4()
+    {
+        ResetWorld();
+        GameObject g = new GameObject("c"); g.AddComponent<ManagedHealth>();
+        ManagedNpcBrain b = g.AddComponent<ManagedNpcBrain>();
+        Set(b, "_role", NpcRole.Companion);
+        NPCNativeObservation o = b.BuildObservation();
+        Check(o.Trustworthiness == 0.5f && o.Affinity == 0.5f && o.PaySatisfaction == 0.5f && o.BetrayalOpportunity == 0 && o.Noise != 0, "a companion sends neutral loyalty numbers, no opportunity, and a random number");
+        b.Trustworthiness = 7f; b.Affinity = -2f; b.PaySatisfaction = 0.25f; b.BetrayalOpportunity = true;
+        o = b.BuildObservation();
+        Check(o.Trustworthiness == 1f && o.Affinity == 0f && o.PaySatisfaction == 0.25f && o.BetrayalOpportunity == 1, "the numbers are clamped to 0..1 and the opportunity reaches the observation");
+        Check(System.Math.Abs(b.Loyalty - (0.4f * 1f + 0.3f * 0f + 0.3f * 0.25f)) < 1e-5f, "loyalty is the weighted mix");
+        HashSet<uint> seen = new HashSet<uint>();
+        for (int i = 0; i < 50; i++) seen.Add(b.BuildObservation().Noise);
+        Check(seen.Count == 50 && !seen.Contains(0u), "the random number changes every decision and is never zero");
+
+        ResetWorld();
+        ManagedNpcBrain a1 = Npc("a", NpcRole.Companion, DecisionBackend.Utility, true, Vector3.zero);
+        ResetWorld();
+        ManagedNpcBrain a2 = Npc("a", NpcRole.Companion, DecisionBackend.Utility, true, Vector3.zero);
+        Check(a1.BuildObservation().Noise == a2.BuildObservation().Noise, "the same id gives the same sequence, so a run is reproducible");
+
+        ResetWorld();
+        ManagedNpcBrain enemy = Npc("e", NpcRole.Enemy, DecisionBackend.Utility, true, Vector3.zero);
+        enemy.Trustworthiness = 0.9f; enemy.BetrayalOpportunity = true;
+        o = enemy.BuildObservation();
+        Check(o.Trustworthiness == 0f && o.Affinity == 0f && o.PaySatisfaction == 0f && o.Noise == 0 && o.BetrayalOpportunity == 0, "other roles send zeros for every companion input");
+    }
+
+    static void Betrayal()
+    {
+        ResetWorld();
+        GameObject player = Player(12f, true);
+        Fighter c = Companion("traitor", Vector3.zero, player.transform, 10);
+        c.Brain.Trustworthiness = 0f; c.Brain.Affinity = 0f; c.Brain.PaySatisfaction = 0f;
+        int betrayed = 0; c.Brain.Betrayed += b => betrayed++;
+        Advance(0.5f);
+        Check(c.Brain.Action == NpcAction.Follow && betrayed == 0, "no opportunity, no betrayal, however disloyal");
+        c.Brain.BetrayalOpportunity = true;
+        bool done = false;
+        for (int i = 0; i < 400 && !done; i++) { Advance(0.1f); done = betrayed > 0; }
+        Check(betrayed == 1, "a disloyal companion with an opportunity betrays within a few decisions, " + betrayed);
+        Check(!c.Brain.BetrayalOpportunity, "the opportunity is used up");
+        Check(c.Brain.Action == NpcAction.Betray && c.Actor.Mode == NpcAction.Betray && c.Agent.isStopped, "it stops and the game takes over");
+        Advance(1f);
+        Check(betrayed == 1 && c.Brain.Action == NpcAction.Follow, "one opportunity, one betrayal, then it follows again, " + betrayed);
+
+        ResetWorld();
+        GameObject p2 = Player(12f, true);
+        Fighter loyal = Companion("loyal", Vector3.zero, p2.transform, 10);
+        loyal.Brain.Trustworthiness = 1f; loyal.Brain.Affinity = 1f; loyal.Brain.PaySatisfaction = 1f; loyal.Brain.BetrayalOpportunity = true;
+        int never = 0; loyal.Brain.Betrayed += b => never++;
+        Advance(40f);
+        Check(never == 0 && loyal.Brain.BetrayalOpportunity, "a loyal companion never betrays, and keeps the opportunity");
+        Check(System.Math.Abs(loyal.Brain.Loyalty - 1f) < 1e-5f, "full loyalty is 1");
+
+        ResetWorld();
+        GameObject p3 = Player(12f, true);
+        Fighter enemy = Goblin(Vector3.zero);
+        enemy.Brain.BetrayalOpportunity = true; enemy.Brain.Trustworthiness = 0f;
+        int e = 0; enemy.Brain.Betrayed += b => e++;
+        Advance(20f);
+        Check(e == 0, "only companions betray");
+
+        // Betrayal beats a refusal and an order.
+        ResetWorld();
+        GameObject p4 = Player(12f, true);
+        Fighter busy = Companion("busy", Vector3.zero, p4.transform, 1);
+        busy.Brain.Trustworthiness = 0f; busy.Brain.Affinity = 0f; busy.Brain.PaySatisfaction = 0f;
+        int refusals = 0, betrayals = 0;
+        busy.Brain.OrderRefused += (b, o, l) => refusals++; busy.Brain.Betrayed += b => betrayals++;
+        busy.Brain.BetrayalOpportunity = true;
+        busy.Brain.SetOrder(NpcOrder.Raid, 90);
+        for (int i = 0; i < 400 && betrayals == 0 && refusals == 0; i++) Advance(0.1f);
+        Check(betrayals + refusals >= 1, "something happened");
+        Check(betrayals == 1 || refusals == 1, "either the roll came first or the refusal did");
+    }
+
+    static void OrderTypes()
+    {
+        ResetWorld();
+        GameObject player = Player(12f, true);
+        Fighter c = Companion("c", Vector3.zero, player.transform, 10);
+        c.Brain.Trustworthiness = 1f; c.Brain.Affinity = 1f; c.Brain.PaySatisfaction = 1f;
+        List<string> refused = new List<string>();
+        c.Brain.OrderRefused += (b, o, lvl) => refused.Add(o + ":" + lvl);
+
+        c.Brain.SetOrder(NpcOrder.Deliver, 16);
+        Advance(0.4f);
+        Check(refused.Count == 0 && c.Brain.Action == NpcAction.Mission && c.Actor.Mode == NpcAction.Mission, "a delivery 6 levels above is accepted and becomes a mission, got " + c.Brain.Action);
+        Check(c.Agent.isStopped, "the actor stands still while game code runs the mission");
+        c.Brain.SetOrder(NpcOrder.Raid, 12);
+        Advance(0.4f);
+        Check(refused.Count == 1 && refused[0] == "Raid:12", "a raid 2 levels above is refused: " + string.Join(",", refused));
+        c.Brain.SetOrder(NpcOrder.Raid, 11);
+        Advance(0.4f);
+        Check(refused.Count == 1 && c.Brain.Action == NpcAction.Mission, "a raid 1 level above is accepted");
+        c.Brain.SetOrder(NpcOrder.Deliver, 17);
+        Advance(0.4f);
+        Check(refused.Count == 2 && refused[1] == "Deliver:17", "a delivery 7 levels above is refused");
+    }
+
+    static void Missions()
+    {
+        ResetWorld();
+        NpcMissionOutcome outcome;
+        Check(!ManagedMissionResolver.TryResolve(NpcOrder.Attack, 10, 10, 0, out outcome), "an attack order is not a mission");
+        Check(!ManagedMissionResolver.TryResolve(NpcOrder.None, 10, 10, 0, out outcome), "no order is not a mission");
+        Check(!ManagedMissionResolver.TryResolve(NpcOrder.Raid, -1, 10, 0, out outcome) && !ManagedMissionResolver.TryResolve(NpcOrder.Raid, 10, -1, 0, out outcome), "negative levels are rejected");
+        Check(!ManagedMissionResolver.TryResolve(NpcOrder.Raid, 65536, 10, 0, out outcome) && !ManagedMissionResolver.TryResolve(NpcOrder.Raid, 10, 65536, 0, out outcome), "levels above 65535 are rejected");
+        Check(ManagedMissionResolver.TryResolve(NpcOrder.Raid, 10, 10, 0, out outcome) && outcome == NpcMissionOutcome.Success, "the lowest roll succeeds");
+        Check(ManagedMissionResolver.TryResolve(NpcOrder.Raid, 10, 10, uint.MaxValue, out outcome) && outcome == NpcMissionOutcome.Killed, "the highest roll on a raid kills");
+        Check(ManagedMissionResolver.TryResolve(NpcOrder.Deliver, 10, 10, uint.MaxValue, out outcome) && outcome == NpcMissionOutcome.Killed, "and on a delivery too");
+
+        // Statistics: a stronger companion does better, a raid is deadlier than a delivery.
+        long[] raidWeak = new long[4], raidStrong = new long[4], delivery = new long[4], raid = new long[4];
+        for (uint i = 0; i < 4096; i++)
+        {
+            uint noise = (i << 20) | (i & 0xFFu);
+            ManagedMissionResolver.TryResolve(NpcOrder.Raid, 5, 20, noise, out outcome); raidWeak[(int)outcome]++;
+            ManagedMissionResolver.TryResolve(NpcOrder.Raid, 35, 20, noise, out outcome); raidStrong[(int)outcome]++;
+            ManagedMissionResolver.TryResolve(NpcOrder.Raid, 20, 20, noise, out outcome); raid[(int)outcome]++;
+            ManagedMissionResolver.TryResolve(NpcOrder.Deliver, 20, 20, noise, out outcome); delivery[(int)outcome]++;
+        }
+        Check(raidWeak[0] < raid[0] && raid[0] < raidStrong[0], "success rises with the companion's level: " + raidWeak[0] + " " + raid[0] + " " + raidStrong[0]);
+        Check(delivery[0] > raid[0], "a delivery is safer than a raid");
+        Check(raid[3] > delivery[3], "and a raid kills more often");
+
+        // A brain resolves with its own level and its own random numbers.
+        ResetWorld();
+        ManagedNpcBrain veteran = Npc("v", NpcRole.Companion, DecisionBackend.Utility, true, Vector3.zero);
+        veteran.Level = 60;
+        ManagedNpcBrain rookie = Npc("r", NpcRole.Companion, DecisionBackend.Utility, true, Vector3.zero);
+        rookie.Level = 1;
+        int veteranWins = 0, rookieWins = 0;
+        for (int i = 0; i < 400; i++)
+        {
+            NpcMissionOutcome a, b;
+            Check(veteran.TryResolveMission(NpcOrder.Raid, 30, out a) && rookie.TryResolveMission(NpcOrder.Raid, 30, out b), "a brain resolves a raid");
+            if (veteran.TryResolveMission(NpcOrder.Raid, 30, out a) && a == NpcMissionOutcome.Success) veteranWins++;
+            if (rookie.TryResolveMission(NpcOrder.Raid, 30, out b) && b == NpcMissionOutcome.Success) rookieWins++;
+        }
+        Check(veteranWins > rookieWins + 100, "a level 60 companion wins far more often than a level 1 one: " + veteranWins + " vs " + rookieWins);
+        NpcMissionOutcome none;
+        Check(!veteran.TryResolveMission(NpcOrder.Follow, 10, out none), "a brain cannot resolve an order that is not a mission");
+    }
+
+    static void DebugViewV4()
+    {
+        ResetWorld();
+        GameObject player = Player(12f, true);
+        Fighter c = Companion("comp", Vector3.zero, player.transform, 10);
+        c.Brain.Trustworthiness = 1f; c.Brain.Affinity = 1f; c.Brain.PaySatisfaction = 1f;
+        Advance(0.3f);
+        Check(ManagedNpcDebugView.Describe(c.Brain).Contains("loyalty 1.00") && !ManagedNpcDebugView.Describe(c.Brain).Contains("betrayal possible"), "a companion line shows its loyalty");
+        c.Brain.BetrayalOpportunity = true;
+        Check(ManagedNpcDebugView.Describe(c.Brain).Contains("betrayal possible"), "and whether it could betray");
+    }
+
     internal static int Run(string expectPath)
     {
         MathTests(); HealthRules(); Basic(); CheapRejects(); Budget(); DeadAndSelf(); DirectorRules();
         ThreatMemory(); ActorPatrol(); ActorAttack(); ActorLostTarget(); ActorRetreat(); ActorIdleTrade(); ActorNavMeshAndDeath(); SpellDamage();
         DebugView(); DebugFilter(); DebugRoute(); DebugDraw(); DebugWindow();
         ObservationV3(); Provocation(); CompanionFollow(); CompanionOrders(); DebugViewV3();
+        ObservationV4(); Betrayal(); OrderTypes(); Missions(); DebugViewV4();
         Console.WriteLine("decision path in director batches: " + (sawNative && sawFallback ? "mixed" : sawNative ? "native" : sawFallback ? "managed fallback" : "none"));
         if (expectPath == "native") Check(sawNative && !sawFallback, "every batch used the native library");
         else if (expectPath == "fallback") Check(sawFallback && !sawNative, "every batch used the managed fallback");

@@ -1,6 +1,6 @@
 # gtg-npc-core
 
-The shared types of the NPC decision: what an NPC is, what it can be told, what it can do. No logic and no dependencies. The C layout of these types is in `gtg-npc-ffi`, and the rules that use them are in `gtg-npc-behavior`. The full contract is in `npc/observation-v3.md`.
+The shared types of the NPC decision: what an NPC is, what it can be told, what it can do. No logic and no dependencies. The C layout of these types is in `gtg-npc-ffi`, and the rules that use them are in `gtg-npc-behavior`. The full contract is in `npc/observation.md`.
 
 Version 0.0.1. Part of the workspace in `rust/Cargo.toml`, which sets the shared lints.
 
@@ -8,7 +8,7 @@ Version 0.0.1. Part of the workspace in `rust/Cargo.toml`, which sets the shared
 
 ### `lib.rs`
 
-**What it does:** Defines `NpcRole` (merchant, civilian, guard, enemy, boss, companion), `DecisionBackend`, `NpcDisposition` (hostile, retaliatory, peaceful), `NpcOrder` (none, follow, hold, attack), `NpcAction` (idle, trade, patrol, attack, retreat, follow, hold, refuse order), and the `Observation` and `Decision` structs.
+**What it does:** Defines `NpcRole` (merchant, civilian, guard, enemy, boss, companion), `DecisionBackend`, `NpcDisposition` (hostile, retaliatory, peaceful), `NpcOrder` (none, follow, hold, attack, deliver, raid), `NpcAction` (idle, trade, patrol, attack, retreat, follow, hold, refuse order, mission, betray), `MissionOutcome` (success, failed, caught, killed), and the `Observation` and `Decision` structs.
 
 **Decisions:**
 - The enums are plain Rust enums. Their numbers are decided in `gtg-npc-ffi`, not here, so the Rust types can be reordered without touching the ABI. `scripts/check_npc_enum_sync.py` compares the numbers with C# and MDIX.
@@ -18,5 +18,5 @@ Version 0.0.1. Part of the workspace in `rust/Cargo.toml`, which sets the shared
 
 ## Fixes and Problems
 
-- Version 3 added the companion role, disposition, order, provoked, level and order level. See `npc/observation-v3.md`.
+- Version 3 added the companion role, disposition, order, provoked, level and order level. Version 4 added the order types deliver and raid, the actions mission and betray, the mission outcomes, and the betrayal inputs (trustworthiness, affinity, pay satisfaction, noise, betrayal opportunity). See `npc/observation.md`.
 - Not tested here: the crate has no logic, so it has no tests of its own. Its types are exercised by the tests of the two crates that use them.

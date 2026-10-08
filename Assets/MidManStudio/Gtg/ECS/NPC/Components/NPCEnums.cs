@@ -1,6 +1,6 @@
 namespace MidManStudio.Gtg.NPC.Components
 {
-    // Values are the Rust ABI v3 values (rust/npc/crates/npc-ffi/src/lib.rs) and the numbers in
+    // Values are the Rust ABI v4 values (rust/npc/crates/npc-ffi/src/lib.rs) and the numbers in
     // Assets/NPC/Archetypes/archetypes.mdix. Do not renumber without bumping the ABI version.
     // scripts/check_npc_enum_sync.py fails CI if the three sources drift apart.
     // Serialized as integers by Unity, so switching a field from int to one of these enums keeps
@@ -40,13 +40,16 @@ namespace MidManStudio.Gtg.NPC.Components
         Peaceful = 2
     }
 
-    // A standing order for a companion. Other roles ignore it.
+    // A standing order for a companion. Other roles ignore it. The type decides how far above its own level
+    // a companion still accepts the order.
     public enum NpcOrder : byte
     {
         None = 0,
         Follow = 1,
         Hold = 2,
-        Attack = 3
+        Attack = 3,
+        Deliver = 4,
+        Raid = 5
     }
 
     // Matches npc-ffi action_code(). The native decision struct keeps a raw int on purpose.
@@ -59,6 +62,17 @@ namespace MidManStudio.Gtg.NPC.Components
         Retreat = 4,
         Follow = 5,
         Hold = 6,
-        RefuseOrder = 7
+        RefuseOrder = 7,
+        Mission = 8,
+        Betray = 9
+    }
+
+    // How an off-screen mission ended. Matches gtg_npc_resolve_mission.
+    public enum NpcMissionOutcome
+    {
+        Success = 0,
+        Failed = 1,
+        Caught = 2,
+        Killed = 3
     }
 }

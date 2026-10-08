@@ -14,7 +14,8 @@ namespace MidManStudio.Gtg.Managed.NPC
     /// <summary>
     /// Carries out the action the Rust decision chose. Patrol walks waypoints or wanders, Attack
     /// chases the threat and hits it in melee, Retreat runs away from it, Follow walks to the brain's
-    /// Leader and stays near, and Idle, Trade, Hold and RefuseOrder stand still.
+    /// Leader and stays near, and Idle, Trade, Hold, RefuseOrder, Mission and Betray stand still. A mission and a
+    /// betrayal are carried out by game code that listens to the brain.
     /// It moves the NPC with a NavMeshAgent, so the scene needs a baked NavMesh. It listens to the
     /// brain and never decides anything itself.
     /// </summary>
@@ -204,7 +205,7 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         private void Update()
         {
-            if (_dead || _mode == NpcAction.Idle || _mode == NpcAction.Trade || _mode == NpcAction.Hold || _mode == NpcAction.RefuseOrder)
+            if (_dead || _mode == NpcAction.Idle || _mode == NpcAction.Trade || _mode == NpcAction.Hold || _mode == NpcAction.RefuseOrder || _mode == NpcAction.Mission || _mode == NpcAction.Betray)
             {
                 if (!_stopped && AgentReady())
                 {

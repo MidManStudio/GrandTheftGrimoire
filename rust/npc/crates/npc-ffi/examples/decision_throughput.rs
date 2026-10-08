@@ -13,7 +13,8 @@
 //! - `mixed`: a deterministic town-like population (12% merchants, 38% civilians, 12% guards,
 //!   20% enemies, 8% bosses, 10% companions; ~25% see a threat; random health; ~10% of
 //!   non-merchants immobile; combatants split 60/25/15 between hostile, retaliatory and peaceful;
-//!   20% provoked; levels 1 to 30; companions get a random order and order level).
+//!   20% provoked; levels 1 to 30; companions get a random order of any of the six types, an order
+//!   level, trust, liking, pay satisfaction, a random number and a 30% betrayal opportunity).
 //!   The batch window slides across a 16384-NPC pool every call, so successive calls see
 //!   different data and the branch predictor cannot memorize one batch.
 //!
@@ -31,7 +32,8 @@ use std::time::Instant;
 const POOL: usize = 16384;
 const SEED: u64 = 0x4754_4700;
 const SEED2: u64 = 0x4754_4701;
-const ACTIONS: usize = 8;
+const SEED3: u64 = 0x4754_4702;
+const ACTIONS: usize = 10;
 const COUNTS: [usize; 4] = [10, 100, 500, 1000];
 const WINDOW_STEP: usize = 977;
 const REPS: usize = 9;
@@ -63,6 +65,7 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
         .map(|i| {
             let r = mix(SEED + i as u64);
             let r2 = mix(SEED2 + i as u64);
+            let r3 = mix(SEED3 + i as u64);
             let pct = r % 100;
             let role: u32 = if pct < 12 {
                 0
@@ -108,12 +111,29 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
                 disposition,
                 provoked: u8::from((r2 >> 8) % 100 < 20),
                 level: 1 + ((r2 >> 16) % 30) as u16,
-                order: if role == 5 { ((r2 >> 24) % 4) as u8 } else { 0 },
+                order: if role == 5 { ((r2 >> 24) % 6) as u8 } else { 0 },
                 order_level: if role == 5 {
                     ((r2 >> 32) % 40) as u16
                 } else {
                     0
                 },
+                trustworthiness: if role == 5 {
+                    (r3 % 1001) as f32 / 1000.0
+                } else {
+                    0.0
+                },
+                affinity: if role == 5 {
+                    ((r3 >> 12) % 1001) as f32 / 1000.0
+                } else {
+                    0.0
+                },
+                pay_satisfaction: if role == 5 {
+                    ((r3 >> 24) % 1001) as f32 / 1000.0
+                } else {
+                    0.0
+                },
+                noise: if role == 5 { (r3 >> 32) as u32 } else { 0 },
+                betrayal_opportunity: u8::from(role == 5 && (r2 >> 40) % 100 < 30),
                 ..Default::default()
             }
         })
@@ -203,7 +223,7 @@ fn main() {
         bench("mixed", &mixed, count, WINDOW_STEP);
     }
     println!(
-        "# mixed_actions idle={} trade={} patrol={} attack={} retreat={} follow={} hold={} refuse={} fnv1a=0x{hash:016x}",
-        hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7]
+        "# mixed_actions idle={} trade={} patrol={} attack={} retreat={} follow={} hold={} refuse={} mission={} betray={} fnv1a=0x{hash:016x}",
+        hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8], hist[9]
     );
 }

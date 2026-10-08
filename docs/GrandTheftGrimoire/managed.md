@@ -70,7 +70,7 @@ missing script. Delete it, or switch the define back.
 5. The first brain creates a `GTG NPC Director` object. Add a `ManagedNpcDirector` to the scene yourself to change the tick rate or batch limits, or to turn the overlay on.
 6. Select an NPC in the Scene view to see its view cone and eye. The cone is yellow while idle and red while it sees a threat.
 7. Check the Console at Play start. A missing native library logs one warning and the managed decision takes over. The director overlay says `native` or `managed fallback`. An NPC that is not on the NavMesh logs one warning and stands still.
-8. For a companion, choose the role Companion, set its Level, and set its Leader to the player object. Give it orders from code with `brain.SetOrder(NpcOrder.Hold, 0)` and listen to `brain.OrderRefused`. No UI for orders exists yet. A companion with no order follows its leader.
+8. For a companion, choose the role Companion, set its Level, its Trustworthiness, Affinity and PaySatisfaction, and set its Leader to the player object. Give it orders from code with `brain.SetOrder(NpcOrder.Raid, 12)` and listen to `brain.OrderRefused` and `brain.Betrayed`. For a mission, resolve it with `brain.TryResolveMission` when it happens off screen. No UI for orders exists yet. A companion with no order follows its leader.
 9. For a non-hostile NPC, set its Disposition. Retaliatory ignores the player until it has been hit, and Peaceful runs and never fights.
 
 ### Scene setup (Managed)
@@ -424,9 +424,13 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - The NPC data lives here, in Unity, and Rust receives a snapshot with every decision: level, order, order level, provoked and disposition. Rust keeps no state.
 - Provoked is set by `ManagedHealth.Damaged` with a source, and it runs out after `_provokedMemorySeconds` (20 s). Damage with no source, such as a hazard, damage from the NPC itself, and damage from its leader do not provoke, so friendly fire does not turn a companion on the player. The handler is removed when the brain is disabled.
 - `SetOrder(order, level)` gives a companion an order. A level is clamped to 0 to 65535 in the observation, and the order None carries no level. Other roles ignore orders.
+- Companion inputs: `Trustworthiness`, `Affinity` and `PaySatisfaction` (0 to 1, 0.5 by default, so loyalty 0.5 and no betrayal), and `BetrayalOpportunity`, which game code sets and which a betrayal uses up. They are sent for companions only, and every other role sends zeros. `Loyalty` is the weighted mix. A scripted betrayal does not use any of this: the story changes the companion directly.
+- Each brain has its own random sequence, seeded from its id (xorshift32, never zero), so a run is reproducible. It is the `noise` of the observation, sent for companions only.
+- `Betrayed` is raised when Rust returns Betray. The opportunity is used up first, so one opportunity gives one betrayal, and the handler decides what it means (steal, leak, switch sides).
+- `TryResolveMission(order, missionLevel, out outcome)` resolves an off-screen mission with this companion's level and its own random numbers.
 - A refusal always clears the order and raises `OrderRefused`, even twice in a row. The order is already cleared when the event fires, so a listener can give a new one. A refusal result for a companion that has no order any more raises no event.
 - A companion never sees its `Leader`, or anything above or below it, as a threat. A companion with no leader warns once and sees the player as a threat. There is no faction system, so a companion sees no enemy at all today: only the player has a threat source. Companion combat waits for factions.
-- The Inspector tooltip says the refusal gap is 5. That number lives in Rust (`REFUSE_LEVEL_GAP`) and in the C# fallback, and CI compares them.
+- The Inspector tooltip says the refusal gap depends on the order type. The gaps live in Rust (`refuse_gap`) and in the C# fallback, and CI compares them on 16,384 NPCs.
 ### `ManagedNpcActor.cs`
 
 **What it does:** Carries out the action Rust chose, driving a `NavMeshAgent`. Patrol walks the waypoints in order, or wanders near where the NPC began. Attack chases the last seen position and hits the target in melee. Retreat runs directly away. Follow walks to the brain's `Leader` and stops 3 m from it. Idle, Trade, Hold and RefuseOrder stand still. It raises `Attacked` for every hit.
@@ -444,7 +448,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 
 ### `ManagedNpcDebugView.cs`
 
-**What it does:** Editor-only drawing and text for the NPC debugger, in `Managed/NPC/Editor/` so it compiles into `Assembly-CSharp-Editor` and never reaches a build. It draws one NPC in the Scene view: a label, the path to the destination, a marker on the destination, the patrol route with numbered stops, the wander, attack or retreat range, the sight cone, and a cross where the threat was last seen. Colors follow the action: grey Idle, cyan Trade, green Patrol, red Attack, amber Retreat, blue Follow, purple Hold, pink RefuseOrder. A companion's line shows its level and order, a non-hostile disposition is named, and provoked is shown. A follower draws a dotted line to its leader and a ring of the follow distance around the leader.
+**What it does:** Editor-only drawing and text for the NPC debugger, in `Managed/NPC/Editor/` so it compiles into `Assembly-CSharp-Editor` and never reaches a build. It draws one NPC in the Scene view: a label, the path to the destination, a marker on the destination, the patrol route with numbered stops, the wander, attack or retreat range, the sight cone, and a cross where the threat was last seen. Colors follow the action: grey Idle, cyan Trade, green Patrol, red Attack, amber Retreat, blue Follow, purple Hold, pink RefuseOrder, teal Mission, dark red Betray. A companion's line shows its level, order, loyalty and whether it could betray, a non-hostile disposition is named, and provoked is shown. A follower draws a dotted line to its leader and a ring of the follow distance around the leader.
 
 **Decisions:**
 - It reads public state only and changes nothing in the game. The brain, the actor and the director gained read-only accessors for it (`Current`, `GetBrain`, `ViewRange`, `FieldOfViewDegrees`, `Home`, `AttackRange`, `WanderRadius`, `RetreatDistance`, waypoints, `HasPath`, `Destination`, `GetPathCorners`). No game code reads them.
@@ -464,6 +468,15 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - "Selected only" matches the selected root object. Selecting a child of the NPC does not count.
 - Waypoints are shown but not editable here. Moving them is still done with the transforms in the Scene view.
 
+### `ManagedMissionResolver.cs`
+
+**What it does:** Decides how a companion mission that happens off screen ends: success, failed, caught or killed. It calls `gtg_npc_resolve_mission` in the Rust library and uses a managed copy of the same rules when the library is not there.
+
+**Decisions:**
+- Only a delivery and a raid are missions. Any other order, or a level outside 0 to 65535, returns false with no outcome.
+- A mission the player joins is played out and does not come through here. The player gets a notification and the reward when the result is success. Scheduling, the notification, rewards, capture and rescue are not built.
+- The managed copy keeps the float arithmetic in the same order as Rust, and the C# test compares both on 200,000 inputs with no difference allowed. The numbers are placeholders for balance work.
+
 ### `ManagedNpcDirector.cs`
 
 **What it does:** Drives every brain. Each tick takes a bounded batch, runs sight for the living NPCs, makes one native call for the whole batch and hands the actions back. A brain creates the director when the scene has none.
@@ -472,7 +485,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - One native call per tick, never one per NPC. The tick is 0.1 s and the batch is capped at 256, the same numbers as the ECS decision system. A larger population is served in turns through a rotating cursor.
 - Sight rays have their own cap per tick, 128 by default, so a crowd cannot spend an unbounded number of raycasts in one frame. When the cap is hit, the NPC that ran out leads the next tick, so every NPC is served in turn and none starves.
 - The tick works in three phases. Phase 1 copies the batch out of the list. Phase 2 runs sight and builds observations. Phase 3 applies actions. `ActionChanged` listeners run only in phase 3, so a listener that disables or destroys an NPC cannot change the list under the loop.
-- A decision is applied only if its NPC id matches the row it was made for and the action is in range (0 to 7 since ABI version 3). The ECS system still stops at 4, which is correct for it because it has no companions.
+- A decision is applied only if its NPC id matches the row it was made for and the action is in range (0 to 9 since ABI version 4). The ECS system still stops at 4, which is correct for it because it has no companions.
 - A scene director is reused even when it is disabled, because a disabled director is the scene's choice. A second enabled director disables itself with one warning.
 - With no `ManagedNpcThreatSource` in the scene the director warns once, because that is the usual reason for NPCs that never see anything.
 - `Brains` and the id counter are static and cleared at `SubsystemRegistration`. `Current` and `GetBrain(index)` are public for the NPC debugger.
@@ -491,7 +504,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   plain .NET and runs them against the real Rust library. The `managed-npc` job compiles
   `Managed/Health`, `Managed/NPC` (including its `Editor/` folder) and the spell damage files (C# 9, as in Unity 2022.3)
   against hand written `UnityEngine`, `UnityEditor` and `NavMeshAgent` stand-ins in
-  `rust/npc/managed-npc-test/` and runs 208 checks, once on the managed fallback and
+  `rust/npc/managed-npc-test/` and runs 645 checks, once on the managed fallback and
   once on the real library. The spell caster itself is replaced by a stub that has only
   the `Impact` event.
 
@@ -551,12 +564,12 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   system still uses it unchanged. The alternative was a second copy of the decision, which the Rust parity
   test would not cover. `NPCNativeLib.cs`, `NPCNativeTypes.cs` and `NPCEnums.cs` were already unwrapped.
 - Not verified in the Editor, not compiled by Unity. The files compile with .NET 8 (C# 9) against hand
-  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 208 checks pass there on
+  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 645 checks pass there on
   both the managed fallback and the real Rust library. CI job `managed-npc` repeats this on every push. The
   stub raycast is a callback, the NavMesh is a callback and the agent moves in a straight line, so the checks
   prove the logic around them (cone, budget, lingering, memory, patrol, chase, cooldown, retreat, damage
   falloff, debugger filters and drawing) and not real colliders, layers, NavMesh pathing or `Physics.Raycast`
-  behavior. Twenty-three deliberate breaks of the earlier logic and eighteen of the version 3 additions (provocation, orders, refusal, follow, hold) were each caught by a failing check.
+  behavior. Twenty-three deliberate breaks of the earlier logic and the version 3 and 4 additions (provocation, orders, refusal, follow, hold, betrayal, missions, the resolver) were each caught by a failing check.
 - The `UnityEditor` stubs were written from knowledge of the API and prove that the editor files are
   consistent with them, not with the real `UnityEditor`. An editor file that does not compile in Unity blocks
   Play mode for the whole project, so after importing, look at the Console first. The calls used are

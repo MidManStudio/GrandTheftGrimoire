@@ -2,9 +2,10 @@ using System.Runtime.InteropServices;
 
 namespace MidManStudio.Gtg.NPC.Native
 {
-    // Must match npc-ffi/src/lib.rs exactly (ABI version 3, 64 bytes). The first 32 bytes are the version 2
+    // Must match npc-ffi/src/lib.rs exactly (ABI version 4, 64 bytes). The first 32 bytes are the version 2
     // layout. Booleans are 32-bit integers up to offset 28 and bytes after that, and every Reserved field
-    // must stay zero. A zero in every field from Disposition on means: hostile, no order, not provoked, level 0.
+    // must stay zero. A zero in every field from Disposition on means: hostile, no order, not provoked, level 0,
+    // and no betrayal opportunity.
     [StructLayout(LayoutKind.Explicit, Size = 64)]
     internal struct NPCNativeObservation
     {
@@ -21,9 +22,14 @@ namespace MidManStudio.Gtg.NPC.Native
         [FieldOffset(35)] public byte ReservedByte;
         [FieldOffset(36)] public ushort Level;
         [FieldOffset(38)] public ushort OrderLevel;
-        [FieldOffset(40)] public ulong ReservedTail0;
-        [FieldOffset(48)] public ulong ReservedTail1;
-        [FieldOffset(56)] public ulong ReservedTail2;
+        [FieldOffset(40)] public float Trustworthiness;
+        [FieldOffset(44)] public float Affinity;
+        [FieldOffset(48)] public float PaySatisfaction;
+        [FieldOffset(52)] public uint Noise;
+        [FieldOffset(56)] public byte BetrayalOpportunity;
+        [FieldOffset(57)] public byte ReservedA;
+        [FieldOffset(58)] public ushort ReservedB;
+        [FieldOffset(60)] public uint ReservedC;
     }
 
     [StructLayout(LayoutKind.Explicit, Size = 16)]

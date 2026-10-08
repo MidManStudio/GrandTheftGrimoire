@@ -44,7 +44,8 @@ pub enum NpcDisposition {
     Peaceful,
 }
 
-/// A standing order given to a companion. Other roles ignore it.
+/// A standing order given to a companion. Other roles ignore it. Every order has a type, and the type
+/// decides how far above its own level a companion still accepts it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NpcOrder {
     /// No order. Behaves like [`NpcOrder::Follow`].
@@ -55,6 +56,10 @@ pub enum NpcOrder {
     Hold,
     /// Stay with the leader and engage any threat it sees.
     Attack,
+    /// Take something to someone. A mission, resolved by the game on screen or off screen.
+    Deliver,
+    /// Raid a competitor. A mission, resolved by the game on screen or off screen.
+    Raid,
 }
 
 /// What the NPC should do next. The game carries the action out.
@@ -76,6 +81,23 @@ pub enum NpcAction {
     Hold,
     /// The companion declines its current order. The game clears the order.
     RefuseOrder,
+    /// Carry out the accepted mission. The game knows what the mission is and where.
+    Mission,
+    /// The companion turns on the player. The game decides what that means.
+    Betray,
+}
+
+/// How a mission ended, as decided by `resolve_mission` in `gtg-npc-behavior`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MissionOutcome {
+    /// The mission went well. The player gets the reward.
+    Success,
+    /// The mission failed and the companion comes back.
+    Failed,
+    /// The companion was caught and can be rescued.
+    Caught,
+    /// The companion was killed.
+    Killed,
 }
 
 /// Everything the decision knows about one NPC. The game collects it, memory included.
@@ -103,6 +125,17 @@ pub struct Observation {
     pub level: u16,
     /// How hard the current order is, as a level. Zero for an order with no difficulty.
     pub order_level: u16,
+    /// How trustworthy the companion is, from 0 to 1. Used for betrayal only.
+    pub trustworthiness: f32,
+    /// How much the companion likes the player, from 0 to 1. Used for betrayal only.
+    pub affinity: f32,
+    /// How satisfied the companion is with its pay, from 0 to 1. Used for betrayal only.
+    pub pay_satisfaction: f32,
+    /// A random number the game supplies for each decision, so a chance in a rule stays reproducible.
+    pub noise: u32,
+    /// The companion could betray the player now. The game decides that, for instance when it is alone
+    /// with something valuable, and never sets it for a companion the story protects.
+    pub betrayal_opportunity: bool,
 }
 
 /// The result of one decision.

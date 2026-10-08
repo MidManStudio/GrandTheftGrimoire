@@ -10,7 +10,7 @@ The four files marked shared have no ECS dependency and are compiled by both sta
 
 | File | Role |
 |---|---|
-| `Components/NPCEnums.cs` (shared) | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction`, plus `NpcDisposition` and `NpcOrder` (ABI v3 numbers) |
+| `Components/NPCEnums.cs` (shared) | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction`, plus `NpcDisposition` and `NpcOrder` (ABI v4 numbers) |
 | `Components/NPCComponents.cs` | `NPCTag`, `NPCIdentity`, `NPCObservation`, `NPCDecision` |
 | `Authoring/NPCAuthoring.cs` | Baker that adds the four components with default values |
 | `Native/NPCNativeTypes.cs` (shared) | 64-byte observation and 16-byte decision structs, explicit layout |
@@ -39,7 +39,7 @@ Each Managed tick (every 0.1 s): take up to 256 brains from a rotating cursor, r
 1. Every 0.1 s, `ToEntityArray` on the NPC query, then take up to 256 entities starting at a rotating cursor.
 2. Copy identity and observation into a reused managed array. Health is clamped to 0..1 (NaN becomes 1). The NPC id is `Identity.Id`, or entity version and index when that is 0.
 3. One `gtg_npc_decide_batch` call. If the library is missing, the ABI differs, or the batch is rejected, the managed fallback decides instead (one warning per session).
-4. A decision is written only if its id matches the observation's and its action is 0..7.
+4. A decision is written only if its id matches the observation's and its action is 0..9.
 
 ## Verified, and how
 
