@@ -17,8 +17,43 @@ namespace MidManStudio.Gtg.Managed.Magic
         public ManagedSpellKind Kind;
         public string DisplayName;
         public float CooldownSeconds;
+
+        /// <summary>
+        /// Speed of the shot. A powered shot holds this speed for its whole flight. An
+        /// unpowered shot, a thrown one, leaves at this speed and then follows gravity and drag.
+        /// </summary>
         public float Speed;
+
+        /// <summary>
+        /// How long a clean mix flies at full speed, in seconds. The drive cost per meter is
+        /// derived from it, so the table keeps the range a designer thinks in. The hard cap on
+        /// flight time is twice this.
+        /// </summary>
         public float LifetimeSeconds;
+
+        /// <summary>True when the vessel's SP drives the shot. False for a thrown shot.</summary>
+        public bool Powered = true;
+
+        /// <summary>Share of world gravity that bends the path. Zero flies straight.</summary>
+        public float GravityScale;
+
+        /// <summary>Speed lost to drag per second. Only matters for an unpowered shot.</summary>
+        public float DragPerSecond;
+
+        // The four values below describe the stand-in vessel each cast uses until vessel
+        // items exist. Later the vessel item supplies them and they leave this table.
+
+        /// <summary>SP in the vessel's crystal at the cast.</summary>
+        public float VesselSp = 100f;
+
+        /// <summary>Load the vessel holds without extra cost, on the same scale as payload load.</summary>
+        public float VesselRating = 10f;
+
+        /// <summary>SP per second the vessel spends to hold the bubble, whatever the mix.</summary>
+        public float HoldSpPerSecond = 4f;
+
+        /// <summary>Extra SP per second for each unit of load above the vessel's rating.</summary>
+        public float OverloadSpPerLoad = 3f;
 
         /// <summary>Radius of the sphere swept along the path, so thin colliders are still hit.</summary>
         public float SweepRadius;
@@ -63,6 +98,59 @@ namespace MidManStudio.Gtg.Managed.Magic
             VisualDiameter = 0.35f,
             Color = new Color(0.55f, 0.85f, 1f, 1f),
         };
+
+        /// <summary>
+        /// SP per meter of drive. Zero for an unpowered shot. Derived so that a clean mix at
+        /// full speed flies for <see cref="LifetimeSeconds"/>.
+        /// </summary>
+        public float DriveSpPerMeter
+        {
+            get
+            {
+                if (!Powered || Speed <= 0f || LifetimeSeconds <= 0f)
+                {
+                    return 0f;
+                }
+
+                return Mathf.Max(0f, VesselSp / LifetimeSeconds - HoldSpPerSecond) / Speed;
+            }
+        }
+
+        /// <summary>Hard cap on flight time, a safety net for a spell whose burn is zero.</summary>
+        public float MaxFlightSeconds
+        {
+            get { return LifetimeSeconds * 2f; }
+        }
+
+        /// <summary>Hold cost per second for a payload of the given load. Only load above the rating costs extra.</summary>
+        public float HoldSpPerSecondFor(float load)
+        {
+            return HoldSpPerSecond + OverloadSpPerLoad * Mathf.Max(0f, load - VesselRating);
+        }
+
+        /// <summary>
+        /// Builds the flight record for a cast of this spell from the stand-in vessel. This is
+        /// the one place that turns authored numbers into flight values, so a vessel item
+        /// replaces it later and flight itself never changes.
+        /// </summary>
+        public ManagedShotSpawn CreateSpawn(int profile, int payload, Vector3 origin, Vector3 direction)
+        {
+            return new ManagedShotSpawn
+            {
+                Position = origin,
+                Velocity = direction * Speed,
+                Profile = profile,
+                Payload = payload,
+                Sp = VesselSp,
+                HoldBurnPerSecond = HoldSpPerSecondFor(ManagedSpellPayloads.LoadOf(payload)),
+                DriveBurnPerMeter = DriveSpPerMeter,
+                MaxAgeSeconds = MaxFlightSeconds,
+                Powered = Powered,
+                Speed = Speed,
+                GravityScale = GravityScale,
+                DragPerSecond = DragPerSecond,
+            };
+        }
 
         private static readonly ManagedSpellDefinition[] Slots = { Fireball, Ice };
 

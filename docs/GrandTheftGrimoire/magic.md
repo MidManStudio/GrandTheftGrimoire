@@ -14,6 +14,71 @@ driven from ECS state. The two sides meet at impact entities that Chemistry
 reads. Both systems follow the system structure in `GTG_REPO_CONVENTIONS.md`: an
 `ISystem` that schedules a nested `IJobEntity`.
 
+The design notes below record how spells fly. The Managed stack has the SP drive
+described there. The ECS stack does not, and still flies one straight shot with a
+lifetime.
+
+## Design notes
+
+### Spell flight: SP drive
+
+Status: built on the Managed stack, see `ManagedSpellFlight.cs` in `managed.md`. Not
+built on the ECS stack. Every number is a placeholder.
+
+**Locked.**
+- A spell that flies on its own is powered by SP, held in the crystal of its vessel
+  (bottle or orb). The options that were considered and not chosen: thrust from the
+  payload's gas and heat, thrust now with SP steering later, and throw or place only.
+- The mix changes how much SP flight costs, but only the part of its load above the
+  vessel's rating costs extra. A mix at or under the rating flies the vessel's normal
+  range.
+- When the SP runs out in flight, the bubble collapses where it is and the payload
+  releases there.
+- Bottles are single-use. Orbs are rechargeable.
+- The demo fireball stays an SP-driven bolt. This replaces the demo plan's line that
+  the demo bottle is thrown only.
+
+**Proposed, built, not canon until approved.**
+- One SP pool per vessel. Flight burns it through a hold cost per second and a drive
+  cost per meter. The hold cost is a vessel base plus a tuning constant times the load
+  above the vessel's rating. The drive cost is derived from the spell's authored flight
+  time. Range is the pool divided by the burn, and a hard cap on flight time stays as a
+  safety net.
+- Each payload carries one number, its load: how hard the mix pushes on the bubble.
+  Each vessel carries a rating on the same scale. The authored loads are placeholders
+  until the outcome classifier produces them from energy released, peak temperature and
+  gas produced.
+- The collapse point is interpolated inside the step, so range does not depend on the
+  frame rate.
+- A flying spell is a record of position, velocity, SP, profile id, payload id and
+  owner, kept in dense arrays with no class reference, the flat-array layout of the
+  UnityDodNoEcs reference repo. A straight powered shot is a pure function of that
+  record until it hits something, so netcode only has to replicate the spawn and the
+  impact for those.
+- Flight is a module of its own. It reads no spell definition and no payload, only the
+  numbers in its spawn record, so another caster or the ECS port can reuse it.
+- Impact carries the payload id and the chemistry side applies the authored footprint,
+  see `chemistry-simulation.md`.
+- A thrown spell uses the same integrator with the drive off and gravity on. The path
+  exists, and no spell uses it yet.
+- Drawing goes through `ManagedSphereBatch`, which has the instanced path and the
+  combined mesh fallback. Anything new that draws with `DrawMeshInstanced` gets a
+  fallback the same way, because the development machine cannot run it. A shot dims and
+  shrinks as its SP drains.
+
+**Proposed, not built.**
+- Steering as a turn rate on the same drive, 0 for a straight shot, so homing or curved
+  flight is a table row and not a new system.
+- Vessel items. Until they exist a stand-in vessel, full at every cast, supplies the SP.
+- Payloads from the cook. The per-impact Alembic run goes away once they exist, which
+  needs two Alembic jobs first: a restricted element set and an observables report
+  (section 3 of the chemistry system design draft).
+
+**Open.** How an orb recharges: from a crystal item, at a station, or over time.
+
+The chemistry system design draft (`gtg-chemistry-system-design.md`, section 6)
+and the demo plan are not in this repo.
+
 ## Modules
 
 Files are in `Assets/MidManStudio/Gtg/Magic/`.
@@ -71,6 +136,8 @@ until real particle and shader assets replace it.
 - Hit detection is a ray, so a fireball has no thickness.
 - The fireball does not damage anything yet. Its only effect is the chemical
   hazard that Chemistry spawns.
+- Flight on this stack is a straight line with a lifetime. The SP drive model in the
+  design notes is built on the Managed stack only.
 
 ## CI and Workflows
 

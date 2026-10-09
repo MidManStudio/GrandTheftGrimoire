@@ -117,7 +117,8 @@ Unity creates `.meta` files for the new scripts on first import. Commit them.
 | Crosshair aim and shot point | backlog | done |
 | Fireball | entities, command buffers, presentation system | list of shots swept with a sphere cast, one draw call |
 | Ice spell and spell slots | backlog | done |
-| Explosion at range end | backlog | done |
+| Explosion at range end | backlog | done, now where the SP runs out |
+| SP drive, payload load, collapse at zero SP | design notes in `magic.md` | done, `ManagedSpellFlight` |
 | Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
 | Ice recipe and Freeze hazard | backlog | done |
 | Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
@@ -188,11 +189,16 @@ struct.
 **Decisions:**
 - The impact carries `Source`, the GameObject that cast the spell, so damage can skip
   the caster. Existing consumers ignore the field.
+- The impact carries `PayloadId`, the id of the payload the shot carried, so the
+  chemistry side can later pick the footprint from the payload and not from the kind.
+  A collapse of the bubble raises the same impact as a hit. No consumer reads the id
+  yet.
 
 ### `ManagedSpellDefinition.cs`
 
-**What it does:** One tuning record per spell: cooldown, speed, lifetime, sweep
-radius, drawn diameter and color. The slot order is the table order, so key 1 picks
+**What it does:** One tuning record per spell: cooldown, speed, flight time, flight
+shape, stand-in vessel values, sweep radius, drawn diameter and color. It also builds
+the flight record for a cast. The slot order is the table order, so key 1 picks
 the first entry. The values live in code and move to an mdix table later, like the
 chemistry recipes.
 
@@ -205,6 +211,56 @@ chemistry recipes.
   edge. Ice has no damage. These are placeholder tuning numbers, chosen so three direct
   hits kill a 100 health NPC, and they move to the mdix table with the rest.
 - `For(kind)` looks a definition up by kind, because the slot order is not a stable key.
+- `LifetimeSeconds` is how long a clean mix flies at full speed. The drive cost per
+  meter is derived from it (`DriveSpPerMeter`), so a clean mix flies `Speed` times
+  `LifetimeSeconds` meters: 75 m for the fireball and 63 m for ice, the same as the
+  old fixed lifetime. The hard cap on flight time is twice that (`MaxFlightSeconds`).
+- `VesselSp`, `VesselRating`, `HoldSpPerSecond` and `OverloadSpPerLoad` describe a
+  stand-in vessel. Every cast gets a full one. They leave this table when vessel
+  items exist.
+- Only the part of a payload's load above `VesselRating` costs extra
+  (`HoldSpPerSecondFor`). A mix at or under the rating flies the normal range.
+- `Powered`, `GravityScale` and `DragPerSecond` shape the path. A thrown spell is a
+  row with `Powered` false and a gravity scale. No spell uses it yet.
+- `CreateSpawn` is the one place that turns these numbers into flight values. A vessel
+  item replaces it later, and `ManagedSpellFlight` does not change.
+
+### `ManagedSpellPayload.cs`
+
+**What it does:** `ManagedSpellPayload` holds the load of a mix, how hard it pushes
+on the bubble. `ManagedSpellPayloads` is the table, indexed by payload id, with
+`IdFor(kind)` and `LoadOf(id)`.
+
+**Decisions:**
+- Load is on the same scale as a vessel's rating, and flight costs only the part above
+  the rating. The numbers are placeholders: fireball 6, ice 3, against a rating of 10.
+- For now the id equals the spell kind. The id is what the impact carries, so a cook
+  result from the outcome classifier can replace the table without touching flight.
+- An id the table does not have has load 0.
+
+### `ManagedSpellFlight.cs`
+
+**What it does:** Shots in flight as parallel arrays of plain values, with no class
+reference per shot. `Plan` updates a shot's velocity and returns the segment it wants
+to fly. The caller sweeps that segment. `Commit` moves the shot, burns its SP and says
+whether it is still flying, collapsed or at its flight cap.
+
+**Decisions:**
+- The module knows nothing about spell definitions, payloads or physics. Every number
+  arrives in `ManagedShotSpawn`, and gravity arrives per call. Another caster, a trap
+  or the ECS port can use it as it is.
+- A step burns `hold * dt + drive * distance`. When that is more than the SP left, the
+  shot is released at the point of the segment where the SP ran out. Range therefore
+  does not depend on the frame rate: a clean fireball releases at 75.000 m at 120, 60,
+  30 and 10 frames per second.
+- A powered shot keeps its speed, so gravity and drag only bend the path. An unpowered
+  shot gains speed from gravity and loses it to drag.
+- `RemoveAt` swaps the last shot into the gap. The caster counts down from the end, so
+  no shot is visited twice or skipped.
+- `CapReached` is a safety net for a shot whose burn is zero. A shot with SP 0 at the
+  cast collapses on its first step.
+- Collision stays with the caller, because the sweep needs Unity Physics and the caster
+  owns the rule about its own colliders.
 
 ### `ManagedSpellVfxMaterials.cs`
 
@@ -216,9 +272,10 @@ objects.
 ### `ManagedSpellCaster.cs`
 
 **What it does:** Casts the selected spell. A cast leaves the shot point and flies to
-the crosshair target. Each step sweeps a sphere from the old position to the new one
-and raises `Impact` on a hit. Shots are drawn through one `ManagedSphereBatch`, with
-no GameObject per shot.
+the crosshair target, powered by the SP of a stand-in vessel. Each step sweeps a sphere
+from the old position to the new one and raises `Impact` on a hit, or when the bubble
+collapses. Flight state lives in `ManagedSpellFlight`. Shots are drawn through one
+`ManagedSphereBatch`, with no GameObject per shot.
 
 **Decisions:**
 - The aim ray goes through the screen center of the main camera. The first collider
@@ -237,9 +294,11 @@ no GameObject per shot.
   the character's capsule never swallows a shot.
 - A shot point inside a collider cannot sweep correctly, so that cast detonates at
   once.
-- A shot that reaches the end of its lifetime detonates where it is
-  (`_detonateAtRangeEnd`). This makes a miss visible and also shows the chemistry
-  working on open ground. Turn it off for shots that should fizzle out.
+- A shot that runs out of SP collapses where it is and the payload releases there.
+  This makes a miss visible and also shows the chemistry working on open ground. It
+  replaces the fixed lifetime and the `_detonateAtRangeEnd` switch.
+- A shot dims to 35 percent brightness and shrinks to 60 percent size as its SP
+  drains, so a dying spell can be seen.
 - Impact times, positions and the collider name are logged (`_logImpacts`). This
   tells apart "the shot hit nothing" from "the shot hit but nothing was drawn".
 - The impact raised on a hit carries `Source`, the caster's GameObject, set in
@@ -544,6 +603,35 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   physics world, not against Unity Physics.
 - The shots were pooled GameObjects with a light each. They are now drawn through one
   `ManagedSphereBatch`, and the light is gone.
+
+### SP drive flight (`ManagedSpellFlight.cs`, `ManagedSpellPayload.cs`)
+
+- Reported: every spell flew at a constant speed for a fixed lifetime, so neither the
+  vessel nor the mix could change how far a shot went.
+- Now: a shot carries SP from its vessel and burns it in flight. The mix changes the
+  burn only through the part of its load above the vessel's rating. A shot with no SP
+  left collapses in place and releases its payload. The numbers are in
+  `ManagedSpellDefinition`, and the design is in `magic.md`.
+- Checked with a console harness against stubs of `UnityEngine`: 21 checks pass,
+  covering the range at four frame rates, the overload cost, a thrown arc, drag, the
+  flight cap, swap-remove and growth. The harness is not in the repo. The five Magic
+  files also compile under C# 9 against the stubs. Not verified in the Editor: the
+  sweep, the draw path and the dimming ran only as a compile.
+- The stand-in vessel is full at every cast. Nothing is consumed or recharged yet, so
+  the rule that bottles are single-use and orbs are rechargeable is not enforced.
+- The payload loads are placeholders. The fireball and ice have the same range as before
+  because both sit under the rating.
+- Steering is not built. The thrown row exists in the definition and in flight, and no
+  spell uses it.
+- `_detonateAtRangeEnd` is gone. A scene that serialized it drops the value without an
+  error.
+- The chemistry field and the damage code still choose by kind. `PayloadId` is carried
+  and unused.
+- The ECS stack is unchanged and still flies a straight shot with a lifetime.
+- Edit to existing Managed files: `ManagedSpellTypes.cs` gained `PayloadId`,
+  `ManagedSpellDefinition.cs` gained the flight and vessel fields, `CreateSpawn` and the
+  derived values, and `ManagedSpellCaster.cs` flies through `ManagedSpellFlight`.
+  `ManagedCameraRig` reads `ShotCount` as before.
 
 ### `ManagedChemicalHazardField.cs`
 

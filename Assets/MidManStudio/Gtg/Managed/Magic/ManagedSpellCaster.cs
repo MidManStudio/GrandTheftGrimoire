@@ -4,7 +4,6 @@
 // ============================================================================
 
 using System;
-using System.Collections.Generic;
 using MidManStudio.Gtg.Managed.CharacterController;
 using MidManStudio.Gtg.Managed.Rendering;
 using UnityEngine;
@@ -12,11 +11,13 @@ using UnityEngine;
 namespace MidManStudio.Gtg.Managed.Magic
 {
     /// <summary>
-    /// Spell caster. A cast leaves the shot point and flies toward the crosshair. Each step
-    /// sweeps a small sphere from the old position to the new one, so a fast shot cannot pass
-    /// through a thin collider. A hit, or the end of the range, raises <see cref="Impact"/>.
-    /// Shots are drawn through one <see cref="ManagedSphereBatch"/>, with no GameObject per
-    /// shot. Put it on the same GameObject as ManagedCharacter.
+    /// Spell caster. A cast leaves the shot point and flies toward the crosshair, powered by
+    /// the SP of a stand-in vessel until vessel items exist. Each step sweeps a small sphere
+    /// from the old position to the new one, so a fast shot cannot pass through a thin
+    /// collider. A hit, or the bubble collapsing when the SP runs out, raises
+    /// <see cref="Impact"/>. Flight state lives in <see cref="ManagedSpellFlight"/>. Shots
+    /// are drawn through one <see cref="ManagedSphereBatch"/>, with no GameObject per shot.
+    /// Put it on the same GameObject as ManagedCharacter.
     /// </summary>
     [DefaultExecutionOrder(-40)]
     [DisallowMultipleComponent]
@@ -41,8 +42,6 @@ namespace MidManStudio.Gtg.Managed.Magic
 
         [Header("Collision")]
         [SerializeField] private LayerMask _hitMask = ~0;
-        [Tooltip("A shot that reaches the end of its lifetime explodes where it is.")]
-        [SerializeField] private bool _detonateAtRangeEnd = true;
 
         [Header("Rendering")]
         [Tooltip("Skips hardware instancing and uses the combined mesh path. For testing the fallback.")]
@@ -52,20 +51,15 @@ namespace MidManStudio.Gtg.Managed.Magic
         [Header("Debug")]
         [SerializeField] private bool _logImpacts = true;
 
-        private struct Shot
-        {
-            public Vector3 Position;
-            public Vector3 Velocity;
-            public float RemainingLife;
-            public float Travelled;
-            public ManagedSpellDefinition Spell;
-        }
-
         private const int OverlapBufferSize = 8;
         private const float RestartPadding = 0.02f;
         private const int MaxOwnHitSkips = 4;
 
-        private readonly List<Shot> _shots = new List<Shot>(16);
+        // A shot with no SP left is drawn at these fractions of its full brightness and size.
+        private const float MinDim = 0.35f;
+        private const float MinScale = 0.6f;
+
+        private readonly ManagedSpellFlight _flight = new ManagedSpellFlight(16);
         private readonly Collider[] _overlaps = new Collider[OverlapBufferSize];
         private ManagedCharacter _character;
         private ManagedSphereBatch _batch;
@@ -77,7 +71,7 @@ namespace MidManStudio.Gtg.Managed.Magic
             get { return ManagedSpellDefinition.At(_selected); }
         }
 
-        public int ShotCount { get { return _shots.Count; } }
+        public int ShotCount { get { return _flight.Count; } }
 
         // Static state survives a play session when domain reload is off.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -130,10 +124,17 @@ namespace MidManStudio.Gtg.Managed.Magic
         private void LateUpdate()
         {
             _batch.Clear();
-            for (int i = 0; i < _shots.Count; i++)
+            for (int i = 0; i < _flight.Count; i++)
             {
-                Shot shot = _shots[i];
-                _batch.Add(shot.Position, Vector3.one * shot.Spell.VisualDiameter, shot.Spell.Color);
+                ManagedSpellDefinition spell = ManagedSpellDefinition.At(_flight.ProfileAt(i));
+
+                // The shot shrinks and dims as its SP drains, so a dying spell can be seen.
+                float charge = _flight.SpFractionAt(i);
+                float dim = Mathf.Lerp(MinDim, 1f, charge);
+                Color color = new Color(spell.Color.r * dim, spell.Color.g * dim, spell.Color.b * dim, spell.Color.a);
+                float diameter = spell.VisualDiameter * Mathf.Lerp(MinScale, 1f, charge);
+
+                _batch.Add(_flight.PositionAt(i), Vector3.one * diameter, color);
             }
 
             _batch.Draw();
@@ -162,20 +163,15 @@ namespace MidManStudio.Gtg.Managed.Magic
             _cooldownRemaining = spell.CooldownSeconds;
 
             // A shot point inside a wall would sweep from the wrong side, so it explodes at once.
+            int payload = ManagedSpellPayloads.IdFor(spell.Kind);
+
             if (IsBlockedAt(origin, spell.SweepRadius))
             {
-                Detonate(spell, origin, -direction, "was cast inside a collider", 0f);
+                Detonate(spell, payload, origin, -direction, "was cast inside a collider", 0f);
                 return;
             }
 
-            _shots.Add(new Shot
-            {
-                Position = origin,
-                Velocity = direction * spell.Speed,
-                RemainingLife = spell.LifetimeSeconds,
-                Travelled = 0f,
-                Spell = spell,
-            });
+            _flight.Add(spell.CreateSpawn(_selected, payload, origin, direction));
         }
 
         // The ray through the screen center decides the target point. The shot then flies from
@@ -217,40 +213,48 @@ namespace MidManStudio.Gtg.Managed.Magic
             return direction;
         }
 
+        // Counts down so a swap-remove never makes the loop visit a shot twice.
         private void StepShots(float dt)
         {
-            for (int i = _shots.Count - 1; i >= 0; i--)
+            float gravityY = Physics.gravity.y;
+
+            for (int i = _flight.Count - 1; i >= 0; i--)
             {
-                Shot shot = _shots[i];
-                Vector3 step = shot.Velocity * dt;
-                Vector3 end = shot.Position + step;
+                Vector3 start;
+                Vector3 end;
+                _flight.Plan(i, dt, gravityY, out start, out end);
+
+                ManagedSpellDefinition spell = ManagedSpellDefinition.At(_flight.ProfileAt(i));
+                int payload = _flight.PayloadAt(i);
 
                 RaycastHit hit;
-                if (TryHit(shot.Position, end, shot.Spell.SweepRadius, out hit))
+                if (TryHit(start, end, spell.SweepRadius, out hit))
                 {
-                    _shots.RemoveAt(i);
+                    float travelledAtHit = _flight.TravelledAt(i) + hit.distance;
+                    _flight.RemoveAt(i);
                     Detonate(
-                        shot.Spell, hit.point, hit.normal,
-                        "hit '" + hit.collider.name + "'", shot.Travelled + hit.distance);
+                        spell, payload, hit.point, hit.normal,
+                        "hit '" + hit.collider.name + "'", travelledAtHit);
                     continue;
                 }
 
-                shot.Position = end;
-                shot.Travelled += step.magnitude;
-                shot.RemainingLife -= dt;
-
-                if (shot.RemainingLife <= 0f)
+                Vector3 releasedAt;
+                ManagedFlightState state = _flight.Commit(i, dt, end, out releasedAt);
+                if (state == ManagedFlightState.Flying)
                 {
-                    _shots.RemoveAt(i);
-                    if (_detonateAtRangeEnd)
-                    {
-                        Detonate(shot.Spell, end, -shot.Velocity.normalized, "reached the end of its range", shot.Travelled);
-                    }
-
                     continue;
                 }
 
-                _shots[i] = shot;
+                // The bubble collapses where the SP ran out and the payload releases there.
+                float travelled = _flight.TravelledAt(i);
+                Vector3 normal = -_flight.VelocityAt(i).normalized;
+                _flight.RemoveAt(i);
+                Detonate(
+                    spell, payload, releasedAt, normal,
+                    state == ManagedFlightState.Collapsed
+                        ? "ran out of SP and the bubble collapsed"
+                        : "reached its flight cap",
+                    travelled);
             }
         }
 
@@ -309,7 +313,7 @@ namespace MidManStudio.Gtg.Managed.Magic
             return false;
         }
 
-        private void Detonate(ManagedSpellDefinition spell, Vector3 position, Vector3 normal, string what, float travelled)
+        private void Detonate(ManagedSpellDefinition spell, int payload, Vector3 position, Vector3 normal, string what, float travelled)
         {
             if (_logImpacts)
             {
@@ -326,6 +330,7 @@ namespace MidManStudio.Gtg.Managed.Magic
                     Position = position,
                     Normal = normal,
                     Kind = spell.Kind,
+                    PayloadId = payload,
                     Source = gameObject,
                 });
             }
