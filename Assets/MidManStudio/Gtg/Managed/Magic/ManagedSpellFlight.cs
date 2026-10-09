@@ -31,6 +31,9 @@ namespace MidManStudio.Gtg.Managed.Magic
         /// <summary>The caller's payload id, carried to the impact. Flight stores it and never reads it.</summary>
         public int Payload;
 
+        /// <summary>The caller's handle for what the shot flies toward, 0 for none. Flight stores it and never reads it.</summary>
+        public int Target;
+
         /// <summary>SP in the vessel's crystal at the moment of the cast.</summary>
         public float Sp;
 
@@ -49,14 +52,21 @@ namespace MidManStudio.Gtg.Managed.Magic
 
         /// <summary>Speed lost to drag per second, for an unpowered shot.</summary>
         public float DragPerSecond;
+
+        /// <summary>Fastest the shot can turn, in radians per second. Zero flies straight.</summary>
+        public float TurnRatePerSecond;
+
+        /// <summary>SP the vessel spends for each radian of turn.</summary>
+        public float SteerBurnPerRadian;
     }
 
     /// <summary>
     /// Shots in flight, kept as parallel arrays of plain values with no class reference per
-    /// shot. This module knows nothing about spell definitions, payloads or physics: every
-    /// number it uses arrives in the spawn record. Collision stays with the caller:
+    /// shot. This module knows nothing about spell definitions, payloads, targets or physics:
+    /// every number it uses arrives in the spawn record. Collision and targeting stay with
+    /// the caller. The caller says which way to turn with <see cref="Steer"/>,
     /// <see cref="Plan"/> says where a shot wants to go, the caller sweeps that segment, and
-    /// <see cref="Commit"/> moves the shot and burns its SP.
+    /// <see cref="Commit"/> moves the shot and burns its SP, turning included.
     /// </summary>
     public sealed class ManagedSpellFlight
     {
@@ -73,8 +83,12 @@ namespace MidManStudio.Gtg.Managed.Magic
         private float[] _gravityScale;
         private float[] _drag;
         private bool[] _powered;
+        private float[] _turnRate;
+        private float[] _steerBurn;
+        private float[] _pendingSteer;
         private int[] _profile;
         private int[] _payload;
+        private int[] _target;
         private int _count;
 
         public ManagedSpellFlight(int capacity)
@@ -93,8 +107,12 @@ namespace MidManStudio.Gtg.Managed.Magic
             _gravityScale = new float[size];
             _drag = new float[size];
             _powered = new bool[size];
+            _turnRate = new float[size];
+            _steerBurn = new float[size];
+            _pendingSteer = new float[size];
             _profile = new int[size];
             _payload = new int[size];
+            _target = new int[size];
         }
 
         public int Count { get { return _count; } }
@@ -106,6 +124,8 @@ namespace MidManStudio.Gtg.Managed.Magic
         public int ProfileAt(int index) { return _profile[index]; }
 
         public int PayloadAt(int index) { return _payload[index]; }
+
+        public int TargetAt(int index) { return _target[index]; }
 
         public float TravelledAt(int index) { return _travelled[index]; }
 
@@ -136,8 +156,12 @@ namespace MidManStudio.Gtg.Managed.Magic
             _gravityScale[i] = spawn.GravityScale;
             _drag[i] = spawn.DragPerSecond;
             _powered[i] = spawn.Powered;
+            _turnRate[i] = spawn.TurnRatePerSecond;
+            _steerBurn[i] = spawn.SteerBurnPerRadian;
+            _pendingSteer[i] = 0f;
             _profile[i] = spawn.Profile;
             _payload[i] = spawn.Payload;
+            _target[i] = spawn.Target;
         }
 
         /// <summary>
@@ -162,8 +186,12 @@ namespace MidManStudio.Gtg.Managed.Magic
                 _gravityScale[index] = _gravityScale[last];
                 _drag[index] = _drag[last];
                 _powered[index] = _powered[last];
+                _turnRate[index] = _turnRate[last];
+                _steerBurn[index] = _steerBurn[last];
+                _pendingSteer[index] = _pendingSteer[last];
                 _profile[index] = _profile[last];
                 _payload[index] = _payload[last];
+                _target[index] = _target[last];
             }
 
             _count = last;
@@ -172,6 +200,63 @@ namespace MidManStudio.Gtg.Managed.Magic
         public void Clear()
         {
             _count = 0;
+        }
+
+        /// <summary>
+        /// Turns a shot toward <paramref name="desiredDirection"/> by at most its turn rate
+        /// times <paramref name="dt"/>, keeping its speed. Returns the angle turned in
+        /// radians. The SP for the turn is held back and charged in <see cref="Commit"/>, so
+        /// the point where the SP runs out accounts for the turn. Call it before
+        /// <see cref="Plan"/>.
+        /// </summary>
+        public float Steer(int index, Vector3 desiredDirection, float dt)
+        {
+            float maxAngle = _turnRate[index] * dt;
+            Vector3 velocity = _velocity[index];
+            float speed = velocity.magnitude;
+            float wanted = desiredDirection.magnitude;
+            if (maxAngle <= 0f || speed < 1e-4f || wanted < 1e-6f)
+            {
+                return 0f;
+            }
+
+            Vector3 from = velocity / speed;
+            Vector3 to = desiredDirection / wanted;
+            float angle = Mathf.Acos(Mathf.Clamp(Vector3.Dot(from, to), -1f, 1f));
+            if (angle < 1e-5f)
+            {
+                return 0f;
+            }
+
+            Vector3 direction;
+            float turned;
+            if (angle <= maxAngle)
+            {
+                direction = to;
+                turned = angle;
+            }
+            else
+            {
+                // Rotate about the axis both directions share. Straight back has no such
+                // axis, so any axis square to the heading turns it.
+                Vector3 axis = Vector3.Cross(from, to);
+                float axisLength = axis.magnitude;
+                if (axisLength < 1e-5f)
+                {
+                    axis = Vector3.Cross(from, Mathf.Abs(from.y) < 0.99f ? Vector3.up : Vector3.right);
+                    axisLength = axis.magnitude;
+                }
+
+                axis = axis / axisLength;
+                float cos = Mathf.Cos(maxAngle);
+                float sin = Mathf.Sin(maxAngle);
+                direction = (from * cos + Vector3.Cross(axis, from) * sin).normalized;
+                turned = maxAngle;
+            }
+
+            _velocity[index] = direction * speed;
+            _pendingSteer[index] += turned * _steerBurn[index];
+            return turned;
         }
 
         /// <summary>
@@ -208,9 +293,10 @@ namespace MidManStudio.Gtg.Managed.Magic
         }
 
         /// <summary>
-        /// Moves a shot to <paramref name="end"/> and burns its SP. When the SP runs out inside
-        /// the step, <paramref name="releasedAt"/> is the point on the segment where it ran
-        /// out, so range does not depend on the frame rate. Otherwise it is the end point.
+        /// Moves a shot to <paramref name="end"/> and burns its SP, including the turn made
+        /// since the last commit. When the SP runs out inside the step,
+        /// <paramref name="releasedAt"/> is the point on the segment where it ran out, so
+        /// range does not depend on the frame rate. Otherwise it is the end point.
         /// </summary>
         public ManagedFlightState Commit(int index, float dt, Vector3 end, out Vector3 releasedAt)
         {
@@ -219,7 +305,8 @@ namespace MidManStudio.Gtg.Managed.Magic
             float length = step.magnitude;
 
             float before = _sp[index];
-            float burn = _holdBurn[index] * dt + _driveBurn[index] * length;
+            float burn = _holdBurn[index] * dt + _driveBurn[index] * length + _pendingSteer[index];
+            _pendingSteer[index] = 0f;
 
             _age[index] += dt;
             releasedAt = end;
@@ -259,8 +346,12 @@ namespace MidManStudio.Gtg.Managed.Magic
             Array.Resize(ref _gravityScale, size);
             Array.Resize(ref _drag, size);
             Array.Resize(ref _powered, size);
+            Array.Resize(ref _turnRate, size);
+            Array.Resize(ref _steerBurn, size);
+            Array.Resize(ref _pendingSteer, size);
             Array.Resize(ref _profile, size);
             Array.Resize(ref _payload, size);
+            Array.Resize(ref _target, size);
         }
     }
 }

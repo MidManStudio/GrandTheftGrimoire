@@ -25,6 +25,7 @@ namespace MidManStudio.Gtg.Managed.Magic
         {
             new ManagedSpellPayload { Load = 6f },
             new ManagedSpellPayload { Load = 3f },
+            new ManagedSpellPayload { Load = 6f },
         };
 
         public static int IdFor(ManagedSpellKind kind)

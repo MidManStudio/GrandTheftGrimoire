@@ -37,6 +37,15 @@ built on the ECS stack. Every number is a placeholder.
 - Bottles are single-use. Orbs are rechargeable.
 - The demo fireball stays an SP-driven bolt. This replaces the demo plan's line that
   the demo bottle is thrown only.
+- A steered spell locks onto the target if there is one, and onto the crosshair point
+  if there is not.
+- Turning costs SP, per radian turned.
+- The first steering spell is a third placeholder spell, so the two existing spells
+  stay as they were.
+- A cast takes the whole charge of its vessel. The SP a shot does not burn is lost with
+  it, so a shot that hits early gives nothing back.
+- An orb keeps its spell and its payload. Only its SP recharges.
+- An orb can cast partly charged, and then flies a shorter way in proportion.
 
 **Proposed, built, not canon until approved.**
 - One SP pool per vessel. Flight burns it through a hold cost per second and a drive
@@ -61,20 +70,44 @@ built on the ECS stack. Every number is a placeholder.
   see `chemistry-simulation.md`.
 - A thrown spell uses the same integrator with the drive off and gravity on. The path
   exists, and no spell uses it yet.
+- Steering is a turn rate on the same drive, 0 for a straight shot. `Steer` in flight
+  turns a shot toward a direction it is given and charges SP for the angle. It does not
+  choose the direction, so homing, a waypoint or a scripted curve use the same call.
+- Lock-on is its own module, `ManagedSpellSeeker`. It scans a cone around the aim for
+  a living target in line of sight, nearest the aim line first, and falls back to the
+  crosshair point. A shot holds only an id for its lock. A point lock is dropped once
+  the shot has flown past it, so a shot that missed open air does not loop back. A
+  living target is followed until the shot hits something or the SP runs out.
+- The Seeker is the first steered spell: 140 degrees per second, 10 SP per radian, a
+  40 m scan and a 20 degree cone. All placeholders, the name included.
+- Vessels are a belt of slots, built in `ManagedVesselBelt`. A bottle slot counts full
+  bottles and each cast uses one. An orb slot holds one orb, a cast empties it, and it
+  charges in a straight line over game time, 45 seconds from empty. The drive cost per
+  meter comes from a full vessel and the shot starts with the SP drawn, so range follows
+  the charge. The vessel's rating sets the overload cost. The belt is filled from an
+  Inspector loadout until crafting and pickup exist, and it holds plain values, so a
+  carrier can fill and read it.
 - Drawing goes through `ManagedSphereBatch`, which has the instanced path and the
   combined mesh fallback. Anything new that draws with `DrawMeshInstanced` gets a
   fallback the same way, because the development machine cannot run it. A shot dims and
   shrinks as its SP drains.
 
 **Proposed, not built.**
-- Steering as a turn rate on the same drive, 0 for a straight shot, so homing or curved
-  flight is a table row and not a new system.
-- Vessel items. Until they exist a stand-in vessel, full at every cast, supplies the SP.
+- A launch angle for curved flight, so a shot can leave the hand sideways and bend
+  toward the crosshair. Steering turns toward a lock now, from the aim direction.
+- Vessel items from the world: crafting a bottle at the table, finding an orb, topping one
+  up from a crystal. Until then the belt is filled from the loadout. An inventory
+  package such as Inventorizz would carry the items. It stores an item id and a count
+  per slot, so the SP of an orb stays in the belt, and a bridge maps one to the other.
 - Payloads from the cook. The per-impact Alembic run goes away once they exist, which
   needs two Alembic jobs first: a restricted element set and an observables report
   (section 3 of the chemistry system design draft).
 
-**Open.** How an orb recharges: from a crystal item, at a station, or over time.
+**Working choice, built, not locked.** An orb recharges slowly over time, per orb, in
+game time, with no crystal top-up for now. The aim is that the player plans a fight
+before it starts, so that spending SP matters. The 45 seconds is a placeholder.
+
+**Open.** Whether waiting or sleeping skips game time, and so recharges orbs for free.
 
 The chemistry system design draft (`gtg-chemistry-system-design.md`, section 6)
 and the demo plan are not in this repo.

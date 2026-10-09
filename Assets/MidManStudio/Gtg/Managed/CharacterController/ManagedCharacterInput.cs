@@ -55,6 +55,7 @@ namespace MidManStudio.Gtg.Managed.CharacterController
 
                 if (keyboard.digit1Key.wasPressedThisFrame) frame.SpellSlot = 1;
                 if (keyboard.digit2Key.wasPressedThisFrame) frame.SpellSlot = 2;
+                if (keyboard.digit3Key.wasPressedThisFrame) frame.SpellSlot = 3;
                 if (keyboard.tabKey.wasPressedThisFrame) frame.CycleSpell = 1;
 
                 // Keyboard look, so the aim also works without a mouse.

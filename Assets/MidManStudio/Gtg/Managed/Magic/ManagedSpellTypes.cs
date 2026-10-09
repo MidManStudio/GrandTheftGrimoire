@@ -11,6 +11,9 @@ namespace MidManStudio.Gtg.Managed.Magic
     {
         Fireball = 0,
         Ice = 1,
+
+        /// <summary>Placeholder name. A fireball variant that homes, the first spell with steering.</summary>
+        Seeker = 2,
     }
 
     /// <summary>One spell hit, or a collapse of the bubble. The caster raises it. The chemistry field and the spell damage consume it.</summary>

@@ -87,12 +87,21 @@ missing script. Delete it, or switch the define back.
 
 Controls: move with WASD or the arrow keys, look with the mouse, the right stick or
 the keys J and L (turn) and I and K (up and down), jump with Space, cast with the
-left mouse button, F or the right trigger. Pick a spell with 1 or 2, Tab, or the
-d-pad. V switches the view, Escape frees the cursor.
+left mouse button, F or the right trigger. Pick a spell with 1, 2 or 3, Tab, or
+the d-pad. V switches the view, Escape frees the cursor.
 
 Shots leave the `GTG Shot Point` child of the character and fly to whatever the
 screen center looks at. A white crosshair marks that point. Move the shot point in
 the Scene view, or assign a staff or hand bone to the caster.
+
+Spell 3 is the Seeker. It locks onto a living target near the crosshair, or onto the
+crosshair point when there is none, and turns toward the lock in flight. Every turn
+costs SP, so a shot that turns hard flies a shorter way.
+
+Each key picks a slot of the vessel belt, and the overlay shows what is in it. A bottle
+is used up by one cast. An orb is emptied by one cast and charges back slowly with game
+time. The caster component has a context menu entry, Refill vessels, that restores
+every orb and every bottle count, for testing.
 
 Draw path: shots and hazards are drawn with `Graphics.DrawMeshInstanced` when the
 GPU supports instancing and `MidManStudio/Gtg/SphereUnlit` compiled, otherwise as
@@ -119,6 +128,8 @@ Unity creates `.meta` files for the new scripts on first import. Commit them.
 | Ice spell and spell slots | backlog | done |
 | Explosion at range end | backlog | done, now where the SP runs out |
 | SP drive, payload load, collapse at zero SP | design notes in `magic.md` | done, `ManagedSpellFlight` |
+| Steering: homing and curved flight, third spell | design notes in `magic.md` | done, `ManagedSpellSeeker` and `Steer` |
+| Vessels: single-use bottles, rechargeable orbs | design notes in `magic.md` | done, `ManagedVesselBelt` |
 | Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
 | Ice recipe and Freeze hazard | backlog | done |
 | Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
@@ -159,7 +170,7 @@ Gravity, Cast, plus `All`.
 - J and L turn, I and K look up and down, at `_keyboardLookDegreesPerSecond`. This is
   the way to aim without a mouse. Arrow keys are not used for look, because they
   move.
-- The frame also carries the picked spell slot (keys 1 and 2) and a cycle step (Tab,
+- The frame also carries the picked spell slot (keys 1, 2 and 3) and a cycle step (Tab,
   d-pad left and right), which the caster reads.
 
 ### `ManagedCharacter.cs`
@@ -183,8 +194,8 @@ frame it reads the input and runs look, walk, jump and gravity, then calls `Move
 
 ### `ManagedSpellTypes.cs`
 
-**What it does:** `ManagedSpellKind` (Fireball, Ice) and the `ManagedSpellImpact`
-struct.
+**What it does:** `ManagedSpellKind` (Fireball, Ice, Seeker) and the
+`ManagedSpellImpact` struct.
 
 **Decisions:**
 - The impact carries `Source`, the GameObject that cast the spell, so damage can skip
@@ -193,11 +204,15 @@ struct.
   chemistry side can later pick the footprint from the payload and not from the kind.
   A collapse of the bubble raises the same impact as a hit. No consumer reads the id
   yet.
+- `Seeker` is the first steered spell, and its name is a placeholder. It has no recipe
+  branch of its own: `ManagedChemistryRecipe.ForSpell` returns the fireball recipe for
+  any kind it does not list. Damage reads the definition, so the Seeker does its own
+  numbers.
 
 ### `ManagedSpellDefinition.cs`
 
 **What it does:** One tuning record per spell: cooldown, speed, flight time, flight
-shape, stand-in vessel values, sweep radius, drawn diameter and color. It also builds
+shape, vessel values, sweep radius, drawn diameter and color. It also builds
 the flight record for a cast. The slot order is the table order, so key 1 picks
 the first entry. The values live in code and move to an mdix table later, like the
 chemistry recipes.
@@ -215,15 +230,31 @@ chemistry recipes.
   meter is derived from it (`DriveSpPerMeter`), so a clean mix flies `Speed` times
   `LifetimeSeconds` meters: 75 m for the fireball and 63 m for ice, the same as the
   old fixed lifetime. The hard cap on flight time is twice that (`MaxFlightSeconds`).
-- `VesselSp`, `VesselRating`, `HoldSpPerSecond` and `OverloadSpPerLoad` describe a
-  stand-in vessel. Every cast gets a full one. They leave this table when vessel
-  items exist.
+- `VesselSp` and `VesselRating` are what a vessel for this spell is made with. The
+  caster copies them into the belt, and a cast reads them back from the vessel it drew,
+  so a crafted vessel can carry its own and these two leave the table later.
+  `HoldSpPerSecond` and `OverloadSpPerLoad` are tuning for the bubble and stay.
 - Only the part of a payload's load above `VesselRating` costs extra
   (`HoldSpPerSecondFor`). A mix at or under the rating flies the normal range.
 - `Powered`, `GravityScale` and `DragPerSecond` shape the path. A thrown spell is a
   row with `Powered` false and a gravity scale. No spell uses it yet.
-- `CreateSpawn` is the one place that turns these numbers into flight values. A vessel
-  item replaces it later, and `ManagedSpellFlight` does not change.
+- `CreateSpawn` is the one place that turns these numbers and a vessel into flight
+  values, and `ManagedSpellFlight` does not change. It takes a `ManagedVesselDraw`. The
+  shot starts with the SP drawn. The drive cost per meter comes from the vessel's
+  capacity (`DriveSpPerMeterFor`), not from the SP drawn, so a half charged orb burns
+  at the normal rate and flies half as far. The overload cost uses the vessel's rating
+  (`HoldSpPerSecondFor(load, rating)`). A cheat that changes a spell's numbers plugs in
+  here.
+- `IndexOf(kind)` gives the table index of a kind. A shot carries that index as its
+  profile, because a belt slot is no longer the same as a table row.
+- `TurnDegreesPerSecond`, `SteerSpPerRadian`, `SeekRange` and `SeekConeHalfAngleDegrees`
+  describe steering. A turn rate of 0 is a straight shot (`Seeks` is false), so the
+  fireball and ice rows did not change and fly as before.
+- The `Seeker` row turns 140 degrees per second at 10 SP per radian, looks 40 m ahead
+  inside a cone of 20 degrees either side of the aim, flies 20 m/s for 3.5 s (70 m when
+  it never turns) and does 30 damage in a 2.5 m radius. A 90 degree turn costs 15.7 SP,
+  about 16 percent of a full vessel's 100. The name, the numbers and the color are
+  placeholders.
 
 ### `ManagedSpellPayload.cs`
 
@@ -233,7 +264,8 @@ on the bubble. `ManagedSpellPayloads` is the table, indexed by payload id, with
 
 **Decisions:**
 - Load is on the same scale as a vessel's rating, and flight costs only the part above
-  the rating. The numbers are placeholders: fireball 6, ice 3, against a rating of 10.
+  the rating. The numbers are placeholders: fireball 6, ice 3, seeker 6, against a
+  rating of 10.
 - For now the id equals the spell kind. The id is what the impact carries, so a cook
   result from the outcome classifier can replace the table without touching flight.
 - An id the table does not have has load 0.
@@ -243,7 +275,8 @@ on the bubble. `ManagedSpellPayloads` is the table, indexed by payload id, with
 **What it does:** Shots in flight as parallel arrays of plain values, with no class
 reference per shot. `Plan` updates a shot's velocity and returns the segment it wants
 to fly. The caller sweeps that segment. `Commit` moves the shot, burns its SP and says
-whether it is still flying, collapsed or at its flight cap.
+whether it is still flying, collapsed or at its flight cap. `Steer` turns a shot toward
+a direction the caller gives it, before `Plan`.
 
 **Decisions:**
 - The module knows nothing about spell definitions, payloads or physics. Every number
@@ -261,6 +294,88 @@ whether it is still flying, collapsed or at its flight cap.
   cast collapses on its first step.
 - Collision stays with the caller, because the sweep needs Unity Physics and the caster
   owns the rule about its own colliders.
+- `Steer` rotates a shot's velocity toward a desired direction by at most its turn rate
+  times the step, and keeps the speed. It returns the radians turned. A shot with turn
+  rate 0 does not turn, whatever it is asked. The module does not choose the direction,
+  so homing, a waypoint or a scripted curve all use the same call.
+- Turning costs SP: radians turned times `SteerBurnPerRadian`. The cost is held back and
+  charged in the next `Commit` with the hold and drive cost, so the point where the SP
+  runs out inside a step accounts for the turn. A 90 degree turn burns 15.7 SP at 10 per
+  radian.
+- A turn straight back has no rotation axis, because the two directions are parallel.
+  `Steer` picks an axis square to the heading, so the shot still turns.
+- A shot carries `Target`, an int the module never reads. The caster puts a lock id in
+  it, so a shot stays a record of plain values.
+
+### `ManagedSpellSeeker.cs`
+
+**What it does:** Decides what a steered spell flies toward and remembers it for the life
+of the shot. A lock is a living target found in a cone around the aim, or, when the cone
+is empty, the point the player aimed at. A shot keeps only the id of its lock, and asks
+`TryGetPoint` each step where to turn.
+
+**Decisions:**
+- `Lock` scans a sphere of `SeekRange` around the shot point with
+  `Physics.OverlapSphereNonAlloc`, so the scan allocates nothing. The buffer holds 32
+  colliders, and any beyond that are not considered.
+- A candidate must have an `IManagedDamageable` that is alive, sit between 0.75 m and the
+  range away, and lie inside the cone. The one nearest the aim line wins, and a tie goes
+  to the closer one. The caster's own colliders are skipped.
+- A candidate must also be in line of sight, checked once with `Physics.Linecast`. The
+  first thing the line meets has to be the target, or the caster's own body, because the
+  shot point sits near it. A target behind a wall is not locked.
+- With no candidate the lock is the fallback point, which the caster passes as the
+  crosshair target. That gives the rule "the target if there is one, else the crosshair
+  point".
+- A lock follows its target each step while it is alive. When the target dies or is
+  destroyed the lock keeps its last point, so the shot flies to where it was.
+- A point lock, and the last point of a dead target, is dropped once the shot has flown
+  past it. This is judged from the shot's heading: when the point is behind it, the lock
+  is marked passed and stays passed. A living target is never dropped this way, so a
+  shot that overshoots a living target turns back for it.
+- Locks live in a slot table with a free list, and the table doubles when it is full. An
+  id is the slot index plus one, so 0 means no lock. `Release` returns the slot, and
+  releasing an id twice or an unknown id does nothing.
+- The seeker holds no reference to flight or to the caster, only the transform it is
+  told to ignore.
+
+### `ManagedVesselTypes.cs`
+
+**What it does:** `ManagedVesselKind` (Bottle, Orb), `ManagedVesselDraw` and
+`ManagedLoadoutEntry`.
+
+**Decisions:**
+- `ManagedVesselDraw` is what one cast takes out of a vessel: the SP the shot starts with,
+  the SP of a full vessel of that kind, and the vessel's rating. The capacity travels with
+  the draw so the drive cost can be worked out from a full vessel and not from the SP drawn.
+  That is what makes a half charged orb fly half as far.
+- `ManagedLoadoutEntry` is the Inspector record for one belt slot: spell, vessel kind,
+  bottle count and orb recharge seconds. The SP and the rating of the vessel come from
+  the spell's definition until crafted vessels exist.
+
+### `ManagedVesselBelt.cs`
+
+**What it does:** The vessels the player can cast from, one per slot. A bottle slot holds a
+count of full bottles. An orb slot holds one orb. `TryDraw` takes what one cast uses,
+`Tick` charges the orbs, `Refill` restores everything, and `Describe` gives a short line
+for the overlay.
+
+**Decisions:**
+- Bottles are single-use. Each cast uses one full bottle, and a slot with none left stays
+  in place and cannot cast.
+- An orb keeps its spell and its payload, and only its SP changes. A cast takes all the SP
+  the orb has, however little, and leaves it at 0. The SP a shot does not burn is not
+  given back, so a shot that hits early wastes the rest. An orb at 0.01 SP or less cannot
+  cast.
+- `Tick(dt)` charges an orb in a straight line, capacity divided by its recharge seconds,
+  and stops at full. The step is game time: the caster passes the scaled frame time, so
+  charging pauses with the time scale, and waiting or sleeping could pass a larger step.
+  The default of 45 seconds from empty is a placeholder.
+- The belt holds plain values and knows nothing about spell definitions, flight or
+  physics. Another carrier, such as an inventory package, can fill it with `Set` and read
+  it with the `...At` getters.
+- A slot index outside the belt does nothing and never throws, and a belt always has at
+  least one slot.
 
 ### `ManagedSpellVfxMaterials.cs`
 
@@ -272,10 +387,11 @@ objects.
 ### `ManagedSpellCaster.cs`
 
 **What it does:** Casts the selected spell. A cast leaves the shot point and flies to
-the crosshair target, powered by the SP of a stand-in vessel. Each step sweeps a sphere
-from the old position to the new one and raises `Impact` on a hit, or when the bubble
-collapses. Flight state lives in `ManagedSpellFlight`. Shots are drawn through one
-`ManagedSphereBatch`, with no GameObject per shot.
+the crosshair target, powered by the SP of a vessel drawn from the belt. Each step
+sweeps a sphere from the old position to the new one and raises `Impact` on a hit, or
+when the bubble collapses. Flight state lives in `ManagedSpellFlight` and vessel state
+in `ManagedVesselBelt`. Shots are drawn through one `ManagedSphereBatch`, with no
+GameObject per shot.
 
 **Decisions:**
 - The aim ray goes through the screen center of the main camera. The first collider
@@ -307,6 +423,27 @@ collapses. Flight state lives in `ManagedSpellFlight`. Shots are drawn through o
   caster. It is cleared at `SubsystemRegistration`, because static state survives a
   play session when domain reload is off.
 - The batch is filled and drawn in `LateUpdate`.
+- A spell that `Seeks` locks at the cast. `ManagedSpellSeeker.Lock` is given the shot
+  point, the aim direction, the crosshair point as the fallback, the spell's range and
+  cone, the hit mask and the caster's transform. The lock id goes into the spawn, and
+  the log says what was locked onto.
+- Each step, `SteerShot` runs before `Plan`. It asks the seeker for the point, skips
+  when the shot is within 0.5 m of it, because a direction from almost no distance is
+  unstable, and otherwise calls `Steer`. Sweeping and hits are unchanged, so a curving
+  shot still stops on the first collider it meets.
+- Every way a shot ends goes through `Retire`, which releases the lock and then removes
+  the shot. A lock cannot leak from one ending path and not another.
+- The belt is built in `Awake` from the serialized loadout. An empty array uses the
+  default: a fireball orb, five ice bottles and a seeker orb. An entry whose spell has no
+  definition gets no slot, so a key never points at a hole. Keys 1 to 3 and Tab pick
+  belt slots in order.
+- A cast draws from the belt first. When the slot cannot give anything the cast logs why
+  and the next try waits 0.3 s, so a held fire button does not flood the log. The draw
+  comes before the check for a shot point inside a wall, so a cast that explodes in the
+  hand still uses its vessel. The log also says how much SP the cast started with.
+- Orbs charge in `Update` with the frame's game time.
+- `RefillVessels` is a context menu entry on the component, for testing. It is also the
+  place a cheat would call.
 
 ### `ManagedSpellDamage.cs`
 
@@ -378,6 +515,8 @@ and draws the debug overlay with the module toggles and the selected spell.
   is no world.
 - The crosshair is a small white cross at the screen center. It marks the point that
   the caster aims at, so it must stay at the center.
+- The spell hint in the overlay lists keys 1, 2 and 3 and the state of the selected
+  vessel, such as `orb 62 percent` or `bottles 4 of 5`.
 
 ### `ManagedChemistryTypes.cs`
 
@@ -617,12 +756,12 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   flight cap, swap-remove and growth. The harness is not in the repo. The five Magic
   files also compile under C# 9 against the stubs. Not verified in the Editor: the
   sweep, the draw path and the dimming ran only as a compile.
-- The stand-in vessel is full at every cast. Nothing is consumed or recharged yet, so
-  the rule that bottles are single-use and orbs are rechargeable is not enforced.
+- The stand-in vessel was full at every cast in this change, so nothing was consumed or
+  recharged. See the Vessels subsection.
 - The payload loads are placeholders. The fireball and ice have the same range as before
   because both sit under the rating.
-- Steering is not built. The thrown row exists in the definition and in flight, and no
-  spell uses it.
+- Steering was left for the next change, see the Steering subsection. The thrown row
+  exists in the definition and in flight, and no spell uses it.
 - `_detonateAtRangeEnd` is gone. A scene that serialized it drops the value without an
   error.
 - The chemistry field and the damage code still choose by kind. `PayloadId` is carried
@@ -632,6 +771,87 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   `ManagedSpellDefinition.cs` gained the flight and vessel fields, `CreateSpawn` and the
   derived values, and `ManagedSpellCaster.cs` flies through `ManagedSpellFlight`.
   `ManagedCameraRig` reads `ShotCount` as before.
+
+### Steering (`ManagedSpellSeeker.cs`, `ManagedSpellFlight.cs`, `ManagedSpellCaster.cs`)
+
+- Asked for: homing and curved flight on the SP drive. The lock is the target if there
+  is one and the crosshair point if not, turning costs SP per radian, and the first
+  steered spell is a third placeholder spell so it can be felt in the game.
+- Now: spell 3, the Seeker, locks at the cast and turns toward its lock each step at a
+  limited rate. A turn burns SP in proportion to the angle, so a shot that chases a fast
+  target flies a shorter way than a straight one. The design is in `magic.md`.
+- Found in testing: a shot locked on an open-air point flew past it, turned back and
+  circled it until the SP ran out. It collapsed at 34.6 m of a 70 m flight. The seeker
+  now marks a point as passed once the shot's heading points away from it, and the shot
+  flies on straight.
+- Checked with the console harness against the `UnityEngine` stubs, with a fake physics
+  world for the seeker: 46 checks pass. They cover the turn rate cap, 15.7 SP for a 90
+  degree turn, the collapse point counting a turn, swap-remove keeping the steering
+  fields, the lock rules (nearest the aim line, dead, outside the cone, behind a wall,
+  own collider, out of range), slot growth and reuse, a shot that hits a walking target,
+  a dead target, and a shot with no target that collapses at the end of its range. A
+  mutation check with the passed latch removed fails three of them. The Managed files
+  also compile under C# 9 against the stubs. The harness is not in the repo.
+- Not verified in the Editor: how `OverlapSphereNonAlloc` and `Linecast` behave with real
+  colliders and layers, whether NPC colliders sit in the hit mask, key 3, and the draw
+  path of the third spell.
+- A shot that misses a living target turns back for it until it hits, or the SP runs out.
+- Line of sight is checked at the cast only. After that the shot turns toward the target
+  through walls, and the sweep stops it on the first collider like any other shot.
+- The shot leaves along the aim direction and turns from there. A launch angle that
+  curves from the hand toward the crosshair is not built.
+- The stand-in vessel was still full at every cast in this change, see the Vessels
+  subsection. The Seeker name, its numbers and its color are placeholders.
+- The ECS stack is unchanged. The cheat code manager is not started, and `CreateSpawn`
+  is where a cheat would change a spell's numbers.
+- Edits to existing Managed files: `ManagedSpellTypes.cs` gained `Seeker`,
+  `ManagedSpellDefinition.cs` gained the steering fields, the Seeker row and the third
+  slot, `ManagedSpellPayload.cs` gained a load for it, `ManagedSpellFlight.cs` gained
+  `Target`, the turn fields and `Steer`, `ManagedSpellCaster.cs` locks, steers and
+  retires, `ManagedCharacterInput.cs` reads key 3, and `ManagedCameraRig.cs` lists it in
+  the hint.
+
+### Vessels (`ManagedVesselBelt.cs`, `ManagedVesselTypes.cs`, `ManagedSpellDefinition.cs`, `ManagedSpellCaster.cs`)
+
+- Asked for: bottles that are used up and orbs that recharge slowly, so the player plans a
+  fight. An orb keeps its payload and only its SP recharges. SP a shot does not burn is
+  lost with it. An orb can cast partly charged and flies a shorter way. Reuse the studio
+  packages where they fit.
+- Now: the caster owns a belt of vessels, drawn from on every cast. A bottle gives one full
+  charge and is used up. An orb gives all the SP it has and is empty after, and charges
+  back over 45 seconds of game time. A shot starts with the SP drawn, and its burn rate is
+  worked out from a full vessel, so a 40 percent orb flies 30 m of the fireball's 75.
+- Packages checked, not used. Inventorizz (`unity-chem-sim`) is a slot container with a
+  lock, drag and drop adapters and mdix authored content. Its slot rows hold an item id and
+  a count only, so the SP of an orb cannot live there. The SP stays in the belt, and an
+  inventory bridge would map slot item ids to belt vessels. The package is not in this
+  project: the manifest lists Alembic only, and it also needs `com.midmanstudio.dragndrop`
+  and the mdix package. A package that fails to resolve blocks every system, so the Managed
+  stack takes no dependency on it for now. `MID_Logger`, the level gated logger in the
+  utilities package of `MidManStudio_Unity`, is not in the project either, so the Magic
+  files still log through `Debug.Log` with a `[GTG Magic]` prefix. Both would be added with
+  a `file:` entry in `Packages/manifest.json`, the way Alembic is.
+- Checked with the console harness against the `UnityEngine` stubs: 64 checks pass, 18 of
+  them new. They cover bottle counts, an orb emptied by a cast, recharge at three frame
+  rates, a partly charged orb flying 30 m at three frame rates, the rating changing the
+  overload cost, refill, and out of range slots. Seven deliberate breakages, such as a
+  bottle that is not used up or a drive cost taken from the SP drawn, each fail at least
+  one check. The Managed files also compile under C# 9 against the stubs. The harness is
+  not in the repo.
+- Not verified in the Editor: the Inspector array of loadout entries and its default, the
+  context menu entry, and the overlay text.
+- The belt is filled from the Inspector loadout at every play. Nothing is saved, and there
+  is no way to gain bottles in the game yet, only Refill vessels.
+- The recharge time of 45 seconds, the five bottles and the vessel numbers are placeholders.
+  The vessel numbers still come from the spell's definition.
+- Waiting does not skip time, so it does not recharge orbs. Whether it should is open in
+  `magic.md`.
+- The ECS stack is unchanged. The cheat code manager is not started. `RefillVessels` and
+  `CreateSpawn` are where a cheat would act.
+- Edits to existing Managed files: `ManagedSpellDefinition.cs` gained `DriveSpPerMeterFor`,
+  `HoldSpPerSecondFor(load, rating)` and `IndexOf`, and `CreateSpawn` takes a vessel draw.
+  `ManagedSpellCaster.cs` builds and ticks the belt and draws on every cast.
+  `ManagedCameraRig.cs` shows the vessel in the overlay.
 
 ### `ManagedChemicalHazardField.cs`
 

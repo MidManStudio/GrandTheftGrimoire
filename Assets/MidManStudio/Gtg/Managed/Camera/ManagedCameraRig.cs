@@ -239,7 +239,8 @@ namespace MidManStudio.Gtg.Managed.Camera
             if (_caster != null)
             {
                 _text.Append("Spell: ").Append(_caster.SelectedSpell.DisplayName)
-                    .Append("  (1, 2, Tab or d-pad)  Shots in flight ").Append(_caster.ShotCount).Append('\n');
+                    .Append(" (").Append(_caster.SelectedVesselText).Append(')')
+                    .Append("  (1, 2, 3, Tab or d-pad)  Shots in flight ").Append(_caster.ShotCount).Append('\n');
             }
 
             _text.Append("Cursor ").Append(Cursor.lockState).Append("  (Esc releases, click captures)\n");
