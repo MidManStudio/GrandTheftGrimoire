@@ -20,12 +20,14 @@ namespace UnityEngine
         public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; }
         public static Vector3 zero { get { return new Vector3(0, 0, 0); } }
         public static Vector3 up { get { return new Vector3(0, 1, 0); } }
+        public static Vector3 right { get { return new Vector3(1, 0, 0); } }
         public static Vector3 operator +(Vector3 a, Vector3 b) { return new Vector3(a.x + b.x, a.y + b.y, a.z + b.z); }
         public static Vector3 operator -(Vector3 a, Vector3 b) { return new Vector3(a.x - b.x, a.y - b.y, a.z - b.z); }
         public static Vector3 operator -(Vector3 a) { return new Vector3(-a.x, -a.y, -a.z); }
         public static Vector3 operator *(Vector3 a, float f) { return new Vector3(a.x * f, a.y * f, a.z * f); }
         public static Vector3 operator /(Vector3 a, float f) { return new Vector3(a.x / f, a.y / f, a.z / f); }
         public static float Dot(Vector3 a, Vector3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+        public static Vector3 Cross(Vector3 a, Vector3 b) { return new Vector3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
         public float sqrMagnitude { get { return x * x + y * y + z * z; } }
         public float magnitude { get { return (float)Math.Sqrt(sqrMagnitude); } }
         public Vector3 normalized { get { float m = magnitude; return m > 1e-6f ? this / m : zero; } }
@@ -87,6 +89,9 @@ namespace UnityEngine
         public static float Min(float a, float b) { return a < b ? a : b; }
         public static int Min(int a, int b) { return a < b ? a : b; }
         public static float Cos(float f) { return (float)Math.Cos(f); }
+        public static float Sin(float f) { return (float)Math.Sin(f); }
+        public static float Acos(float f) { return (float)Math.Acos(f); }
+        public static float Abs(float f) { return f < 0f ? -f : f; }
         public static int RoundToInt(float f) { return (int)Math.Round(f, MidpointRounding.ToEven); }
         public static float Sqrt(float f) { return (float)Math.Sqrt(f); }
         public static float DeltaAngle(float a, float b)

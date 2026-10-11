@@ -40,6 +40,12 @@ namespace MidManStudio.Gtg.Managed.Chemistry
             return _hazards[index];
         }
 
+        /// <summary>Removes every live hazard at once. Their views disappear on the next frame.</summary>
+        public void Clear()
+        {
+            _hazards.Clear();
+        }
+
         private void Awake()
         {
             _batch = new ManagedSphereBatch(_maxHazards * 2, gameObject.layer, _forceCombinedMesh, "hazards");

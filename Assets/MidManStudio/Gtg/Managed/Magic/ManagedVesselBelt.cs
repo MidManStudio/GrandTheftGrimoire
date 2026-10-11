@@ -114,6 +114,36 @@ namespace MidManStudio.Gtg.Managed.Magic
             return s.Capacity > 0f ? Math.Min(1f, s.Sp / s.Capacity) : 0f;
         }
 
+        /// <summary>SP an orb can still take before it is full. Zero for a bottle slot or an unused slot.</summary>
+        public float MissingSpAt(int slot)
+        {
+            if (!IsInUse(slot) || _slots[slot].Kind != ManagedVesselKind.Orb)
+            {
+                return 0f;
+            }
+
+            return Math.Max(0f, _slots[slot].Capacity - _slots[slot].Sp);
+        }
+
+        /// <summary>
+        /// Puts SP into an orb, up to its capacity, and returns how much it took. The rest is lost.
+        /// A bottle slot, an unused slot or a zero amount takes nothing.
+        /// </summary>
+        public float Charge(int slot, float sp)
+        {
+            float room = MissingSpAt(slot);
+            if (!(sp > 0f) || room <= 0f)
+            {
+                return 0f;
+            }
+
+            float taken = Math.Min(sp, room);
+            Slot s = _slots[slot];
+            s.Sp = Math.Min(s.Capacity, s.Sp + taken);
+            _slots[slot] = s;
+            return taken;
+        }
+
         public bool CanDraw(int slot)
         {
             if (!IsInUse(slot))

@@ -103,6 +103,18 @@ is used up by one cast. An orb is emptied by one cast and charges back slowly wi
 time. The caster component has a context menu entry, Refill vessels, that restores
 every orb and every bottle count, for testing.
 
+SP is also money. The player carries a purse of gold, silver and SP crystals, and the
+overlay shows it under the spell line. R, or the west button of a gamepad, uses the
+smallest crystal that fills the selected orb, or the largest one held when none does. The
+orb fills at once and the crystal is used up. The caster adds a `ManagedPlayerWallet` to
+its own object, where the starting purse is set. Nothing is saved.
+
+In the Editor and in development builds a cheat manager starts by itself, so the scene
+needs no setup for it. The backquote key opens a panel with every cheat, and a click on
+a button uses it. A code typed at any time, with or without the panel, uses it too. The
+codes are listed under `ManagedBuiltInCheats.cs`. A toggle stays on until it is switched
+off, a full scene load or the end of play. A release build leaves the cheats out.
+
 Draw path: shots and hazards are drawn with `Graphics.DrawMeshInstanced` when the
 GPU supports instancing and `MidManStudio/Gtg/SphereUnlit` compiled, otherwise as
 one combined mesh. The Console prints the chosen path at Play start, one line for
@@ -130,6 +142,8 @@ Unity creates `.meta` files for the new scripts on first import. Commit them.
 | SP drive, payload load, collapse at zero SP | design notes in `magic.md` | done, `ManagedSpellFlight` |
 | Steering: homing and curved flight, third spell | design notes in `magic.md` | done, `ManagedSpellSeeker` and `Steer` |
 | Vessels: single-use bottles, rechargeable orbs | design notes in `magic.md` | done, `ManagedVesselBelt` |
+| Currency: gold, silver and SP crystals | design notes in `magic.md` | done, `ManagedWallet` and `ManagedVesselCharging` |
+| Cheat code manager | backlog | done, Editor and development builds only, `ManagedCheatManager` |
 | Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
 | Ice recipe and Freeze hazard | backlog | done |
 | Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
@@ -172,6 +186,8 @@ Gravity, Cast, plus `All`.
   move.
 - The frame also carries the picked spell slot (keys 1, 2 and 3) and a cycle step (Tab,
   d-pad left and right), which the caster reads.
+- `UseCrystalPressed` is true the frame R or the west button of a gamepad was pressed.
+  The caster reads it to recharge the selected orb.
 
 ### `ManagedCharacter.cs`
 
@@ -191,6 +207,9 @@ frame it reads the input and runs look, walk, jump and gravity, then calls `Move
   collider is disabled before it is destroyed, because `Destroy` runs at the end of
   the frame and the controller would collide with its own body on the first move.
 - Execution order is -50, so the caster and the rig read this frame's input.
+- `MoveSpeedScale` multiplies the walking speed and is 1 by default. Whatever wants to
+  change how fast the character walks sets it, a cheat today and an effect later, and
+  nothing else in the character changes. A negative value counts as 0.
 
 ### `ManagedSpellTypes.cs`
 
@@ -243,8 +262,12 @@ chemistry recipes.
   shot starts with the SP drawn. The drive cost per meter comes from the vessel's
   capacity (`DriveSpPerMeterFor`), not from the SP drawn, so a half charged orb burns
   at the normal rate and flies half as far. The overload cost uses the vessel's rating
-  (`HoldSpPerSecondFor(load, rating)`). A cheat that changes a spell's numbers plugs in
-  here.
+  (`HoldSpPerSecondFor(load, rating)`).
+- `CreateSpawn` also takes a `ManagedSpellModifiers`, which is where a cheat or a later
+  effect changes a spell. The range scale multiplies the SP the shot starts with and the
+  flight cap, so a scale of 2 flies twice as far and a scale under 1 flies less. The
+  steer cost scale multiplies the SP per radian. A negative scale counts as 0. The call
+  without modifiers still works and gives the same shot as neutral ones.
 - `IndexOf(kind)` gives the table index of a kind. A shot carries that index as its
   profile, because a belt slot is no longer the same as a table row.
 - `TurnDegreesPerSecond`, `SteerSpPerRadian`, `SeekRange` and `SeekConeHalfAngleDegrees`
@@ -357,8 +380,8 @@ is empty, the point the player aimed at. A shot keeps only the id of its lock, a
 
 **What it does:** The vessels the player can cast from, one per slot. A bottle slot holds a
 count of full bottles. An orb slot holds one orb. `TryDraw` takes what one cast uses,
-`Tick` charges the orbs, `Refill` restores everything, and `Describe` gives a short line
-for the overlay.
+`Tick` charges the orbs, `MissingSpAt` and `Charge` put SP into one, `Refill` restores
+everything, and `Describe` gives a short line for the overlay.
 
 **Decisions:**
 - Bottles are single-use. Each cast uses one full bottle, and a slot with none left stays
@@ -374,8 +397,87 @@ for the overlay.
 - The belt holds plain values and knows nothing about spell definitions, flight or
   physics. Another carrier, such as an inventory package, can fill it with `Set` and read
   it with the `...At` getters.
+- `Charge(slot, sp)` fills an orb up to its capacity and returns what it took. The rest
+  is lost. `MissingSpAt(slot)` is the room an orb has left. A bottle slot, an unused slot,
+  a zero, negative or NaN amount takes nothing, and has no room. `ManagedVesselCharging`
+  uses both.
 - A slot index outside the belt does nothing and never throws, and a belt always has at
   least one slot.
+
+### `ManagedCrystal.cs`
+
+**What it does:** `ManagedCrystalSize` (Small, Medium, Large) and `ManagedCrystals`,
+which gives the SP value and the name of a size.
+
+**Decisions:**
+- SP is both what powers a vessel and a currency, and a crystal is how it is carried, as a
+  soul stone is in Skyrim. The sizes are fixed, so a crystal is a count per size and never
+  a loose amount.
+- The values are 25, 100 and 250 SP. They are placeholders. A medium crystal equals the
+  SP of a full orb of the current spells, so one fills an empty orb.
+- An unknown size is worth 0 SP and is named "unknown", so a bad value does nothing.
+
+### `ManagedWallet.cs`
+
+**What it does:** Gold, silver and crystals as plain values, with no Unity types: `AddGold`,
+`AddSilver`, `CanAfford`, `TrySpend`, `AddCrystals`, `TryTakeCrystal`, `TryTakeCrystalFor`
+and `Describe`.
+
+**Decisions:**
+- One silver total sits underneath. 100 silver make a gold, and `Gold` and `Silver` are
+  how that total is shown. There is no coin to break or give change for, so paying 30
+  silver from 1 gold leaves 70 silver.
+- A price is a gold part and a silver part. `TrySpend` fails whole and changes nothing
+  when a part is negative, the price overflows or the total is too small.
+- `AddGold` and `AddSilver` ignore a zero or negative amount and an add that would
+  overflow, and `AddCrystals` does the same for counts and unknown sizes, so a bad call
+  cannot leave the wallet in a wrong state.
+- `TryTakeCrystalFor(missing, out sp)` picks the crystal for a gap: the smallest one that
+  covers it, so little is wasted, or the largest one held when none does. `sp` is what the
+  crystal was worth. Nothing changes when no crystal is held or the gap is not above 0,
+  NaN included.
+- `Describe` gives a line such as `3 gold 50 silver, crystals S2 M1 L0` for the overlay.
+- No shop or price list reads the wallet yet.
+
+### `ManagedPlayerWallet.cs`
+
+**What it does:** Holds the `ManagedWallet` as a component, so the overlay, the caster and
+the cheats can find it, and carries the starting purse for testing: 3 gold, 50 silver, two
+small crystals, one medium crystal and no large one. The numbers are Inspector fields.
+
+**Decisions:**
+- The caster adds this component to its own object when it has none, so a scene needs no
+  wiring.
+- The wallet is built on first use, so a read before `Awake` still works.
+- Nothing is saved. Every play starts from the starting purse.
+
+### `ManagedSpellModifiers.cs`
+
+**What it does:** Four values the caster applies on top of the spell tables:
+`CooldownScale`, `RangeScale`, `SteerCostScale` and `InfiniteVessels`. All are neutral by
+default. `IsNeutral` and `Reset` read and clear them.
+
+**Decisions:**
+- The caster owns one and passes it to `CreateSpawn`. Anything that changes how spells
+  behave, a cheat today and an item or an effect later, writes a field here, and no spell,
+  flight or vessel code needs to know who did.
+- The range scale multiplies the SP a shot starts with and its flight cap, and leaves the
+  burn rate alone, so 2 gives twice the distance.
+- The cooldown scale and the steer cost scale count a negative value as 0.
+- `InfiniteVessels` is read by the caster, which refills the belt before every draw.
+
+### `ManagedVesselCharging.cs`
+
+**What it does:** `ManagedVesselCharging.Recharge(belt, slot, wallet, out crystalSp, out
+taken)` and the result enum `ManagedChargeResult` (Charged, NotAnOrb, Full, NoCrystal).
+
+**Decisions:**
+- The soul gem rule: a crystal fills an orb at once and is used up. The part that does not
+  fit is lost, the same as SP a shot does not burn.
+- The checks run in this order: the slot holds an orb, the orb has room, the wallet has a
+  crystal. A full orb keeps the crystal, and nothing changes unless a crystal is used.
+- It is a function of its own with no state, so a shop, a pickup or a menu can call it the
+  way the caster does. The caster turns the result into a log line.
 
 ### `ManagedSpellVfxMaterials.cs`
 
@@ -442,8 +544,19 @@ GameObject per shot.
   comes before the check for a shot point inside a wall, so a cast that explodes in the
   hand still uses its vessel. The log also says how much SP the cast started with.
 - Orbs charge in `Update` with the frame's game time.
-- `RefillVessels` is a context menu entry on the component, for testing. It is also the
-  place a cheat would call.
+- `RefillVessels` is a context menu entry on the component, for testing, and the refill
+  cheat calls it. `AdvanceTime(seconds)` charges the orbs as if that much game time had
+  passed, and the time skip cheats call it.
+- The caster owns a `ManagedSpellModifiers`, given out as `Modifiers`, and passes it to
+  `CreateSpawn` on every cast. The cooldown after a cast is the spell's cooldown times
+  `CooldownScale`. With `InfiniteVessels` on, the belt is refilled before the draw, so
+  every cast finds a full vessel and uses nothing up.
+- `Awake` gets the `ManagedPlayerWallet` on the same object or adds one. `Wallet` gives
+  the purse to the overlay and the cheats.
+- R calls `UseCrystal`, which hands the selected slot and the purse to
+  `ManagedVesselCharging.Recharge` and logs the outcome: how much the orb took and how
+  much of the crystal was lost, or why nothing happened. Like firing, it only works while
+  the Cast module is on.
 
 ### `ManagedSpellDamage.cs`
 
@@ -517,6 +630,137 @@ and draws the debug overlay with the module toggles and the selected spell.
   the caster aims at, so it must stay at the center.
 - The spell hint in the overlay lists keys 1, 2 and 3 and the state of the selected
   vessel, such as `orb 62 percent` or `bottles 4 of 5`.
+- A purse line under the spell line shows gold, silver and crystals by size, and names
+  the crystal key.
+- `CursorCaptureBlocked` is a static flag. While it is true a click does not capture
+  the cursor, so a click on a panel button does not also lock the mouse. The cheat
+  panel sets it while it is open. The rig knows nothing about the cheats. The flag is
+  cleared at `SubsystemRegistration`, because static state survives a play session when
+  domain reload is off.
+
+### `IManagedCheatHost.cs`
+
+**What it does:** Everything a cheat is allowed to touch: the spell modifiers, the wallet,
+refilling vessels, skipping time, the time scale, invulnerability, healing, the walk speed
+scale, killing NPCs, clearing hazards, and logging.
+
+**Decisions:**
+- The built-in cheats are written against this interface and never against the scene, so
+  they are tested without one and another host can stand in.
+- A method that cannot do its job returns false, null or 0 and logs why. The registry then
+  leaves a toggle off.
+- The whole `Cheats/` folder is inside `#if UNITY_EDITOR || DEVELOPMENT_BUILD`, so a release
+  build compiles it to nothing. The `.meta` files stay, so GUIDs do not change between
+  build kinds.
+
+### `ManagedCheat.cs`
+
+**What it does:** One cheat: code, name, group, description, an apply step and an optional
+revert step. `ManagedCheat.Toggle` makes one that stays on, `ManagedCheat.OneShot` one that
+runs each time it is used.
+
+**Decisions:**
+- A cheat with a revert step is a toggle, so every toggle can be switched back. A one-shot
+  has none.
+- `On` is set only by the registry and lives in memory. Nothing is saved, so every play
+  starts with every cheat off.
+
+### `ManagedCheatRegistry.cs`
+
+**What it does:** The list of cheats, the buffer of typed characters, and the on and off
+bookkeeping: `Add`, `Find`, `Feed`, `Activate`, `RevertAll` and `ClearBuffer`. It has no
+Unity types, so the panel, the typed codes and the tests all drive it the same way.
+
+**Decisions:**
+- A code is 4 to 24 characters of a to z and 0 to 9. `Add` refuses a code that appears
+  inside another, in either direction, because typing the longer one would trigger the
+  shorter one on the way. It also refuses a repeated code and a null cheat.
+- `Feed` lowercases a character, ignores anything that is not a letter or a digit, keeps
+  the last 24 characters and forgets a half typed code after 2 seconds of silence. A hit
+  clears the buffer, so a code cannot borrow letters from the one before it. The caller
+  passes the time, so tests need no clock and the manager can pass unscaled time, which
+  keeps slow motion from stretching the gap.
+- `Activate` switches a toggle that is on off, and otherwise runs the apply step. A toggle
+  turns on only when the apply step returned true.
+- `RevertAll` switches every toggle that is on back off. The manager runs it on a full
+  scene load and when it goes away.
+
+### `ManagedBuiltInCheats.cs`
+
+**What it does:** The cheats that ship, 16 codes in 5 groups. `CreateRegistry` builds a
+registry that holds them.
+
+| Code | Group | Kind | Effect |
+|---|---|---|---|
+| `loadup` | Vessels and spells | run | Fills every orb and restores every bottle. |
+| `endlessmagic` | Vessels and spells | toggle | A cast never uses a vessel up. |
+| `quickcast` | Vessels and spells | toggle | No cooldown between casts. |
+| `longshot` | Vessels and spells | toggle | Shots fly twice as far on the same vessel. |
+| `freesteer` | Vessels and spells | toggle | Steering costs no SP. |
+| `godmode` | Player | toggle | The player takes no damage. |
+| `healme` | Player | run | Full health. A dead player is not revived. |
+| `fastfeet` | Player | toggle | The player walks twice as fast. |
+| `skipshort` | Time | run | Orbs charge as if 15 seconds of game time passed. |
+| `skiplong` | Time | run | Orbs charge as if 60 seconds of game time passed. |
+| `slowmotion` | Time | toggle | Game time runs at a quarter speed. |
+| `wipenpcs` | World | run | Kills every living NPC. |
+| `cleanup` | World | run | Removes every chemical hazard. |
+| `givegold` | Money | run | Adds 10 gold. |
+| `givesilver` | Money | run | Adds 50 silver. |
+| `givecrystals` | Money | run | Adds 3 crystals of each size. |
+
+**Decisions:**
+- Every toggle changes one thing, and its off step puts that thing back to normal, so
+  `RevertAll` can undo all of them. Each modifier field belongs to one cheat, so two toggles
+  never fight over a value. For the same reason slow motion is the only cheat on game time,
+  and there is no fast forward toggle.
+- The time skips and the toggles that need the caster fail, and stay off, when the scene
+  has none. `wipenpcs` and `cleanup` count as failed when there was nothing to do, so the
+  message says so.
+- `CreateRegistry` throws when a code breaks the registry rules, so a typo shows up in the
+  first test run.
+- The numbers sit in constants at the top of the class. They are placeholders.
+- The time skips call the same `AdvanceTime` that waiting or sleeping would, so they test
+  the open question in `magic.md` about whether waiting recharges orbs.
+
+### `ManagedCheatSceneHost.cs`
+
+**What it does:** The cheat host for a running scene. It looks the caster, the character,
+the NPCs and the hazard fields up when a cheat needs them.
+
+**Decisions:**
+- It keeps a reference to the caster and to the character and nothing else besides the last
+  message. A reference to a destroyed object compares equal to null, so the host looks the
+  object up again, and a respawn does not leave it pointing at the old player.
+- `KillAllNpcs` deals each living NPC its current health and counts the ones that died. An
+  NPC that is invulnerable by design survives and is not counted.
+- `HealPlayer` does not revive. A dead player stays dead until a respawn.
+- `ClearHazards` clears every field in the scene and returns the total.
+- Messages go to the Console with a `[GTG Cheat]` prefix and are kept with their time, so
+  the panel can show the last one.
+
+### `ManagedCheatManager.cs`
+
+**What it does:** Feeds typed characters to the registry through `Keyboard.onTextInput`,
+opens and closes the panel with the backquote key, and draws a line of the cheats that are
+on while the panel is closed. It creates itself when play starts and survives scene loads.
+
+**Decisions:**
+- A manager that the scene already has, even a disabled one, stops the automatic one. A
+  second manager disables itself, as the NPC director does.
+- Opening the panel frees the cursor and sets `ManagedCameraRig.CursorCaptureBlocked`.
+  Closing it gives the cursor back only when the panel was the one that took it. The
+  dependency runs one way: the cheats know the camera rig, and the rig knows nothing about
+  the cheats.
+- A full scene load switches every toggle off and clears the typing buffer, because the
+  objects the toggles changed are replaced. An additive load does nothing. When the manager
+  goes away, at the end of play, it does the same, which also puts `Time.timeScale` back.
+- The manager follows `Keyboard.current` when the keyboard object changes.
+- The panel is IMGUI, like the overlay, so it needs no prefab or UI package. It sits at
+  the right, scrolls, and shows one button per cheat with its state (`[on]`, `[off]` or
+  `[run]`), its code and its description. The line for a closed panel shows the cheats that
+  are on and the last message for four seconds.
+- A code typed in the game also presses the game keys. See Fixes and Problems.
 
 ### `ManagedChemistryTypes.cs`
 
@@ -567,6 +811,9 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   and yellow when unconfirmed.
 - The field holds at most `_maxHazards` hazards. A new one drops the oldest.
 - No GameObject is created. Hazards are plain objects, drawn from `LateUpdate`.
+- `Clear()` removes every live hazard at once. The clear hazards cheat calls it. The
+  drawing follows on the next frame, because the batch is rebuilt from the list every
+  `LateUpdate`.
 
 ### `IManagedDamageable.cs`
 
@@ -704,7 +951,8 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   against hand written `UnityEngine`, `UnityEditor` and `NavMeshAgent` stand-ins in
   `rust/npc/managed-npc-test/` and runs 645 checks, once on the managed fallback and
   once on the real library. The spell caster itself is replaced by a stub that has only
-  the `Impact` event.
+  the `Impact` event. The spell definition is compiled too, so the flight, payload,
+  modifier and vessel type files that it depends on are part of the project.
 
 ## Fixes and Problems
 
@@ -846,12 +1094,72 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   The vessel numbers still come from the spell's definition.
 - Waiting does not skip time, so it does not recharge orbs. Whether it should is open in
   `magic.md`.
-- The ECS stack is unchanged. The cheat code manager is not started. `RefillVessels` and
-  `CreateSpawn` are where a cheat would act.
+- The ECS stack is unchanged. `RefillVessels` and `CreateSpawn` are where a cheat acts, see
+  the entry for currency and cheats below.
 - Edits to existing Managed files: `ManagedSpellDefinition.cs` gained `DriveSpPerMeterFor`,
   `HoldSpPerSecondFor(load, rating)` and `IndexOf`, and `CreateSpawn` takes a vessel draw.
   `ManagedSpellCaster.cs` builds and ticks the belt and draws on every cast.
   `ManagedCameraRig.cs` shows the vessel in the overlay.
+
+### Currency and cheats (`Economy/`, `Cheats/`, `ManagedVesselCharging.cs`, `ManagedSpellModifiers.cs`)
+
+- Asked for: a cheat code manager that makes testing easier, with every cheat reset after
+  play, and currency: gold, silver and SP, where SP both powers things and is money, like
+  the soul stones in Skyrim. Decided with Su: cheats by typed codes plus a panel, in the
+  groups vessels and spells, player, time and world, with give-money cheats beside them. A
+  cheat stays on until it is switched off or play ends. Cheats exist in the Editor and in
+  development builds only. 100 silver make a gold. SP is carried as crystals of fixed sizes.
+  A crystal refills an orb at once and is used up. The scope is the wallet, the overlay, the
+  give-money cheats and the manager, with no shops and no price list yet.
+- Now: the player has a purse of gold, silver and crystals, shown in the overlay. R uses
+  the smallest crystal that fills the selected orb and the orb fills at once. The caster
+  carries a `ManagedSpellModifiers` that `CreateSpawn` reads, and the 16 cheats change the
+  modifiers, the character, the health, the NPCs and the hazard field through a host
+  interface. Codes are typed at any time. The backquote key opens a panel with every cheat.
+- Checked with the console harness against the `UnityEngine` stubs: 180 checks pass, 116
+  of them new. They cover the coin arithmetic and refused payments, crystal choice, room
+  in an orb and charging at every result, the modifiers changing a shot (twice the range
+  flies 150 m of the fireball's 75), the registry (code rules, typing with junk, gaps and
+  buffer clearing, toggles, one-shots, failures, `RevertAll`), every built-in cheat and
+  every code typed in full without setting off another, the real caster driven through R,
+  endless vessels and the cooldown, the scene host against a stub scene (damage, heal,
+  killing, clearing, respawn), the manager (typing, panel, cursor, scene loads, keyboard
+  swap, one manager only, bootstrap) and the rig (cursor gate, purse line). 28 deliberate
+  breakages each fail at least one check. The Economy, Magic, Cheats, input, camera rig and
+  health files compile under C# 9 against the stubs, with the real sources. The character
+  and the hazard field are stand-ins in the harness, because they need the Unity character
+  controller and Alembic. Their edits are one property and one method, read by eye. The
+  harness is not in the repo.
+- Not verified in the Editor: the panel drawing and clicks, typed input through
+  `Keyboard.onTextInput`, the backquote key, the cursor release and relock, R and the west
+  button, `FindFirstObjectByType` and `FindObjectsByType` in a real scene, the manager
+  creating itself at `AfterSceneLoad`, slow motion through `Time.timeScale`, and the purse
+  line in the overlay.
+- Placeholders: the crystal values (25, 100, 250), the starting purse, the cheat numbers
+  (twice the range, twice the speed, a quarter time, skips of 15 and 60 seconds, 10 gold,
+  50 silver, 3 crystals of each size) and the codes.
+- Known limits. A code typed in the game also presses the game keys: the letters of a code
+  can move the character, F fires, R uses a crystal, a digit picks a spell and Space jumps.
+  The toggles switch off on a full scene load and at the end of play, and not on a respawn
+  inside a scene, so a toggle can show on while a new player object is back to normal. A
+  release build has no cheats, and the wallet stays. The crystals and coin are not saved.
+  Nothing can spend gold or silver yet.
+- Packages: still none. Inventorizz and the logger of `MidManStudio_Unity` are not in the
+  project, so the cheats log through `Debug.Log` with a `[GTG Cheat]` prefix. An inventory
+  bridge for the crystals would need the package added to `Packages/manifest.json` first.
+- The managed NPC CI job had stopped compiling after the SP drive drop. `ManagedSpellDefinition.cs`
+  needs `ManagedShotSpawn` and `ManagedVesselDraw`, which live in files the project did
+  not include. The project now includes `ManagedSpellFlight.cs`, `ManagedSpellPayload.cs`,
+  `ManagedSpellModifiers.cs` and `ManagedVesselTypes.cs`, and the stubs gained `Mathf.Sin`,
+  `Mathf.Acos`, `Mathf.Abs`, `Vector3.Cross` and `Vector3.right`. All 645 checks pass on
+  the managed fallback. The run against the real native library was not repeated.
+- The ECS stack is unchanged.
+- Edits to existing Managed files: `ManagedVesselBelt.cs` gained `MissingSpAt` and `Charge`.
+  `ManagedSpellDefinition.cs` gained a `CreateSpawn` overload that takes modifiers.
+  `ManagedSpellCaster.cs` owns the modifiers and the purse, reads R and has `AdvanceTime`.
+  `ManagedCharacterInput.cs` reads R and the west button. `ManagedCharacter.cs` gained
+  `MoveSpeedScale`. `ManagedChemicalHazardField.cs` gained `Clear`. `ManagedCameraRig.cs`
+  gained `CursorCaptureBlocked` and the purse line.
 
 ### `ManagedChemicalHazardField.cs`
 

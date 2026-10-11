@@ -20,6 +20,10 @@
     <!-- Only the spell files that have no camera or rendering dependency. The caster itself is stubbed. -->
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellTypes.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDefinition.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellFlight.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellPayload.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellModifiers.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselTypes.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDamage.cs" />
     <!-- Shared with the ECS stack, no ECS dependency. -->
     <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Native/*.cs" />

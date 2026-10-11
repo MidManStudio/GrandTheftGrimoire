@@ -69,6 +69,9 @@ namespace MidManStudio.Gtg.Managed.CharacterController
         public float VerticalVelocity { get { return _verticalVelocity; } }
         public ManagedCharacterInputFrame Input { get { return _input; } }
 
+        /// <summary>Multiplies walking speed. 1 is normal. Something that wants to change how fast the character walks, a cheat or an effect, sets it.</summary>
+        public float MoveSpeedScale { get; set; } = 1f;
+
         /// <summary>Writable at runtime, so a stun or a cutscene only flips a flag.</summary>
         public ManagedCharacterFeature Features
         {
@@ -140,7 +143,7 @@ namespace MidManStudio.Gtg.Managed.CharacterController
             if (Has(ManagedCharacterFeature.Move))
             {
                 Quaternion yaw = Quaternion.Euler(0f, _yaw, 0f);
-                target = yaw * new Vector3(_input.Move.x, 0f, _input.Move.y) * _moveSpeed;
+                target = yaw * new Vector3(_input.Move.x, 0f, _input.Move.y) * (_moveSpeed * Mathf.Max(0f, MoveSpeedScale));
             }
 
             float acceleration = _acceleration * (_grounded ? 1f : _airControl);

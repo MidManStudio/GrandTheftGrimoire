@@ -25,6 +25,9 @@ namespace MidManStudio.Gtg.Managed.CharacterController
 
         /// <summary>Plus or minus one when the cycle button was pressed, otherwise zero.</summary>
         public int CycleSpell;
+
+        /// <summary>True the frame the button that uses a crystal on the selected orb was pressed.</summary>
+        public bool UseCrystalPressed;
     }
 
     /// <summary>Polls the local devices. Keyboard, mouse and gamepad are all read directly.</summary>
@@ -52,6 +55,7 @@ namespace MidManStudio.Gtg.Managed.CharacterController
                 if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) move.x -= 1f;
                 frame.JumpPressed |= keyboard.spaceKey.wasPressedThisFrame;
                 frame.FirePressed |= keyboard.fKey.wasPressedThisFrame;
+                frame.UseCrystalPressed |= keyboard.rKey.wasPressedThisFrame;
 
                 if (keyboard.digit1Key.wasPressedThisFrame) frame.SpellSlot = 1;
                 if (keyboard.digit2Key.wasPressedThisFrame) frame.SpellSlot = 2;
@@ -79,6 +83,7 @@ namespace MidManStudio.Gtg.Managed.CharacterController
                 stick = gamepad.rightStick.ReadValue();
                 frame.JumpPressed |= gamepad.buttonSouth.wasPressedThisFrame;
                 frame.FirePressed |= gamepad.rightTrigger.wasPressedThisFrame;
+                frame.UseCrystalPressed |= gamepad.buttonWest.wasPressedThisFrame;
 
                 if (gamepad.dpad.left.wasPressedThisFrame) frame.CycleSpell = -1;
                 if (gamepad.dpad.right.wasPressedThisFrame) frame.CycleSpell = 1;

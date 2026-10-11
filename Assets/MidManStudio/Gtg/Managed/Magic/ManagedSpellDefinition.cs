@@ -195,22 +195,37 @@ namespace MidManStudio.Gtg.Managed.Magic
         public ManagedShotSpawn CreateSpawn(
             int profile, int payload, Vector3 origin, Vector3 direction, ManagedVesselDraw draw)
         {
+            return CreateSpawn(profile, payload, origin, direction, draw, null);
+        }
+
+        /// <summary>
+        /// The same, with the caster's scales applied: the range scale multiplies the SP the shot
+        /// starts with and the cap on its flight time, and the steer scale multiplies the SP a turn
+        /// costs. A null set of modifiers changes nothing.
+        /// </summary>
+        public ManagedShotSpawn CreateSpawn(
+            int profile, int payload, Vector3 origin, Vector3 direction, ManagedVesselDraw draw,
+            ManagedSpellModifiers modifiers)
+        {
+            float rangeScale = modifiers != null ? Mathf.Max(0f, modifiers.RangeScale) : 1f;
+            float steerScale = modifiers != null ? Mathf.Max(0f, modifiers.SteerCostScale) : 1f;
+
             return new ManagedShotSpawn
             {
                 Position = origin,
                 Velocity = direction * Speed,
                 Profile = profile,
                 Payload = payload,
-                Sp = draw.Sp,
+                Sp = draw.Sp * rangeScale,
                 HoldBurnPerSecond = HoldSpPerSecondFor(ManagedSpellPayloads.LoadOf(payload), draw.Rating),
                 DriveBurnPerMeter = DriveSpPerMeterFor(draw.Capacity),
-                MaxAgeSeconds = MaxFlightSeconds,
+                MaxAgeSeconds = MaxFlightSeconds * Mathf.Max(1f, rangeScale),
                 Powered = Powered,
                 Speed = Speed,
                 GravityScale = GravityScale,
                 DragPerSecond = DragPerSecond,
                 TurnRatePerSecond = TurnDegreesPerSecond * Mathf.Deg2Rad,
-                SteerBurnPerRadian = SteerSpPerRadian,
+                SteerBurnPerRadian = SteerSpPerRadian * steerScale,
             };
         }
 

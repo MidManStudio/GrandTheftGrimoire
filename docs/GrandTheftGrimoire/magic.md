@@ -46,6 +46,10 @@ built on the ECS stack. Every number is a placeholder.
   it, so a shot that hits early gives nothing back.
 - An orb keeps its spell and its payload. Only its SP recharges.
 - An orb can cast partly charged, and then flies a shorter way in proportion.
+- Currency is gold, silver and SP. 100 silver make a gold. SP is both what powers a
+  vessel and money, as soul stones are in Skyrim.
+- SP is carried as crystals of fixed sizes, each worth a set amount of SP. A crystal
+  refills an orb at once and is used up. The part that does not fit in the orb is lost.
 
 **Proposed, built, not canon until approved.**
 - One SP pool per vessel. Flight burns it through a hold cost per second and a drive
@@ -87,6 +91,16 @@ built on the ECS stack. Every number is a placeholder.
   the charge. The vessel's rating sets the overload cost. The belt is filled from an
   Inspector loadout until crafting and pickup exist, and it holds plain values, so a
   carrier can fill and read it.
+- The wallet keeps one silver total and shows it as gold and silver, so there is no coin
+  to break. A price is a gold part and a silver part, and a payment fails whole. Crystals
+  are counts per size. To fill a gap the wallet gives the smallest crystal that covers
+  it, or the largest one held when none does, so little is wasted. The sizes are 25, 100
+  and 250 SP, and a medium crystal fills an empty orb. The starting purse is 3 gold, 50
+  silver, two small crystals and one medium one. All of it is placeholder.
+- Anything that changes how spells behave, a cheat today and an item or an effect later,
+  writes to `ManagedSpellModifiers`: a cooldown scale, a range scale, a steering cost
+  scale and an endless vessels switch. `CreateSpawn` and the caster read it, and the
+  spell tables stay as authored.
 - Drawing goes through `ManagedSphereBatch`, which has the instanced path and the
   combined mesh fallback. Anything new that draws with `DrawMeshInstanced` gets a
   fallback the same way, because the development machine cannot run it. A shot dims and
@@ -95,19 +109,23 @@ built on the ECS stack. Every number is a placeholder.
 **Proposed, not built.**
 - A launch angle for curved flight, so a shot can leave the hand sideways and bend
   toward the crosshair. Steering turns toward a lock now, from the aim direction.
-- Vessel items from the world: crafting a bottle at the table, finding an orb, topping one
-  up from a crystal. Until then the belt is filled from the loadout. An inventory
+- Vessel items from the world: crafting a bottle at the table and finding an orb. Until
+  then the belt is filled from the loadout. An inventory
   package such as Inventorizz would carry the items. It stores an item id and a count
   per slot, so the SP of an orb stays in the belt, and a bridge maps one to the other.
 - Payloads from the cook. The per-impact Alembic run goes away once they exist, which
   needs two Alembic jobs first: a restricted element set and an observables report
   (section 3 of the chemistry system design draft).
+- Where coin and crystals come from and go to: shops, a price list, payments in SP, and
+  crystals that are found or crafted. Until then the purse starts with a fixed amount and
+  the give cheats add more.
 
 **Working choice, built, not locked.** An orb recharges slowly over time, per orb, in
-game time, with no crystal top-up for now. The aim is that the player plans a fight
+game time, and a crystal tops it up at once. The aim is that the player plans a fight
 before it starts, so that spending SP matters. The 45 seconds is a placeholder.
 
-**Open.** Whether waiting or sleeping skips game time, and so recharges orbs for free.
+**Open.** Whether waiting or sleeping skips game time, and so recharges orbs for free. The
+time skip cheats call the same step a wait would, so they can be used to try it.
 
 The chemistry system design draft (`gtg-chemistry-system-design.md`, section 6)
 and the demo plan are not in this repo.

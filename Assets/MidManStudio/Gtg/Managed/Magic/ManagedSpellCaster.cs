@@ -5,6 +5,7 @@
 
 using System;
 using MidManStudio.Gtg.Managed.CharacterController;
+using MidManStudio.Gtg.Managed.Economy;
 using MidManStudio.Gtg.Managed.Rendering;
 using UnityEngine;
 
@@ -76,7 +77,9 @@ namespace MidManStudio.Gtg.Managed.Magic
         private readonly ManagedSpellFlight _flight = new ManagedSpellFlight(16);
         private readonly ManagedSpellSeeker _seeker = new ManagedSpellSeeker(16);
         private readonly Collider[] _overlaps = new Collider[OverlapBufferSize];
+        private readonly ManagedSpellModifiers _modifiers = new ManagedSpellModifiers();
         private ManagedVesselBelt _belt;
+        private ManagedPlayerWallet _wallet;
         private ManagedCharacter _character;
         private ManagedSphereBatch _batch;
         private float _cooldownRemaining;
@@ -86,6 +89,18 @@ namespace MidManStudio.Gtg.Managed.Magic
         public ManagedSpellDefinition SelectedSpell
         {
             get { return ManagedSpellDefinition.For(_belt.SpellAt(_selected)); }
+        }
+
+        /// <summary>Scales applied on top of the spell tables. Neutral unless something sets them.</summary>
+        public ManagedSpellModifiers Modifiers
+        {
+            get { return _modifiers; }
+        }
+
+        /// <summary>The player's purse, or null before the caster has woken.</summary>
+        public ManagedWallet Wallet
+        {
+            get { return _wallet != null ? _wallet.Wallet : null; }
         }
 
         /// <summary>A short line about the selected vessel, for the debug overlay.</summary>
@@ -113,6 +128,12 @@ namespace MidManStudio.Gtg.Managed.Magic
                 _shotPoint = point.transform;
                 _shotPoint.SetParent(transform, false);
                 _shotPoint.localPosition = _shotPointOffset;
+            }
+
+            _wallet = GetComponent<ManagedPlayerWallet>();
+            if (_wallet == null)
+            {
+                _wallet = gameObject.AddComponent<ManagedPlayerWallet>();
             }
 
             BuildBelt();
@@ -158,6 +179,12 @@ namespace MidManStudio.Gtg.Managed.Magic
             };
         }
 
+        /// <summary>Moves orb charging forward by game time, as if that long had passed. For testing, and a seam for a cheat.</summary>
+        public void AdvanceTime(float seconds)
+        {
+            _belt.Tick(seconds);
+        }
+
         /// <summary>Fills every orb and restores every bottle count. For testing, and a seam for a cheat.</summary>
         [ContextMenu("Refill vessels")]
         public void RefillVessels()
@@ -181,6 +208,11 @@ namespace MidManStudio.Gtg.Managed.Magic
             _belt.Tick(dt);
 
             SelectSpell();
+
+            if (_character.Has(ManagedCharacterFeature.Cast) && _character.Input.UseCrystalPressed)
+            {
+                UseCrystal();
+            }
 
             if (_character.Has(ManagedCharacterFeature.Cast)
                 && _character.Input.FirePressed
@@ -226,8 +258,53 @@ namespace MidManStudio.Gtg.Managed.Magic
             }
         }
 
+        // The soul gem rule, see ManagedVesselCharging: a crystal fills the selected orb at once
+        // and is used up. What does not fit in the orb is lost.
+        private void UseCrystal()
+        {
+            ManagedWallet wallet = Wallet;
+            if (wallet == null)
+            {
+                return;
+            }
+
+            string name = SelectedSpell.DisplayName;
+            float crystalSp;
+            float taken;
+            switch (ManagedVesselCharging.Recharge(_belt, _selected, wallet, out crystalSp, out taken))
+            {
+                case ManagedChargeResult.Charged:
+                    Log(
+                        "[GTG Magic] a crystal of " + crystalSp.ToString("F0") + " SP recharged the " + name +
+                        " orb by " + taken.ToString("F0") + ", " + (crystalSp - taken).ToString("F0") + " lost");
+                    break;
+                case ManagedChargeResult.NotAnOrb:
+                    Log("[GTG Magic] " + name + " is not an orb, a crystal cannot recharge it");
+                    break;
+                case ManagedChargeResult.Full:
+                    Log("[GTG Magic] " + name + " orb is already full");
+                    break;
+                default:
+                    Log("[GTG Magic] no crystal to recharge the " + name + " orb with");
+                    break;
+            }
+        }
+
+        private void Log(string message)
+        {
+            if (_logImpacts)
+            {
+                Debug.Log(message);
+            }
+        }
+
         private void Cast()
         {
+            if (_modifiers.InfiniteVessels)
+            {
+                _belt.Refill();
+            }
+
             ManagedSpellDefinition spell = SelectedSpell;
             ManagedVesselDraw draw;
             if (!_belt.TryDraw(_selected, out draw))
@@ -252,7 +329,7 @@ namespace MidManStudio.Gtg.Managed.Magic
             Vector3 aimPoint;
             Vector3 direction = ComputeAimDirection(origin, out aimPoint);
             int payload = ManagedSpellPayloads.IdFor(spell.Kind);
-            _cooldownRemaining = spell.CooldownSeconds;
+            _cooldownRemaining = spell.CooldownSeconds * Mathf.Max(0f, _modifiers.CooldownScale);
 
             // A shot point inside a wall would sweep from the wrong side, so it explodes at once.
             if (IsBlockedAt(origin, spell.SweepRadius))
@@ -262,7 +339,7 @@ namespace MidManStudio.Gtg.Managed.Magic
             }
 
             ManagedShotSpawn spawn = spell.CreateSpawn(
-                ManagedSpellDefinition.IndexOf(spell.Kind), payload, origin, direction, draw);
+                ManagedSpellDefinition.IndexOf(spell.Kind), payload, origin, direction, draw, _modifiers);
             if (spell.Seeks)
             {
                 spawn.Target = _seeker.Lock(
