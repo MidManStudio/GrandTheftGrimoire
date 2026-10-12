@@ -15,7 +15,7 @@ namespace MidManStudio.Gtg.Managed.Economy
     /// counts per size, are used whole, and are used up. The wallet holds plain values and
     /// knows nothing about vessels, shops or Unity.
     /// </summary>
-    public sealed class ManagedWallet
+    public sealed class ManagedWallet : IManagedCoinPurse
     {
         public const int SilverPerGold = 100;
 

@@ -115,6 +115,12 @@ a button uses it. A code typed at any time, with or without the panel, uses it t
 codes are listed under `ManagedBuiltInCheats.cs`. A toggle stays on until it is switched
 off, a full scene load or the end of play. A release build leaves the cheats out.
 
+The shop engine has no window yet. In the Editor and in development builds a shop test
+panel starts by itself, and F9 opens it. It lists two sample shops and three sample items,
+buys and sells with the player's purse, and flips the flag that opens the hidden sample
+shop. It needs the player's wallet, which the spell caster adds when play starts. The
+bought items go in a bag the panel owns. A release build leaves the panel out.
+
 Draw path: shots and hazards are drawn with `Graphics.DrawMeshInstanced` when the
 GPU supports instancing and `MidManStudio/Gtg/SphereUnlit` compiled, otherwise as
 one combined mesh. The Console prints the chosen path at Play start, one line for
@@ -144,6 +150,7 @@ Unity creates `.meta` files for the new scripts on first import. Commit them.
 | Vessels: single-use bottles, rechargeable orbs | design notes in `magic.md` | done, `ManagedVesselBelt` |
 | Currency: gold, silver and SP crystals | design notes in `magic.md` | done, `ManagedWallet` and `ManagedVesselCharging` |
 | Cheat code manager | backlog | done, Editor and development builds only, `ManagedCheatManager` |
+| Shops, item bag, flags | backlog | engine and test panel done, no shop window yet, `ManagedShop` |
 | Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
 | Ice recipe and Freeze hazard | backlog | done |
 | Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
@@ -158,6 +165,31 @@ The arrow keys are the one ECS edit since the split, two lines per axis in
 Networking differs. Netcode for Entities needs the ECS stack. The Managed stack has
 no prediction or rollback, and networked play on it would need Netcode for
 GameObjects, see `GTG_REPO_CONVENTIONS.md` section 5.
+
+### Folder dependencies (Managed)
+
+Each system has its own folder under `Managed/`, and a folder reads from the folders in
+the right column and from no other. The table is taken from the `using` lines. The
+project has no assembly definitions, so nothing stops a new line from breaking it. Keep
+the arrows pointing one way, and put a new link in this table when it is added.
+
+| Folder | Reads from |
+|---|---|
+| `Economy`, `Flags`, `Health`, `Rendering`, `CharacterController` | nothing |
+| `Items` | `Data`, in one adapter file |
+| `NPC` | `Health` |
+| `Magic` | `CharacterController`, `Economy`, `Health`, `Rendering` |
+| `Chemistry` | `Magic`, `Rendering` |
+| `Camera` | `CharacterController`, `Economy`, `Magic` |
+| `Shop` | `Economy`, `Items`, `Flags`, and `Camera` in the test panel only |
+| `Cheats` | `Camera`, `CharacterController`, `Chemistry`, `Economy`, `Health`, `Magic`, `NPC` |
+
+The shop reaches all four of its neighbours through small interfaces:
+`IManagedItemCatalog`, `IManagedItemHolder`, `IManagedFlagSource` and
+`IManagedCoinPurse`. Replacing what stands behind one of them changes one file and
+leaves the shop alone. The patterns package of `MidManStudio_Unity` (command, state,
+event queue, dependency injection) is not used yet. These interfaces and the plain C#
+events are the places it would attach to.
 
 ## Modules
 
@@ -437,7 +469,8 @@ and `Describe`.
   crystal was worth. Nothing changes when no crystal is held or the gap is not above 0,
   NaN included.
 - `Describe` gives a line such as `3 gold 50 silver, crystals S2 M1 L0` for the overlay.
-- No shop or price list reads the wallet yet.
+- `ManagedWallet` implements `IManagedCoinPurse`, the coin side of it, and the shop reads
+  the wallet through that interface. See `IManagedCoinPurse.cs`.
 
 ### `ManagedPlayerWallet.cs`
 
@@ -761,6 +794,216 @@ on while the panel is closed. It creates itself when play starts and survives sc
   `[run]`), its code and its description. The line for a closed panel shows the cheats that
   are on and the last message for four seconds.
 - A code typed in the game also presses the game keys. See Fixes and Problems.
+
+### `IManagedCoinPurse.cs`
+
+**What it does:** Four members: `TotalSilver`, `CanAfford`, `TrySpend(gold, silver)` and
+`AddSilver`. `ManagedWallet` implements it with no change to its code.
+
+**Decisions:**
+- The shop needs the coin and nothing else, so it holds this and not the wallet. A test can
+  hand the shop a purse that misbehaves, and a later currency carrier can fit the same four
+  members.
+- The members are the wallet's own, with the same meaning, so the interface adds no rule.
+
+### `ManagedItemInfo.cs`
+
+**What it does:** A plain value with an item's `Id`, `Name`, `ValueSilver` and `MaxStack`.
+`Stackable` is true when `MaxStack` is above 1.
+
+**Decisions:**
+- It carries only what a shop and a bag need. Rarity, weight and type stay in the item
+  table, and a catalog can add them to its own side when something needs them.
+- The constructor repairs bad numbers: a negative value becomes 0, a stack below 1 becomes
+  1 and an empty name becomes `item <id>`.
+
+### `IManagedItemCatalog.cs`
+
+**What it does:** One method, `TryGet(itemId, out ManagedItemInfo)`.
+
+**Decisions:**
+- The shop and the bag ask this and never learn where the answer is stored. The item table,
+  a list built in a test or an inventory package can stand behind it.
+
+### `ManagedItemCatalog.cs`
+
+**What it does:** A catalog filled from code with `Add`. An item with the same id is
+replaced.
+
+**Decisions:**
+- Tests and the shop test panel use it. It has no Unity types.
+
+### `ManagedItemDatabaseCatalog.cs`
+
+**What it does:** Reads a baked `ItemDatabase` once and answers as a catalog.
+
+**Decisions:**
+- It is the only file of `Items/` that knows `Gtg/Data`. If the table changes shape, this
+  file changes and nothing else does.
+- The table has no unit for `Value`. It is read as silver, and that is a flagged default.
+- The table says per item whether it stacks and gives one stack size, `MaxStackSize`. A
+  stackable item gets that size and any other item gets 1.
+- A null row is skipped, and when two rows share an id the first is used. A null table or
+  a null list gives an empty catalog.
+- Nothing builds one in a scene yet. The shop test panel uses the sample items.
+
+### `IManagedItemHolder.cs`
+
+**What it does:** `CountOf`, `CanAdd`, `TryAdd` and `TryRemove`. Adding and removing are all
+or none.
+
+**Decisions:**
+- This is what the shop sees of the player's carried items. `ManagedItemBag` is the plain
+  one, and an inventory package can be wrapped to fit the same four methods.
+
+### `ManagedItemBag.cs`
+
+**What it does:** A bag of slots. A slot holds one kind of item up to its stack size. An item
+that does not stack takes a slot of its own. `SlotCount`, `UsedSlots` and `TryGetSlot` let an
+overlay draw it.
+
+**Decisions:**
+- Slots, not a bare count, because that is how a real inventory refuses an item, and the
+  shop's bag-full result needs a meaning.
+- Adding fills the stacks the item already has and then opens empty slots from the front.
+  Removing takes from the last slot first, so the earlier stacks stay full.
+- An item the catalog does not know is refused. So is a bag built with no catalog.
+- A stack already above a smaller stack size, after the catalog shrank, counts as having no
+  room, and a free slot still takes a full new stack.
+- The slot count is 20 when none is given. It is a placeholder. A count below 1 gives 1.
+- Nothing is saved.
+
+### `IManagedFlagSource.cs`
+
+**What it does:** One method, `IsSet(flag)`.
+
+**Decisions:**
+- A shop asks this to learn whether it is open and never learns who set the flag.
+- `ManagedWorldFlags` is the plain answer today. The Questly package of `unity-chem-sim` has
+  `QuestRuntime.GetQuestState(questId)` and a `QuestState.COMPLETED` value, so an adapter
+  can later answer `IsSet(id)` with "that quest is complete". Questly is not in this
+  project's `Packages/manifest.json`, and nothing here depends on it.
+
+### `ManagedWorldFlags.cs`
+
+**What it does:** A set of named flags with `Set`, `Clear`, `ClearAll`, `IsSet` and `Count`.
+`Set` and `Clear` report whether anything changed.
+
+**Decisions:**
+- Names are exact: `Sus` and `sus` are two flags. A null or empty name is never set and
+  setting it does nothing.
+- Nothing is saved. Nothing in a scene owns one yet, so mission code has no way to reach one
+  until the shop window and the scene wiring exist.
+
+### `ManagedShopTypes.cs`
+
+**What it does:** `ManagedShopLine` (an item the shop sells: item id, price, stock),
+`ManagedShopBuyLine` (an item it buys: item id, price), the result enum
+`ManagedShopResult`, `ManagedTradeKind`, the event value `ManagedShopTrade` and the window
+row `ManagedShopOffer`.
+
+**Decisions:**
+- The line classes are serializable and hold whole numbers, so a data file, a
+  ScriptableObject or code can fill them. A missing number reads as 0, which is the safe
+  side: a price of 0 means the item's own value, and a stock of 0 means sold out.
+  `ManagedShopLine.Unlimited` (-1) is how a shop that never runs out is written, and any
+  negative stock reads as unlimited.
+- A free item cannot be written, because a price of 0 means "use the value". An item with
+  no value and no price has no price, and the shop refuses to trade it.
+- `ManagedShopResult` has one success, `Ok`, and a refusal for each reason: `Closed`,
+  `BadCount`, `NotSold`, `NotBought`, `UnknownItem`, `NoPrice`, `OutOfStock`,
+  `CannotAfford`, `BagFull`, `NotEnoughItems`, `MissingWallet` and `MissingBag`.
+
+### `ManagedShopDefinition.cs`
+
+**What it does:** The data of one shop: `Id`, `DisplayName`, `ShopkeeperName`,
+`RequiredFlag`, `BuyPercent`, and the lists `Sells` and `Buys`. It has no logic.
+
+**Decisions:**
+- An empty `RequiredFlag` means the shop is always open. The hidden shop names the flag that
+  its mission sets.
+- `BuyPercent` is what the shop pays for an item that has no price of its own, as a percent
+  of the item's value. The default is 20, a placeholder for "dirt cheap".
+- The shop has no stock of its own. It is all data, and where the data lives is still open:
+  when the shops plan is available the natural home is a `shops.mdix` file and a baked
+  ScriptableObject in `Gtg/Data`, in the style of the item table. These classes were written
+  so that binder can fill them.
+- Shopkeeper names are empty until they are decided.
+
+### `ManagedShop.cs`
+
+**What it does:** One shop at run time. `TryBuy` and `TrySell` do the trade, `QuoteBuy` and
+`QuoteSell` give a price for a screen, `TryGetSellOffer` and `TryGetBuyOffer` read a row of
+the window by index without allocating, `IsOpen` and the `Traded` event report state.
+
+**Decisions:**
+- It works on a copy of the definition, so editing the definition after the shop is built
+  changes nothing. A null line is skipped, and when two lines name the same item the first
+  is used.
+- It gets the catalog and the flags when built, and the purse and the bag with each trade.
+  A null catalog makes every trade report an unknown item. A null flag source keeps a shop
+  that needs a flag closed.
+- Price of one item bought: the line's price when it is above 0, otherwise the item's value.
+  Price of one item sold: the line's price when above 0, otherwise the buy percent of the
+  value, rounded down but never below 1 silver for an item that has a value. A percent of 0
+  or less, or an item with no value, gives no price. A percent above 100 pays more than the
+  value, as written.
+- Buying checks, in order: the shop is open, the count is at least 1, the shop sells the
+  item, the catalog knows it, it has a price, the stock covers the count, the total fits in
+  a number, the purse and the bag exist, the purse can pay and the bag takes the items. Only
+  then does coin leave, items enter and stock drop. Selling checks the same way, with the
+  bag holding enough and the purse able to take the coin. Any refusal changes nothing. The
+  bag is not touched when the purse cannot pay, and if the purse refuses after the bag
+  accepted, the items are taken back out and no trade is recorded.
+- The shop does not add what it buys to its stock. Whether it should is open.
+- A closed shop refuses a quote too, and the flag is read on every call, so the shop opens
+  the moment the flag is set.
+- `Traded` carries the shop id, the kind, the item, the count and the total. It is a plain
+  C# event now. An event queue or a quest objective can subscribe later.
+- Totals and the percent price are worked so that huge values stop at the largest number
+  and never wrap negative, and a total that cannot be counted is refused.
+
+### `ManagedShopSamples.cs`
+
+**What it does:** Three sample items (the rows of `Assets/inventory_items.mdix` as they are
+today) and two sample shops: a general store that is always open, and a hidden shop that
+needs the flag `sample_hidden_shop_open`.
+
+**Decisions:**
+- It exists so buying can be tried before the real shops exist. None of it is game content,
+  the names and prices are made up, and the real shops never read it.
+- It is left out of release builds, along with the session and the panel.
+
+### `ManagedShopDevSession.cs`
+
+**What it does:** Everything the test panel does except drawing: it holds the shops, a bag
+and a flag set, runs a buy, a sell or a sell-all, toggles a flag, words each result and
+describes the bag.
+
+**Decisions:**
+- It has no Unity types, so it is covered by plain tests, and the panel is only drawing and
+  calls. The purse is passed in, because the player's wallet belongs to the scene.
+- The price in a message is read before the trade, because a trade can empty the stock the
+  price depends on.
+- Sell-all with nothing carried says so, instead of reporting a bad count.
+
+### `ManagedShopDevPanel.cs`
+
+**What it does:** A throwaway panel for trying the shop engine. F9 opens and closes it. It
+shows the purse, the bag, the shops with their open state, the selected shop's items with
+buy and sell buttons, and the flag button of a gated shop. Every action is also logged as
+`[GTG Shop]`.
+
+**Decisions:**
+- It starts by itself at `AfterSceneLoad`, in the Editor and in development builds only, and
+  survives scene loads. A panel the scene already has is left alone, and a second one
+  disables itself.
+- It looks for the player's `ManagedPlayerWallet` when opened and again at most once a
+  second while there is none. It never creates one, because the caster adds it, and a second
+  wallet would split the purse.
+- Opening it frees the cursor and sets `ManagedCameraRig.CursorCaptureBlocked`, the same way
+  the cheat panel does. It sits on the left so it does not cover the cheat panel.
+- It is the only file of `Shop/` that reads `Camera`. The drawn shop window replaces it.
 
 ### `ManagedChemistryTypes.cs`
 
@@ -1160,6 +1403,51 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   `ManagedCharacterInput.cs` reads R and the west button. `ManagedCharacter.cs` gained
   `MoveSpeedScale`. `ManagedChemicalHazardField.cs` gained `Clear`. `ManagedCameraRig.cs`
   gained `CursorCaptureBlocked` and the purse line.
+
+### Shop, items and flags (`Items/`, `Flags/`, `Shop/`, `IManagedCoinPurse.cs`)
+
+- Asked for: start the shop, with each system in its own folder and decoupled, so that the
+  patterns package of `MidManStudio_Unity` can be adopted later when Su has a computer. The
+  art and the window come later from Su's drawings. Decided with Su: bought items go in a
+  small bag in its own folder, shops take coin only, the hidden shop opens on a plain flag
+  for now with the Questly package to be used later, and a test panel for the Editor and
+  development builds.
+- Now: three small folders and one interface. `Items/` has the item value, a catalog
+  interface with a code-filled catalog and an adapter over the baked item table, a holder
+  interface and a slot bag. `Flags/` has a one-method flag interface and a set. `Shop/`
+  has the data classes, the shop with buying, selling, quotes, stock, the gate and the
+  `Traded` event, the sample data, and the test panel with its session. `ManagedWallet` now
+  implements `IManagedCoinPurse`. The Currency and cheats entry below says nothing can spend
+  gold or silver yet, and the shop is the first thing that can.
+- Checked with the console harness against the `UnityEngine` stubs: 315 checks pass, 135 of
+  them new. They cover the bag (stacking, topping up, slots, removal order, refused adds
+  and removes, a shrinking catalog), the catalog and the adapter against the real
+  `ItemDatabase` class, the flags, every shop rule listed under `ManagedShop.cs` including
+  each refusal leaving the wallet, bag and stock unchanged, a holder that lies, a purse that
+  lies, a bag that must not be touched, the percent rounding and the overflow limits, the
+  session's wording of every result, and the panel (F9, cursor, wallet lookup, one panel
+  only, bootstrap). 102 deliberate breakages, 29 from before and 73 for this drop, each fail
+  at least one check. The `Items`, `Flags`, `Shop` and `Economy` files compile under C# 9
+  with the real sources, and the real `ItemDatabase.cs` compiles against a stand-in for the
+  mdix attribute. The harness is not in the repo.
+- Not verified in the Editor: the panel drawing and clicks, F9, finding the wallet in a real
+  scene, the adapter against a baked asset, and the panel's cursor handling next to the cheat
+  panel.
+- Placeholders: the sample items, shops and flag name, the buy percent of 20, the bag's 20
+  slots, and reading the item `Value` as silver.
+- Known limits. The panel's bag lives in the panel and not on the player, so nothing else
+  sees what was bought, and nothing else reads a bag yet. Nothing in a scene owns a flag set,
+  so mission code cannot set the flag yet. The cheat panel and the shop panel share one cursor
+  block flag, so closing one while the other is open gives the cursor back to the camera. A
+  shop does not restock, and does not stock what it buys. Nothing is saved. The item table has
+  no raw material type, so what a shop buys is a list in its data. The hidden shop's mission
+  and the shopkeeper names are not decided, and the shops plan was not available, so no real
+  shop exists.
+- Packages: still none. Inventorizz and Questly are not in `Packages/manifest.json`. They
+  attach to `IManagedItemHolder` and `IManagedFlagSource`.
+- The ECS stack is unchanged.
+- Edits to existing files: `ManagedWallet.cs` gained `: IManagedCoinPurse` on its class line
+  and nothing else. `data.md` gained a note under `ItemDatabase.cs`.
 
 ### `ManagedChemicalHazardField.cs`
 

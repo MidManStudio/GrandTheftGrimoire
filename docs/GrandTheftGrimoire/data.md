@@ -49,6 +49,9 @@ Files are in `Assets/MidManStudio/Gtg/Data/`.
 
 - `KeepSake` exists only so the bake reports no unread key. The text is a note that nothing uses, and both can go when the file is cleaned up.
 - `Weight` is a float because the file derives it from the value with a division.
+- `ManagedItemDatabaseCatalog` in `Managed/Items` shows this table to the shop and the bag
+  as an `IManagedItemCatalog`. It reads `Value` as silver and `Stackable` with `MaxStackSize`
+  for the stack size. Nothing builds one in a scene yet.
 
 ### `NpcArchetypeDatabase.cs`
 
