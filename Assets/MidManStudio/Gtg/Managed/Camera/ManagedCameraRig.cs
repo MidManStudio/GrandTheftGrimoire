@@ -5,7 +5,6 @@
 
 using System.Text;
 using MidManStudio.Gtg.Managed.CharacterController;
-using MidManStudio.Gtg.Managed.Economy;
 using MidManStudio.Gtg.Managed.Magic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -55,16 +54,21 @@ namespace MidManStudio.Gtg.Managed.Camera
         private readonly StringBuilder _text = new StringBuilder(384);
 
         /// <summary>
-        /// While true, a click does not capture the cursor. A panel that needs the mouse sets it,
-        /// and clears it when it closes.
+        /// True while a UI owns the cursor, for instance the build tray. A click then no longer
+        /// recaptures the cursor and the crosshair is hidden. Whoever sets it clears it again.
         /// </summary>
-        public static bool CursorCaptureBlocked { get; set; }
+        public bool CursorHeldByUi { get; set; }
 
-        // Static state survives a play session when domain reload is off.
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStatics()
+        /// <summary>Locks and hides the cursor, as a click on the game does.</summary>
+        public void CaptureCursor()
         {
-            CursorCaptureBlocked = false;
+            SetCursorLocked(true);
+        }
+
+        /// <summary>Frees and shows the cursor, as Esc does.</summary>
+        public void ReleaseCursor()
+        {
+            SetCursorLocked(false);
         }
 
         /// <summary>Public so a UI Button can call it from its onClick list.</summary>
@@ -149,7 +153,7 @@ namespace MidManStudio.Gtg.Managed.Camera
             }
 
             Mouse mouse = Mouse.current;
-            if (!CursorCaptureBlocked && Cursor.lockState != CursorLockMode.Locked && mouse != null && mouse.leftButton.wasPressedThisFrame)
+            if (!CursorHeldByUi && Cursor.lockState != CursorLockMode.Locked && mouse != null && mouse.leftButton.wasPressedThisFrame)
             {
                 SetCursorLocked(true);
             }
@@ -217,7 +221,7 @@ namespace MidManStudio.Gtg.Managed.Camera
 
         private void OnGUI()
         {
-            if (_showCrosshair && _player != null)
+            if (_showCrosshair && _player != null && !CursorHeldByUi)
             {
                 DrawCrosshair();
             }
@@ -253,14 +257,7 @@ namespace MidManStudio.Gtg.Managed.Camera
             if (_caster != null)
             {
                 _text.Append("Spell: ").Append(_caster.SelectedSpell.DisplayName)
-                    .Append(" (").Append(_caster.SelectedVesselText).Append(')')
-                    .Append("  (1, 2, 3, Tab or d-pad)  Shots in flight ").Append(_caster.ShotCount).Append('\n');
-
-                ManagedWallet wallet = _caster.Wallet;
-                if (wallet != null)
-                {
-                    _text.Append("Purse: ").Append(wallet.Describe()).Append("  (R recharges the orb)\n");
-                }
+                    .Append("  (1, 2, Tab or d-pad)  Shots in flight ").Append(_caster.ShotCount).Append('\n');
             }
 
             _text.Append("Cursor ").Append(Cursor.lockState).Append("  (Esc releases, click captures)\n");

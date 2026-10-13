@@ -27,6 +27,10 @@ only covers the code-level docs that do.
   -- the Managed stack: MonoBehaviour versions of the character, camera,
   magic and chemistry systems that need no ECS package, and how the
   `ECS/` and `Managed/` folders relate
+- [`GrandTheftGrimoire/building.md`](GrandTheftGrimoire/building.md)
+  -- `MidManStudio.Gtg.Managed.Building`, station placement with a blue and red
+  ghost, a UI Toolkit tray built in code, pick up and drop, and instanced
+  drawing of placed pieces, Managed stack only
 - [`GrandTheftGrimoire/data.md`](GrandTheftGrimoire/data.md)
   -- `MidManStudio.Gtg.Data`, the ScriptableObjects the `.mdix` data files
   (enemies, items, NPC archetypes, dialogue) bake into, and how to bake them

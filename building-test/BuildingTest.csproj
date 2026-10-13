@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Verification harness, never shipped. Compiles the Managed Building code without Unity against hand written
+       UnityEngine stand-ins. LangVersion 9 matches Unity 2022.3. -->
+  <PropertyGroup>
+    <BuildingDir Condition="'$(BuildingDir)' == ''">/home/claude/work/GrandTheftGrimoire/Assets/MidManStudio/Gtg/Managed/Building</BuildingDir>
+    <RigFile Condition="'$(RigFile)' == ''">/home/claude/work/GrandTheftGrimoire/Assets/MidManStudio/Gtg/Managed/Camera/ManagedCameraRig.cs</RigFile>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <UseAppHost>false</UseAppHost>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>CS0649;CS0169;CS0414;CS0067</NoWarn>
+    <RootNamespace>MidManStudio.Gtg.Managed.Building.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs;Tests.cs;TestsController.cs;TestsWorld.cs;TestsUi.cs;TestsMode.cs;UnityStubs.cs;UiStubs.cs;RigStubs.cs" />
+    <Compile Include="$(BuildingDir)/*.cs" />
+    <Compile Include="$(RigFile)" />
+    <Compile Include="/home/claude/work/GrandTheftGrimoire/Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacterFeature.cs" />
+  </ItemGroup>
+</Project>
