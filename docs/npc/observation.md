@@ -1,13 +1,13 @@
-# NPC observation contract (ABI version 4)
+# NPC observation contract (ABI version 5)
 
-Status (2026-10-06): implemented in Rust, C, the C# bridge and the Managed NPC code, and checked by tests. Not run inside Unity, not run on GitHub. The ABI version is 4. This page replaces `observation-v3.md`.
+Status (2026-10-14): implemented in Rust, C, the C# bridge and the Managed NPC code, and checked by tests. Not run inside Unity, not run on GitHub. The ABI version is 5. This page replaces `observation-v3.md`.
 
 This is the contract between the game and the Rust decision. It lists every field, what it means, how it is validated, and what each rule does with it. Read it before adding a field.
 
 ## Principles
 
 1. **The game owns the data, Rust owns the choice.** NPC memory, levels, orders, loyalty and the economy live in Unity and are saved by Unity (owner decision, 2026-10-05). Rust receives a small snapshot with every decision and returns an action. The decision is a pure function of that snapshot: the same observation always gives the same action, and Rust keeps no state. A chance in a rule uses a random number that Unity supplies in the observation (`noise`), so a run stays reproducible and testable. Static, predictable tables, such as the refusal gaps and the mission profiles, live in Rust.
-2. **Zero means no information.** Every field added after version 2 has a safe default of zero: hostile, no order, not provoked, level 0, and no betrayal opportunity. A caller that sets only older fields behaves as before, and tests check it.
+2. **Zero means no information.** Every field added after version 2 has a safe default of zero: hostile, no order, not provoked, level 0, no betrayal opportunity, and no Crown Heat. A caller that sets only older fields behaves as before, and tests check it.
 3. **Reserved space must be zero.** A non-zero reserved field is rejected, so a caller built for a later layout fails loudly instead of being half understood.
 4. **Add a field only when a rule uses it.**
 5. **A batch is all or nothing.** Every observation is validated before any output is written.
@@ -26,7 +26,7 @@ This is the contract between the game and the Rust decision. It lists every fiel
 | 32 | 1 | `disposition` | u8 | 0 hostile, 1 retaliatory, 2 peaceful |
 | 33 | 1 | `order` | u8 | 0 none, 1 follow, 2 hold, 3 attack, 4 deliver, 5 raid. Companions only |
 | 34 | 1 | `provoked` | u8 | 1 when the NPC was attacked recently, else 0 |
-| 35 | 1 | `reserved_byte` | u8 | Must be 0 |
+| 35 | 1 | `crown_heat` | u8 | Crown Heat tier of the region the NPC stands in: 0 none, 1 wanted, 2 hunted, 3 outlaw. Guards only. Version 4 callers sent 0 here as a reserved byte |
 | 36 | 2 | `level` | u16 | The NPC's level |
 | 38 | 2 | `order_level` | u16 | How hard the current order is, as a level. 0 for an order with no difficulty |
 | 40 | 4 | `trustworthiness` | f32 | 0 to 1, must be finite, clamped. Companions, betrayal only |
@@ -46,7 +46,7 @@ Mission outcomes (from `gtg_npc_resolve_mission`): 0 success, 1 failed, 2 caught
 
 The numbers come from `npc-ffi`, the C header `gtg_npc.h`, the C# enums and structs, and the enums in `archetypes.mdix`. `scripts/check_npc_enum_sync.py` fails CI when the enum values differ, and the C smoke test, the Rust tests and the C# test check sizes and offsets.
 
-Validation (`STATUS_INVALID` for the whole batch, nothing written): an unknown role, backend, disposition or order; `threat_visible`, `can_move`, `provoked` or `betrayal_opportunity` above 1; a non-finite health, trustworthiness, affinity or pay satisfaction; any non-zero reserved field; input and output buffers that overlap. A count above 4096, or an output smaller than the input, is `STATUS_CAPACITY`. A null or misaligned pointer is `STATUS_NULL`.
+Validation (`STATUS_INVALID` for the whole batch, nothing written): an unknown role, backend, disposition or order; a `crown_heat` above 3; `threat_visible`, `can_move`, `provoked` or `betrayal_opportunity` above 1; a non-finite health, trustworthiness, affinity or pay satisfaction; any non-zero reserved field; input and output buffers that overlap. A count above 4096, or an output smaller than the input, is `STATUS_CAPACITY`. A null or misaligned pointer is `STATUS_NULL`.
 
 ## What each rule does
 
@@ -61,6 +61,21 @@ With no threat in view the NPC walks around (or stands, when it cannot move). Wi
 Fighting means: retreat when health is below 0.2 and the NPC can move, otherwise attack for the state machine backend, and for the utility and hybrid backends compare an attack score (0.6 + 0.4 x health) with a retreat score (1 - health) and take the higher.
 
 The three dispositions are an interpretation of the project notes. "Good" humanoids are read as peaceful, so they never fight back. If they should defend themselves, that is one more case in `combatant()`.
+
+### Guard: Crown Heat
+
+`crown_heat` is the tier of the region the guard stands in, as the game worked it out from the crimes the player committed there. One rule reads it. A guard with the retaliatory disposition that sees a threat and was not attacked fights it when the tier is 1 or more, exactly as it would after being attacked. Everything else is unchanged:
+
+| Role and disposition | Tier 0 | Tier 1 and above |
+|---|---|---|
+| Guard, retaliatory, threat in view, not provoked | ignores the threat | fights |
+| Guard, hostile | fights | fights |
+| Guard, peaceful | never fights | never fights |
+| Enemy, boss, companion, merchant, civilian | no change | no change, the tier is not read |
+
+A unit test walks every combination of role, disposition, order, backend, threat, provoked, can-move and health at every tier and checks that this one case is the only difference. Tiers 2 and 3 decide the same as tier 1 today. They are kept for rules that are not built yet (bounty hunters, the Crown's knights). The threshold (`WANTED_CROWN_HEAT`, 1) is a placeholder. Zero means no heat or no information, so a caller that does not know about Crown Heat gets the old behavior.
+
+The tier does not say who the threat is. The game only sets it for a guard, and a threat that is not the player is a case the rule does not separate yet, see the planned list.
 
 ### Companion
 
@@ -115,12 +130,14 @@ The success chance is the base plus the per-level number times (companion level 
 | Trustworthiness, affinity, pay satisfaction | `ManagedNpcBrain` | 0 to 1, 0.5 by default (loyalty 0.5, no betrayal) |
 | Betrayal opportunity | `ManagedNpcBrain` | Set by game code, never for a companion the story protects. Used up by a betrayal |
 | Noise | `ManagedNpcBrain` | Its own sequence per brain, seeded from the id, sent for companions only |
+| Crown Heat meter, regions, crimes, fade | `ManagedCrownRegion` | A box volume in the scene owns the numbers. The brain reads the tier at its position and sends it for guards only. See `GrandTheftGrimoire/crown-heat.md` |
 | Mission scheduling, notification, reward, capture, rescue | not built | Game systems around `ManagedMissionResolver` |
 | Pay, profit split, the economy | not built | Feed pay satisfaction |
 
 ## Planned and not built
 
-- `threat_distance`, allies and enemies nearby, time of day, Crown Heat and Local Favor, for rules that act on range, groups, routines and guard reactions.
+- `threat_distance`, allies and enemies nearby, time of day and Local Favor, for rules that act on range, groups, routines and guard reactions.
+- Rules for tiers 2 and 3 (bounty hunters, the Crown's knights), and a way to tell the player from another threat when a guard decides on Crown Heat.
 - Factions, so companions can see enemies at all.
 - A scripted betrayal is a story event and is not decided here. The story changes the companion directly.
 
@@ -133,12 +150,13 @@ Adding a field means: add it in `npc-ffi`, the C header, the C# struct, the thre
 | 2 | 32-byte observation, five actions, batched call |
 | 3 | 64 bytes. Companion role, disposition, order, provoked, level, order level, actions follow, hold and refuse order |
 | 4 | Order types deliver and raid with per-type refusal gaps, the betrayal inputs and the actions mission and betray, and the off-screen mission export |
+| 5 | `crown_heat` at offset 35 (a reserved byte before), validated up to 3. Retaliatory guards fight a visible threat at tier 1 or more |
 
 ## Checks
 
-- `npc-behavior`: 40 unit tests, including the exact boundaries (every refusal gap, the 0.2 health threshold, the betrayal line at roll 0.5, the mission lines), overflow, and distribution checks.
-- `npc-ffi`: 23 unit tests for layout, every validation rule, version 3 and 2 behavior preserved, the mission export, overlap and alignment rejection.
+- `npc-behavior`: 44 unit tests, including the exact boundaries (every refusal gap, the 0.2 health threshold, the betrayal line at roll 0.5, the mission lines), the Crown Heat rule and the walk that proves it changes one case only, overflow, and distribution checks.
+- `npc-ffi`: 24 unit tests for layout, every validation rule, the Crown Heat tier limit, version 3 and 2 behavior preserved, the mission export, overlap and alignment rejection.
 - `test.c`: layout asserts for every offset and the same behaviors through a real C caller.
-- Rust, C and C# generate the same 16,384 mixed NPCs (companions with all six orders, trust, liking, pay, noise and betrayal opportunities) and must produce the same decisions. All ten actions must occur.
+- Rust, C and C# generate the same 16,384 mixed NPCs (companions with all six orders, trust, liking, pay, noise, betrayal opportunities and Crown Heat tiers) and must produce the same decisions. All ten actions must occur. The decision hash is `0x9e47645dd2412b08` on all three.
 - The C# test also compares 200,000 mission resolutions between the Rust library and the managed copy, with no differences allowed.
-- 645 Managed checks run against Unity stubs on both the fallback and the real library.
+- 836 Managed checks run against Unity stubs on both the fallback and the real library.

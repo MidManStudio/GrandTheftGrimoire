@@ -134,6 +134,12 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
                 },
                 noise: if role == 5 { (r3 >> 32) as u32 } else { 0 },
                 betrayal_opportunity: u8::from(role == 5 && (r2 >> 40) % 100 < 30),
+                crown_heat: match (r2 >> 48) % 100 {
+                    0..=54 => 0,
+                    55..=74 => 1,
+                    75..=89 => 2,
+                    _ => 3,
+                },
                 ..Default::default()
             }
         })

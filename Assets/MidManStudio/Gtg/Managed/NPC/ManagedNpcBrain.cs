@@ -4,6 +4,7 @@
 // ============================================================================
 
 using System;
+using MidManStudio.Gtg.Managed.Crown;
 using MidManStudio.Gtg.Managed.Health;
 using MidManStudio.Gtg.NPC.Components;
 using MidManStudio.Gtg.NPC.Native;
@@ -60,6 +61,11 @@ namespace MidManStudio.Gtg.Managed.NPC
         [Header("Debug")]
         [SerializeField] private bool _logActionChanges;
 
+        // Squared distance is compared, so these are the squares of 0.7 and 0.5. A current target counts as 30 percent
+        // nearer than it is, and the NPC that hurt this one counts as 50 percent nearer.
+        private const float StickyTargetKeyFactor = 0.49f;
+        private const float AttackerTargetKeyFactor = 0.25f;
+
         private ManagedHealth _health;
         private float _lastSeenTime = float.NegativeInfinity;
         private bool _threatVisible;
@@ -73,6 +79,9 @@ namespace MidManStudio.Gtg.Managed.NPC
         private bool _warnedNoLeader;
         private bool _betrayalOpportunity;
         private uint _noiseState;
+
+        // The earliest time a hit on this NPC counts as a new assault, see ManagedCrownRegion.
+        internal float CrimeRepeatTime = float.NegativeInfinity;
 
         /// <summary>(this, old action, new action). Raised on the main thread inside the director tick.</summary>
         public event Action<ManagedNpcBrain, NpcAction, NpcAction> ActionChanged;
@@ -169,6 +178,9 @@ namespace MidManStudio.Gtg.Managed.NPC
         /// <summary>Where the threat was when it was last seen. Only meaningful while Threat is set.</summary>
         public Vector3 LastKnownThreatPosition { get { return _lastKnownThreatPosition; } }
 
+        /// <summary>Time.time of the last ray that saw a threat, or negative infinity before the first.</summary>
+        internal float LastSeenTime { get { return _lastSeenTime; } }
+
         public bool IsAlive { get { return _health == null || _health.IsAlive; } }
 
         public float HealthFraction { get { return _health != null ? _health.Fraction : 1f; } }
@@ -214,6 +226,10 @@ namespace MidManStudio.Gtg.Managed.NPC
 
             _lastAttacker = source;
             _provokedUntil = Time.time + _provokedMemorySeconds;
+
+            // Hurting somebody the law protects, in sight of a guard, earns Crown Heat. The killing blow arrives here
+            // with the health already at zero.
+            ManagedCrownRegion.ReportHurt(this, !health.IsAlive, source);
         }
 
         private void OnValidate()
@@ -247,13 +263,11 @@ namespace MidManStudio.Gtg.Managed.NPC
             bool outOfBudget = false;
             ManagedNpcThreatSource seenSource = null;
 
-            for (int s = 0; s < ManagedNpcThreatSource.Count && !seen && !outOfBudget; s++)
+            // Candidates nearest first, so the NPC spends its rays on the closest target and stops at the first one it sees.
+            int candidates = RankCandidates(eye);
+            for (int s = 0; s < candidates && !seen && !outOfBudget; s++)
             {
-                ManagedNpcThreatSource source = ManagedNpcThreatSource.Get(s);
-                if (!source.IsActive || IsSelf(source.transform) || IsLeader(source.transform))
-                {
-                    continue;
-                }
+                ManagedNpcThreatSource source = RankedSources[s];
 
                 for (int p = 0; p < source.PointCount; p++)
                 {
@@ -279,6 +293,11 @@ namespace MidManStudio.Gtg.Managed.NPC
                 }
             }
 
+            for (int s = 0; s < candidates; s++)
+            {
+                RankedSources[s] = null;
+            }
+
             if (seen)
             {
                 _lastSeenTime = now;
@@ -296,6 +315,66 @@ namespace MidManStudio.Gtg.Managed.NPC
             }
 
             return !outOfBudget;
+        }
+
+        // The sources this NPC may target, nearest first, in scratch arrays shared by every brain. Sight runs on the
+        // main thread and never re-enters, so one pair is enough. The sort key is the squared distance from the eye,
+        // lowered for the current target (so a target does not flip back and forth between two at similar range) and
+        // for the one that last hurt this NPC while it is provoked.
+        private static ManagedNpcThreatSource[] RankedSources = new ManagedNpcThreatSource[8];
+        private static float[] RankedKeys = new float[8];
+
+        private int RankCandidates(Vector3 eye)
+        {
+            int count = 0;
+            bool revenge = _lastAttacker != null && Provoked;
+            for (int s = 0; s < ManagedNpcThreatSource.Count; s++)
+            {
+                ManagedNpcThreatSource source = ManagedNpcThreatSource.Get(s);
+                if (!source.IsActive || IsSelf(source.transform) || IsLeader(source.transform))
+                {
+                    continue;
+                }
+
+                Vector3 offset = source.transform.position - eye;
+                float key = offset.sqrMagnitude;
+                if (source == _threat)
+                {
+                    key *= StickyTargetKeyFactor;
+                }
+
+                if (revenge && IsAttacker(source.transform))
+                {
+                    key *= AttackerTargetKeyFactor;
+                }
+
+                if (count == RankedSources.Length)
+                {
+                    Array.Resize(ref RankedSources, count * 2);
+                    Array.Resize(ref RankedKeys, count * 2);
+                }
+
+                int at = count;
+                while (at > 0 && RankedKeys[at - 1] > key)
+                {
+                    RankedSources[at] = RankedSources[at - 1];
+                    RankedKeys[at] = RankedKeys[at - 1];
+                    at--;
+                }
+
+                RankedSources[at] = source;
+                RankedKeys[at] = key;
+                count++;
+            }
+
+            return count;
+        }
+
+        // The source belongs to whatever hit this NPC last, or to a part of it.
+        private bool IsAttacker(Transform sourceTransform)
+        {
+            Transform attacker = _lastAttacker.transform;
+            return attacker.IsChildOf(sourceTransform) || sourceTransform.IsChildOf(attacker);
         }
 
         internal NPCNativeObservation BuildObservation()
@@ -319,7 +398,9 @@ namespace MidManStudio.Gtg.Managed.NPC
                 Affinity = _role == NpcRole.Companion ? _affinity : 0f,
                 PaySatisfaction = _role == NpcRole.Companion ? _paySatisfaction : 0f,
                 Noise = _role == NpcRole.Companion ? NextNoise() : 0u,
-                BetrayalOpportunity = _role == NpcRole.Companion && _betrayalOpportunity ? (byte)1 : (byte)0
+                BetrayalOpportunity = _role == NpcRole.Companion && _betrayalOpportunity ? (byte)1 : (byte)0,
+                // Only guards enforce the law, so only they are told the Crown Heat of the region they stand in.
+                CrownHeat = _role == NpcRole.Guard ? (byte)ManagedCrownRegion.TierAt(transform.position) : (byte)0
             };
         }
 

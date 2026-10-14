@@ -1,6 +1,6 @@
 # gtg-npc-ffi
 
-The C boundary of the NPC decision. It exports a versioned, batched function, so a host calls Rust once per tick instead of once per NPC. Version 0.0.1, ABI version 4. Builds as a `cdylib` for Unity and as an `rlib` for the tests and the benchmark.
+The C boundary of the NPC decision. It exports a versioned, batched function, so a host calls Rust once per tick instead of once per NPC. Version 0.0.1, ABI version 5. Builds as a `cdylib` for Unity and as an `rlib` for the tests and the benchmark.
 
 The layout and the rules are in `npc/observation.md`.
 
@@ -16,6 +16,7 @@ The layout and the rules are in `npc/observation.md`.
 - The function checks, in this order: the count against the limit, the output capacity, null and alignment, overlap of the two buffers, and then the values. Overlap is rejected because one range becomes a shared slice and the other an exclusive one, which would be undefined behavior if they aliased. The check was added with this version and has a test.
 - Every field added after version 2 is zero in an old caller, and zero means the old behavior. A test sets only the version 2 fields and checks the old results.
 - Booleans are integers that must be 0 or 1, and a reserved field must be zero. A caller written for a later layout is rejected.
+- `crown_heat` (version 5) sits at offset 35, where a reserved byte was. A caller that still sends zero there means no heat and gets the old behavior. A tier above `MAX_CROWN_HEAT` (3, from `gtg-npc-core`) is rejected as a whole batch, so a host built for more tiers fails loudly. Nothing else about the layout moved.
 - The version and both sizes are exported, and the C# bridge refuses a library whose version or sizes differ.
 - `gtg_npc_resolve_mission` is a scalar export, because a mission is resolved rarely and one at a time. It takes the order as the same number the observation uses (4 deliver, 5 raid), so the host needs one set of numbers.
 - `gtg_npc_decide_stub` stays for the first prototype. It builds a hostile, state machine NPC with no order.
@@ -29,7 +30,7 @@ The layout and the rules are in `npc/observation.md`.
 
 ### `test.c`
 
-**What it does:** A C program that calls the library through the header with `-std=c11 -Wall -Wextra -Werror -pedantic`. It checks the layout, the version, the batch behavior, every validation failure, the version 3 rules, and overlap rejection.
+**What it does:** A C program that calls the library through the header with `-std=c11 -Wall -Wextra -Werror -pedantic`. It checks the layout, the version, the batch behavior, every validation failure, the version 3 rules, the Crown Heat rule and its tier limit, and overlap rejection.
 
 ### `decision_throughput.rs` and `bench.c`
 
@@ -42,6 +43,7 @@ The layout and the rules are in `npc/observation.md`.
 
 ## Fixes and Problems
 
+- Version 5 renamed the reserved byte at offset 35 to `crown_heat`, added the tier limit to validation, and bumped the ABI version to 5. The three generators gained the same Crown Heat line, so the pool and the action hash changed together (the hash in the C#, C and Rust `# mixed_actions` lines is `0x9e47645dd2412b08` now). 24 unit tests cover the layout, every validation rule and the Crown Heat tiers. One clippy warning (`useless_vec`, in the overlap test) was there before this change and is not fixed here.
 - Version 3 grew the observation from 32 to 64 bytes. The cost of the larger input is not measured yet. It will show in the next benchmark run.
 - The undocumented `unsafe` blocks, the missing crate docs and the version number `0.1.0` were brought in line with `RUST_RUST_CRATE_GUIDE.md` in this change.
 - Clippy has not run on this code. The sandbox has no clippy, so the lints were checked by building with warnings as errors and by reading each `unsafe` block. The first CI run decides.

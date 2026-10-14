@@ -72,6 +72,7 @@ missing script. Delete it, or switch the define back.
 7. Check the Console at Play start. A missing native library logs one warning and the managed decision takes over. The director overlay says `native` or `managed fallback`. An NPC that is not on the NavMesh logs one warning and stands still.
 8. For a companion, choose the role Companion, set its Level, its Trustworthiness, Affinity and PaySatisfaction, and set its Leader to the player object. Give it orders from code with `brain.SetOrder(NpcOrder.Raid, 12)` and listen to `brain.OrderRefused` and `brain.Betrayed`. For a mission, resolve it with `brain.TryResolveMission` when it happens off screen. No UI for orders exists yet. A companion with no order follows its leader.
 9. For a non-hostile NPC, set its Disposition. Retaliatory ignores the player until it has been hit, and Peaceful runs and never fights.
+10. To change how a group fights, use the two Engagement fields on the `ManagedNpcThreatSource` of the target (the player). Max Melee Attackers (3) is how many NPCs may strike at once, and zero lets everyone strike. Attacker Rotation Seconds (5) is how long a striker keeps its turn before a waiting NPC gets it, and zero lets a striker keep it. The Engagement fields on each `ManagedNpcActor` set the waiting ring, the spacing and the circling speed. Select an attacker with the NPC debugger's Ranges switch on to see its place: a red ring means it holds a turn, an amber ring means it is waiting.
 
 ### Scene setup (Managed)
 
@@ -153,6 +154,10 @@ For a player build, add `MidManStudio/Gtg/SphereUnlit` under Project Settings,
 Graphics, Always Included Shaders. The Editor finds it without that.
 
 Unity creates `.meta` files for the new scripts on first import. Commit them.
+
+To give a town a Crown Heat meter, add `ManagedCrownRegion` to an empty object at the
+town's center and size its box to cover the town. Guards inside the box enforce the law
+there. The rules, the numbers and the debugger line are in `crown-heat.md`.
 
 ### Parity with the ECS stack
 
@@ -1430,6 +1435,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - A source with a `ManagedHealth` that is dead is not seen. A source that is disabled is not seen.
 - The static list is cleared at `SubsystemRegistration`, as in `ManagedSpellCaster`.
 - `Damageable` is the `IManagedDamageable` on the object or a parent. An NPC melee hit uses it, so a source without health can be seen but not hurt.
+- Each source owns the engagement of the NPCs that attack it, created on first use (see `ManagedCombatEngagement.cs`). `MaxMeleeAttackers` (default 3, zero is unlimited) and `AttackerRotationSeconds` (default 5, zero is no rotation) live here because the limit belongs to the target, not to the attackers. `AttackerCount` and `StrikingCount` are read-only for tests and debug tools. Negative values clamp to zero.
 
 ### `ManagedNpcSight.cs`
 
@@ -1454,6 +1460,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - `LearningMode` is stored and exposed. Nothing reads it yet.
 - A threat source on the NPC itself, or on one of its parents or children, is ignored.
 - `Threat` and `LastKnownThreatPosition` record what was seen and where. The memory ends with the lingering time, so an NPC chases the last seen position and not the live one.
+- Target choice: sight walks the candidate sources nearest first, measured from the eye, and the first one that is in view and in line of sight becomes the threat, so the rays stop there. The current threat counts as 30 percent nearer in distance (its squared distance is halved, `StickyTargetKeyFactor` 0.49), so two sources at similar range do not swap places every tick. While the NPC is provoked, the source that last hurt it counts as 50 percent nearer in distance (squared distance quartered, `AttackerTargetKeyFactor` 0.25), so it goes for what hurt it before a stranger who stands closer. A leader and the NPC's own sources are skipped as before. The ranking uses two scratch arrays shared by all brains, sight never re-enters, and they are emptied after every pass so no destroyed source stays referenced. `LastSeenTime` is internal and tells the engagement whose sighting is the freshest.
 - The NPC data lives here, in Unity, and Rust receives a snapshot with every decision: level, order, order level, provoked and disposition. Rust keeps no state.
 - Provoked is set by `ManagedHealth.Damaged` with a source, and it runs out after `_provokedMemorySeconds` (20 s). Damage with no source, such as a hazard, damage from the NPC itself, and damage from its leader do not provoke, so friendly fire does not turn a companion on the player. The handler is removed when the brain is disabled.
 - `SetOrder(order, level)` gives a companion an order. A level is clamped to 0 to 65535 in the observation, and the order None carries no level. Other roles ignore orders.
@@ -1464,24 +1471,44 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - A refusal always clears the order and raises `OrderRefused`, even twice in a row. The order is already cleared when the event fires, so a listener can give a new one. A refusal result for a companion that has no order any more raises no event.
 - A companion never sees its `Leader`, or anything above or below it, as a threat. A companion with no leader warns once and sees the player as a threat. There is no faction system, so a companion sees no enemy at all today: only the player has a threat source. Companion combat waits for factions.
 - The Inspector tooltip says the refusal gap depends on the order type. The gaps live in Rust (`refuse_gap`) and in the C# fallback, and CI compares them on 16,384 NPCs.
+- Crown Heat (ABI version 5). A guard sends the tier of the `ManagedCrownRegion` that holds its position as `CrownHeat`, and every other role sends 0, so only guards can react. Outside every region the tier is 0. The tier is read when the observation is built, so a guard reacts at the next tick after the tier changes. When something hurts the brain, `OnDamaged` hands the hit to `ManagedCrownRegion.ReportHurt`, which decides whether it is a crime. `CrimeRepeatTime` is internal state of that check: the earliest time another hit on this NPC counts as a new assault.
+### `ManagedCombatEngagement.cs`
+
+**What it does:** Says where each NPC that attacks one target should stand, and which of them may strike now. Every attacker holds a `Member`. A few members hold an attack token and take evenly spaced places on a ring just inside melee range (the melee ring). The rest wait on a wider ring (the waiting ring), circle slowly, and take over when a token comes free. The actors read their place from here and walk to it. It moves nothing and decides nothing about whether to fight, Rust still chooses Attack. There is one engagement per `ManagedNpcThreatSource`, and it runs a pass every 0.2 s, started by whichever attacker asks first, so there is no driver to add to a scene.
+
+**Decisions:**
+- This is the Assassin's Creed style of fight: three attackers at most strike at once (the default, set on the target), the others circle and wait. Everyone still counts as attacking, so the debugger and the observation are unchanged. Unlimited (zero) is available for a design that wants a mob.
+- Tokens go to the member that has waited longest, and the nearest wins a tie. A holder gives its token up after the rotation time (5 s) and then queues behind everyone who was already waiting, so over time every attacker gets its turn. A lowered limit takes tokens back from the farthest holders first.
+- Holders get places spaced evenly around the melee ring, 70 percent of the attack range from the target, so a striker is always inside its reach with room to spare. The circle is cut into as many equal steps as there are holders, in the order the holders stand around the target, and the whole ring is turned by the circular mean so the group walks the least. Turning it by whole steps would give the same places to the same members, so no search over turns is made.
+- Waiters get the same even spacing on the waiting ring, 2.5 m outside the melee ring. The ring widens to give each waiter 1.2 m of arc, so forty waiters do not stack on top of each other. The place sits a step ahead of the waiter along the circle (1.5 m/s of travel), and the direction flips every 8 s, so the group drifts around the target instead of standing in a line.
+- The ring is centred on where the freshest sighting among the attackers put the target. Each attacker saw the target within the lingering time, so nobody learns more than it would have known alone, and hiding still works because the rings stay on the last seen position.
+- A member that cannot make progress reports itself blocked (the actor does this, see below). The next pass shifts its place along the ring by 0.6 rad for 3 s. The first direction is chosen by the NPC id parity so two neighbours that block each other do not both step the same way. A repeated block inside the window turns the step around and grows it by half, to a limit of 1.8 rad. When the time is up the bias ends and the member goes back to its place.
+- A new member starts as a waiter and walks to the waiting ring along the line it stands on, or stays where it is when it is already closer. The first pass comes 0.2 s after the first join, when the others that decided in the same tick have joined too, so the attackers are weighed together and the first to join gets no head start. That delay is the attackers' reaction time.
+- Cost: one pass over two hundred attackers took about 0.1 ms in the harness. The work is a sort by bearing of each group (an insertion sort, the groups are small) and a loop. No allocations after the arrays have grown.
+
 ### `ManagedNpcActor.cs`
 
-**What it does:** Carries out the action Rust chose, driving a `NavMeshAgent`. Patrol walks the waypoints in order, or wanders near where the NPC began. Attack chases the last seen position and hits the target in melee. Retreat runs directly away. Follow walks to the brain's `Leader` and stops 3 m from it. Idle, Trade, Hold and RefuseOrder stand still. It raises `Attacked` for every hit.
+**What it does:** Carries out the action Rust chose, driving a `NavMeshAgent`. Patrol walks the waypoints in order, or wanders near where the NPC began. Attack joins the target's engagement, walks to its place and hits the target in melee when it holds a turn. Retreat runs directly away. Follow walks to the brain's `Leader` and stops 3 m from it. Idle, Trade, Hold and RefuseOrder stand still. It raises `Attacked` for every hit.
 
 **Decisions:**
 - The actor never decides. It listens to `ManagedNpcBrain.ActionChanged`, so the Rust decision stays the single source of what an NPC does.
 - Movement uses a `NavMeshAgent`, because the AI Navigation package is installed. The scene needs a baked NavMesh. An NPC that is not on it logs one warning, sends nothing to the agent, and is configured as soon as it is on the NavMesh.
-- A chase goes to `LastKnownThreatPosition`, not to the live position of the target, so stepping out of sight works as hiding. The destination is refreshed every 0.25 s.
-- Melee has a range (1.8 m), a damage (10) and a cooldown (1.2 s), all placeholders in the Inspector. The agent stops at 80 percent of the range and the NPC turns to face the target, so its view cone keeps pointing at it.
-- A hit goes through `ManagedNpcThreatSource.Damageable`. It is skipped when the target is already dead, which matters when two attackers are ready in the same frame.
+- Attack goes to the place the engagement gave, which is computed around `LastKnownThreatPosition`, not around the live position of the target, so stepping out of sight works as hiding. The destination is refreshed every 0.25 s, and a new place that is less than 0.4 m from the last one is not sent to the agent.
+- Melee has a range (1.8 m), a damage (10) and a cooldown (1.2 s), all placeholders in the Inspector. The agent stops 0.25 m short of its place. A holder strikes once it is within 0.6 m of its place, or after 1.5 s inside the attack range whatever the place, so a blocked place never leaves an NPC standing idle in reach of the target.
+- A waiter within 1 m of its ring moves at the circling speed (1.5 m/s, zero makes it stand). Everyone else closes in at the chase speed.
+- Close to the target (within the waiting ring plus 3 m) the NPC turns to face the target itself and the agent's own rotation is turned off, because an agent turns to where it walks. A circling or flanking NPC would turn its side to the target, leave its view cone, lose sight and drop out of the fight. Rotation is restored when it leaves the engagement.
+- Holders get a lower avoidance priority number (they push through) and waiters a higher one (they give way), by 10 around the base value the agent had at start.
+- Stuck detection: every 0.5 s the actor checks that an attacker that wants to move has moved more than 0.1 m. After `_blockedSeconds` (1 s) without movement it tells the engagement it is blocked and plans a new path. A place that is more than 1.5 m from the NavMesh, for instance inside a wall, is reported blocked at once and nothing is sent to the agent. A holder out of range that stands still counts as trying to move.
+- A hit goes through `ManagedNpcThreatSource.Damageable`. It is skipped when the target is already dead, which matters when two attackers are ready in the same frame. It is also skipped, with no event, when the target really is farther than the attack range plus `_hitLeewayMeters` (0.75 m), measured to where the target is now. The swing aims at the last seen position, and a target that has stepped away since is missed. A miss raises no event.
+- The engagement is left when the mode changes, when the NPC dies and when the component is disabled, so no dead or retreating NPC keeps holding a token.
 - Follow stops inside `_followDistance` (3 m) and starts again only when the leader is more than a meter farther, so a follower does not shuffle at the edge. A follower with no leader stands still.
 - A patrol stop lasts `_pauseSeconds`. A wander point must be on the NavMesh, otherwise the NPC stays where it is until the next try.
-- A chase target that is off the NavMesh gives no destination, so the NPC stands. A dead NPC stops. It is destroyed after `_removeAfterDeathSeconds`, and zero leaves the body.
+- A dead NPC stops. It is destroyed after `_removeAfterDeathSeconds`, and zero leaves the body.
 - Every NPC with an actor runs a small `Update`. The work per frame is a few comparisons, and the agent does the movement.
 
 ### `ManagedNpcDebugView.cs`
 
-**What it does:** Editor-only drawing and text for the NPC debugger, in `Managed/NPC/Editor/` so it compiles into `Assembly-CSharp-Editor` and never reaches a build. It draws one NPC in the Scene view: a label, the path to the destination, a marker on the destination, the patrol route with numbered stops, the wander, attack or retreat range, the sight cone, and a cross where the threat was last seen. Colors follow the action: grey Idle, cyan Trade, green Patrol, red Attack, amber Retreat, blue Follow, purple Hold, pink RefuseOrder, teal Mission, dark red Betray. A companion's line shows its level, order, loyalty and whether it could betray, a non-hostile disposition is named, and provoked is shown. A follower draws a dotted line to its leader and a ring of the follow distance around the leader.
+**What it does:** Editor-only drawing and text for the NPC debugger, in `Managed/NPC/Editor/` so it compiles into `Assembly-CSharp-Editor` and never reaches a build. It draws one NPC in the Scene view: a label, the path to the destination, a marker on the destination, the patrol route with numbered stops, the wander, attack or retreat range, the sight cone, and a cross where the threat was last seen. Colors follow the action: grey Idle, cyan Trade, green Patrol, red Attack, amber Retreat, blue Follow, purple Hold, pink RefuseOrder, teal Mission, dark red Betray. A companion's line shows its level, order, loyalty and whether it could betray, a non-hostile disposition is named, and provoked is shown. A guard that stands in a region with Crown Heat adds `crown` and the tier name (wanted, hunted, outlaw) to its line. A follower draws a dotted line to its leader and a ring of the follow distance around the leader. An attacker that is part of an engagement shows `striking` or `waiting` in its line, and with the Ranges switch on it draws a ring at its place with a dotted line to it, red for a holder and amber for a waiter.
 
 **Decisions:**
 - It reads public state only and changes nothing in the game. The brain, the actor and the director gained read-only accessors for it (`Current`, `GetBrain`, `ViewRange`, `FieldOfViewDegrees`, `Home`, `AttackRange`, `WanderRadius`, `RetreatDistance`, waypoints, `HasPath`, `Destination`, `GetPathCorners`). No game code reads them.
@@ -1492,7 +1519,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 
 ### `ManagedNpcDebuggerWindow.cs`
 
-**What it does:** The window behind it, opened from the menu GTG, NPC Debugger. It shows the director line (NPC count, batch size, rays this tick, native library or managed fallback), the switches above, and a live list of NPCs. A click on a row selects the NPC and frames it in the Scene view. It subscribes to `SceneView.duringSceneGui` while it is open and unsubscribes when it closes.
+**What it does:** The window behind it, opened from the menu GTG, NPC Debugger. It shows the director line (NPC count, batch size, rays this tick, native library or managed fallback), one line per Crown region (name, heat and tier), the switches above, and a live list of NPCs. A click on a row selects the NPC and frames it in the Scene view. It subscribes to `SceneView.duringSceneGui` while it is open and unsubscribes when it closes.
 
 **Decisions:**
 - Nothing is drawn in Edit mode, and the window says so. The registry of brains only fills in Play mode.
@@ -1524,6 +1551,32 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - `Brains` and the id counter are static and cleared at `SubsystemRegistration`. `Current` and `GetBrain(index)` are public for the NPC debugger.
 - Tick cost is about one managed array fill, one pinned native call and at most the ray cap, all on the main thread.
 
+### `ManagedCrownTypes.cs`
+
+**What it does:** The two small types of Crown Heat. `ManagedCrimeKind` names what the player did (Assault and Murder of a merchant or civilian, AssaultOnGuard and MurderOfGuard). `ManagedCrownTier` holds the tier numbers (Clear 0, Wanted 1, Hunted 2, Outlaw 3, Max 3) and `Name(tier)`.
+
+**Decisions:**
+- The tier numbers are the ones the native decision receives, so they are constants and not an enum, and the brain casts one to a byte without a conversion table. `Max` equals `MAX_CROWN_HEAT` in Rust and a test checks it.
+- Hunted and Outlaw decide the same as Wanted today. They exist so a region can already tell the difference for the debugger and for the rules that are not built (bounty hunters, the Crown's knights).
+- A kind is about the victim and not the weapon. Crimes against anyone else (an enemy, a boss, a companion) are not crimes, see `ManagedCrownRegion.cs`.
+
+### `ManagedCrownRegion.cs`
+
+**What it does:** One area where the Crown's law holds, and the heat the player has earned in it. A box volume (size in meters, not rotated) on an empty GameObject. Heat rises when somebody hurts or kills a merchant, civilian or guard while a guard of the region sees the offender, and fades while no guard sees anything. The tier of the heat (10, 40 and 75 by default) is what guards in the box send to the native decision. It raises `TierChanged` and `CrimeReported`. It also offers `Add`, `Reduce` and `Clear` for bribes, pardons and story events, and static `Count`, `Get`, `Find` and `TierAt` for lookups.
+
+**Decisions:**
+- Heat is regional and not global. The same crime in another town earns nothing there. A point outside every box has tier 0, so a crime in the wilderness is not a crime. Where boxes overlap, the first to register wins, so keep them apart.
+- A crime counts only when a live guard of the region has the offender in view right now (`ThreatVisible` and `Threat` match). No witness means no heat, and the event still fires with `seen` false so a story system can react to it.
+- The offender is whatever `ManagedNpcThreatSource` the damage source belongs to, found on the source object or a parent. Today that is the player. A second threat source would earn heat the same way, which is the reason the Rust rule cannot tell who the threat is yet.
+- Amounts are per crime kind (assault 5, murder 25, assault on a guard 15, murder of a guard 40) and the cap is 100. All are Inspector fields and all are placeholders.
+- Hurting the same victim again inside `_assaultRepeatSeconds` (3 s) counts once, so a flurry of blows on one victim is one assault and not twelve. A killing blow always counts, even inside the window, and it adds the murder heat on top of any assault already counted.
+- Fade: every 0.5 s the region scans whether any guard in the box sees any threat, and a sighting restarts the clock, as does every crime and every `Add`. After `_unseenSeconds` (20 s) without one, heat falls by `_fadePerSecond` (0.5) per second. So a wanted player who hides loses it, and one who stays in sight of a guard keeps it. The scan sees any threat, not only the offender, which is the same single-player simplification.
+- Only a region with heat runs the scan, and the scan walks the director's brain list, so an idle town costs one float compare per frame.
+- `Reduce` does not touch the fade clock, and `Clear` is `SetHeat(0)`. A tier change raises the event once, whatever caused it.
+- The thresholds are clamped in `OnValidate` so wanted is at most hunted is at most outlaw is at most the cap, and nothing can be negative.
+- The region list is static and cleared at `SubsystemRegistration`, as in the other registries. `OnDrawGizmosSelected` draws the box, yellow when clear and red while wanted or worse.
+- The meter is not saved. Persistence is a game system that does not exist yet.
+
 ## CI and Workflows
 
 - `.github/workflows/run-patch.yml` - runs `.mdix/patches/patch.mdix`. The current
@@ -1535,9 +1588,9 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - `.github/workflows/npc-rust-ci.yml` - checks the shared NPC layer. The `csharp-abi` job
   compiles `NPCNativeLib`, `NPCNativeTypes`, `NPCManagedFallback` and `NPCEnums` with
   plain .NET and runs them against the real Rust library. The `managed-npc` job compiles
-  `Managed/Health`, `Managed/NPC` (including its `Editor/` folder) and the spell damage files (C# 9, as in Unity 2022.3)
+  `Managed/Health`, `Managed/NPC` (including its `Editor/` folder), `Managed/Crown` and the spell damage files (C# 9, as in Unity 2022.3)
   against hand written `UnityEngine`, `UnityEditor` and `NavMeshAgent` stand-ins in
-  `rust/npc/managed-npc-test/` and runs 645 checks, once on the managed fallback and
+  `rust/npc/managed-npc-test/` and runs 836 checks, once on the managed fallback and
   once on the real library. The spell caster itself is replaced by a stub that has only
   the `Impact` event. The spell definition is compiled too, so the flight, payload,
   modifier and vessel type files that it depends on are part of the project.
@@ -1860,13 +1913,46 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   Unity dependency, and the Managed director needs it when the native library is missing. The ECS decision
   system still uses it unchanged. The alternative was a second copy of the decision, which the Rust parity
   test would not cover. `NPCNativeLib.cs`, `NPCNativeTypes.cs` and `NPCEnums.cs` were already unwrapped.
+- Crown Heat (`Managed/Crown/`, the brain, the debug view and window, and the ABI version 5 files in Rust, C and C#).
+  Before, guards ignored a visible player unless they had been attacked themselves, whatever the player had done
+  in front of them, and nothing tracked crimes. Now a region counts witnessed assaults and murders into a meter,
+  turns it into a tier, fades it when unseen, and a retaliatory guard in a region at tier 1 or more fights the
+  player on sight. Forty deliberate breaks (a wrong threshold, a missing witness check, no repeat window, the kill
+  exception, victim roles, the guard-only send, fade timing and rate, the clock restart on crime or sighting, region
+  lookup, clamping, and in Rust the role check, the tier check and the validation limit) were each caught by a
+  failing check. One of my own tests had wrong arithmetic first (it expected tier 1 after 23 s from 11 heat, but 3 s of fade takes
+  1.5 and leaves 9.5, which is tier 0) and was corrected, and the harness needed a `GetComponentInParent` stub. The harness checks the logic
+  with stubs. It does not run real guards with real sight, so witness detection has not seen a real raycast.
+- Crown Heat not built: rules for tiers 2 and 3, crimes other than hurting and killing (theft, trespass, drug dealing
+  once that exists), bribes and pardons as game systems, saving the meter, a UI for the meter, and a way for a guard
+  to tell the player from another threat. Local Favor is separate and not built. Every number is a placeholder.
 - Not verified in the Editor, not compiled by Unity. The files compile with .NET 8 (C# 9) against hand
-  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 645 checks pass there on
+  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 836 checks pass there on
   both the managed fallback and the real Rust library. CI job `managed-npc` repeats this on every push. The
   stub raycast is a callback, the NavMesh is a callback and the agent moves in a straight line, so the checks
   prove the logic around them (cone, budget, lingering, memory, patrol, chase, cooldown, retreat, damage
   falloff, debugger filters and drawing) and not real colliders, layers, NavMesh pathing or `Physics.Raycast`
   behavior. Twenty-three deliberate breaks of the earlier logic and the version 3 and 4 additions (provocation, orders, refusal, follow, hold, betrayal, missions, the resolver) were each caught by a failing check.
+- Combat engagement (`ManagedCombatEngagement.cs`, and the Attack code of `ManagedNpcActor.cs`, `ManagedNpcBrain.cs`,
+  `ManagedNpcThreatSource.cs`, `ManagedNpcDebugView.cs`). Before, every attacker chased the same last seen point and
+  stopped at 80 percent of its range, so a group stacked into one spot on the player's line, and a hit landed
+  whenever the cooldown was ready, even on a target that had moved away since the last sighting. Now attackers hold
+  places on a ring, only a limited number strike at once, the rest circle and wait, and a swing at a target that is
+  out of reach misses. Targets are chosen nearest first, with stickiness and revenge. Thirty-one deliberate breaks of
+  these rules (the token limit, rotation, order of the queue, even spacing, the turn of the ring, circling, crowd
+  widening, blocked handling and its direction by id, the freshest sighting, the live hit check and its leeway,
+  holders only strike, the settling fallback, facing and rotation, avoidance priority, stuck detection, leaving the
+  engagement, and the three target rules) were each caught by a failing check. Four of them were not caught at
+  first, and one showed that a search over turns of the ring did nothing, so it was removed. Existing checks
+  changed on purpose: the chase destination is now the place on the ring (z about 8.74 for a target at 10), the
+  stopping distance is 0.25, and a redundant destination is no longer re-sent.
+- Combat not built: ranged attackers, companions as targets or fighters (needs factions), group spacing while
+  following, Rust-side tactics (flanking, kiting, morale, calling for help), which need the distance to the
+  target and the number of allies in the observation, and an event for a swing that misses. More than about
+  eight holders on the melee ring crowd it, so the default of three is the number to design around. The
+  numbers (3 strikers, 5 s rotation, 2.5 m waiting distance, 1.5 m/s circling, 0.75 m leeway, 30 and 50 percent
+  preferences) are placeholders. The agent stub does not collide, so the harness proves where attackers are sent and
+  when they strike, and not how a real NavMesh crowd squeezes past each other.
 - The `UnityEditor` stubs were written from knowledge of the API and prove that the editor files are
   consistent with them, not with the real `UnityEditor`. An editor file that does not compile in Unity blocks
   Play mode for the whole project, so after importing, look at the Console first. The calls used are

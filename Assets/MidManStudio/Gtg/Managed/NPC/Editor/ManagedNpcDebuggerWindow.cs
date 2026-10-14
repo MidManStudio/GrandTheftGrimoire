@@ -4,6 +4,7 @@
 // ============================================================================
 
 using System.Collections.Generic;
+using MidManStudio.Gtg.Managed.Crown;
 using UnityEditor;
 using UnityEngine;
 
@@ -60,6 +61,10 @@ namespace MidManStudio.Gtg.Managed.NPC
             }
 
             GUILayout.Label(ManagedNpcDebugView.DescribeDirector(ManagedNpcDirector.Current, ManagedNpcDirector.RegisteredCount));
+            for (int r = 0; r < ManagedCrownRegion.Count; r++)
+            {
+                GUILayout.Label("Crown Heat: " + ManagedCrownRegion.Get(r).Describe());
+            }
 
             _options.Mode = (ManagedNpcDrawMode)EditorGUILayout.Popup("Scene drawing", (int)_options.Mode, ModeNames);
             _options.Filter = (ManagedNpcActionFilter)EditorGUILayout.Popup("Show", (int)_options.Filter, FilterNames);

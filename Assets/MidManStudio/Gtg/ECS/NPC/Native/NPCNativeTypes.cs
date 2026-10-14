@@ -2,10 +2,11 @@ using System.Runtime.InteropServices;
 
 namespace MidManStudio.Gtg.NPC.Native
 {
-    // Must match npc-ffi/src/lib.rs exactly (ABI version 4, 64 bytes). The first 32 bytes are the version 2
+    // Must match npc-ffi/src/lib.rs exactly (ABI version 5, 64 bytes). The first 32 bytes are the version 2
     // layout. Booleans are 32-bit integers up to offset 28 and bytes after that, and every Reserved field
     // must stay zero. A zero in every field from Disposition on means: hostile, no order, not provoked, level 0,
-    // and no betrayal opportunity.
+    // no betrayal opportunity and no Crown Heat. CrownHeat is the tier 0 to 3 of the region the NPC stands in,
+    // read by guards only. Offset 35 was a reserved byte up to version 4.
     [StructLayout(LayoutKind.Explicit, Size = 64)]
     internal struct NPCNativeObservation
     {
@@ -19,7 +20,7 @@ namespace MidManStudio.Gtg.NPC.Native
         [FieldOffset(32)] public byte Disposition;
         [FieldOffset(33)] public byte Order;
         [FieldOffset(34)] public byte Provoked;
-        [FieldOffset(35)] public byte ReservedByte;
+        [FieldOffset(35)] public byte CrownHeat;
         [FieldOffset(36)] public ushort Level;
         [FieldOffset(38)] public ushort OrderLevel;
         [FieldOffset(40)] public float Trustworthiness;

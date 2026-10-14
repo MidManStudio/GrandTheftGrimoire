@@ -12,10 +12,11 @@
 
 use gtg_npc_core::{
     DecisionBackend, MissionOutcome, NpcAction, NpcDisposition, NpcOrder, NpcRole, Observation,
+    MAX_CROWN_HEAT,
 };
 
 /// Version of the C layout and meaning of every field. The host refuses a library with another version.
-pub const ABI_VERSION: u32 = 4;
+pub const ABI_VERSION: u32 = 5;
 /// Success.
 pub const STATUS_OK: i32 = 0;
 /// A pointer was null or not aligned for its type.
@@ -30,7 +31,8 @@ pub const MAX_BATCH: usize = 4096;
 
 /// One NPC, as C sees it. 64 bytes, 8-byte alignment on supported 64-bit targets. C# uses explicit
 /// offsets. Booleans are integers that must be 0 or 1. A zero in every field added after version 2
-/// means "no information": hostile, no order, not provoked, level 0, and no betrayal opportunity.
+/// means "no information": hostile, no order, not provoked, level 0, no betrayal opportunity and no
+/// Crown Heat.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NpcObservationAbi {
@@ -54,8 +56,10 @@ pub struct NpcObservationAbi {
     pub order: u8, // 33
     /// 1 when the NPC was attacked recently, otherwise 0.
     pub provoked: u8, // 34
-    /// Must be zero.
-    pub reserved_byte: u8, // 35
+    /// The Crown Heat tier of the region the NPC stands in: 0 none, 1 wanted, 2 hunted, 3 outlaw. Above 3
+    /// is rejected. Only guards read it. Offset 35 held a reserved byte up to version 4, so a caller that
+    /// still sends zero there means no heat.
+    pub crown_heat: u8, // 35
     /// The NPC's level.
     pub level: u16, // 36
     /// The difficulty of the current order as a level, 0 for an order with none.
@@ -144,7 +148,6 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         _ => return None,
     };
     if raw.reserved != 0
-        || raw.reserved_byte != 0
         || raw.reserved_a != 0
         || raw.reserved_b != 0
         || raw.reserved_c != 0
@@ -152,6 +155,7 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         || raw.can_move > 1
         || raw.provoked > 1
         || raw.betrayal_opportunity > 1
+        || raw.crown_heat > MAX_CROWN_HEAT
         || !raw.health_fraction.is_finite()
         || !raw.trustworthiness.is_finite()
         || !raw.affinity.is_finite()
@@ -176,6 +180,7 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         pay_satisfaction: raw.pay_satisfaction.clamp(0.0, 1.0),
         noise: raw.noise,
         betrayal_opportunity: raw.betrayal_opportunity == 1,
+        crown_heat: raw.crown_heat,
     })
 }
 
@@ -374,7 +379,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, disposition), 32);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, order), 33);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, provoked), 34);
-        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_byte), 35);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, crown_heat), 35);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, level), 36);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, order_level), 38);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, trustworthiness), 40);
@@ -392,7 +397,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_b), 58);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_c), 60);
         assert_eq!(std::mem::offset_of!(NpcDecisionAbi, action), 8);
-        assert_eq!(gtg_npc_abi_version(), 4);
+        assert_eq!(gtg_npc_abi_version(), 5);
         assert_eq!(gtg_npc_observation_size(), 64);
         assert_eq!(gtg_npc_decision_size(), 16);
     }
@@ -444,9 +449,6 @@ mod tests {
         o.reserved = 1;
         assert_eq!(call(&[o], &mut out), STATUS_INVALID);
         o.reserved = 0;
-        o.reserved_byte = 1;
-        assert_eq!(call(&[o], &mut out), STATUS_INVALID);
-        o.reserved_byte = 0;
         for (name, bad) in [
             ("reserved_a", NpcObservationAbi { reserved_a: 1, ..o }),
             ("reserved_b", NpcObservationAbi { reserved_b: 1, ..o }),
@@ -526,6 +528,13 @@ mod tests {
                     ..raw(3)
                 },
             ),
+            (
+                "crown_heat above the highest tier",
+                NpcObservationAbi {
+                    crown_heat: 4,
+                    ..raw(2)
+                },
+            ),
         ] {
             assert_eq!(call(&[bad], &mut out), STATUS_INVALID, "{name}");
         }
@@ -587,6 +596,60 @@ mod tests {
             ..raw(3)
         };
         assert_eq!(one(peaceful), 4, "never fights, runs");
+    }
+
+    #[test]
+    fn crown_heat_is_validated_and_reaches_the_decision() {
+        let mut out = [NpcDecisionAbi::default()];
+        for tier in 0..=3u8 {
+            let o = NpcObservationAbi {
+                crown_heat: tier,
+                ..raw(2)
+            };
+            assert_eq!(call(&[o], &mut out), STATUS_OK, "tier {tier}");
+        }
+        let sentinel = NpcDecisionAbi {
+            npc_id: 999,
+            action: 9,
+            reserved: 9,
+        };
+        for tier in [4u8, 5, 100, 255] {
+            let mut out = [sentinel; 2];
+            let bad = NpcObservationAbi {
+                crown_heat: tier,
+                ..raw(2)
+            };
+            assert_eq!(
+                call(&[raw(0), bad], &mut out),
+                STATUS_INVALID,
+                "tier {tier}"
+            );
+            assert_eq!(out, [sentinel; 2], "a rejected tier writes nothing");
+        }
+        let guard = NpcObservationAbi {
+            disposition: 1,
+            threat_visible: 1,
+            ..raw(2)
+        };
+        assert_eq!(
+            one(guard),
+            2,
+            "a retaliatory guard ignores a threat while the player is not wanted"
+        );
+        for tier in 1..=3u8 {
+            let wanted = NpcObservationAbi {
+                crown_heat: tier,
+                ..guard
+            };
+            assert_eq!(one(wanted), 3, "and attacks it at tier {tier}");
+        }
+        let enemy = NpcObservationAbi {
+            disposition: 1,
+            threat_visible: 1,
+            crown_heat: 3,
+            ..raw(3)
+        };
+        assert_eq!(one(enemy), 2, "an enemy does not read the tier");
     }
 
     #[test]

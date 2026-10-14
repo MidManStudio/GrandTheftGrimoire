@@ -18,7 +18,7 @@ _Static_assert(offsetof(GtgNpcObservation,reserved)==28, "reserved offset");
 _Static_assert(offsetof(GtgNpcObservation,disposition)==32, "disposition offset");
 _Static_assert(offsetof(GtgNpcObservation,order)==33, "order offset");
 _Static_assert(offsetof(GtgNpcObservation,provoked)==34, "provoked offset");
-_Static_assert(offsetof(GtgNpcObservation,reserved_byte)==35, "reserved_byte offset");
+_Static_assert(offsetof(GtgNpcObservation,crown_heat)==35, "crown_heat offset");
 _Static_assert(offsetof(GtgNpcObservation,level)==36, "level offset");
 _Static_assert(offsetof(GtgNpcObservation,order_level)==38, "order_level offset");
 _Static_assert(offsetof(GtgNpcObservation,trustworthiness)==40, "trustworthiness offset");
@@ -109,12 +109,25 @@ int main(void) {
  CHECK(gtg_npc_resolve_mission(GTG_NPC_ORDER_ATTACK,10,10,0)==GTG_NPC_INVALID);
  CHECK(gtg_npc_resolve_mission(GTG_NPC_ORDER_RAID,65536,10,0)==GTG_NPC_INVALID);
 
+ /* Crown Heat. Only a retaliatory guard reads it: it fights a visible threat once the tier is 1 or more. */
+ GtgNpcObservation guard={.npc_id=4,.role=GTG_NPC_ROLE_GUARD,.backend=GTG_NPC_BACKEND_UTILITY,.threat_visible=1,.health_fraction=1,.can_move=1,.disposition=GTG_NPC_DISPOSITION_RETALIATORY};
+ CHECK(decide_one(guard,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_PATROL);
+ for (uint8_t tier=1; tier<=GTG_NPC_CROWN_HEAT_MAX; tier++) {
+  guard.crown_heat=tier;
+  CHECK(decide_one(guard,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_ATTACK);
+ }
+ GtgNpcObservation hot_enemy=enemy; hot_enemy.disposition=GTG_NPC_DISPOSITION_RETALIATORY; hot_enemy.crown_heat=3;
+ CHECK(decide_one(hot_enemy,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_PATROL);
+ GtgNpcObservation hot_peaceful=guard; hot_peaceful.disposition=GTG_NPC_DISPOSITION_PEACEFUL;
+ CHECK(decide_one(hot_peaceful,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_RETREAT);
+
  /* Anything outside the defined values is rejected, and nothing is written. */
  GtgNpcObservation bad;
  bad=enemy; bad.disposition=3; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=companion; bad.order=6; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.provoked=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
- bad=enemy; bad.reserved_byte=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.crown_heat=GTG_NPC_CROWN_HEAT_MAX+1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.crown_heat=255; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.reserved_a=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.reserved_b=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.reserved_c=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);

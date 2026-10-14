@@ -13,9 +13,10 @@ namespace MidManStudio.Gtg.Managed.NPC
 {
     /// <summary>
     /// Carries out the action the Rust decision chose. Patrol walks waypoints or wanders, Attack
-    /// chases the threat and hits it in melee, Retreat runs away from it, Follow walks to the brain's
-    /// Leader and stays near, and Idle, Trade, Hold, RefuseOrder, Mission and Betray stand still. A mission and a
-    /// betrayal are carried out by game code that listens to the brain.
+    /// closes in on the threat, takes the place the target's engagement gives it, circles while it
+    /// waits for a turn and hits in melee when it has one, Retreat runs away from it, Follow walks to
+    /// the brain's Leader and stays near, and Idle, Trade, Hold, RefuseOrder, Mission and Betray stand
+    /// still. A mission and a betrayal are carried out by game code that listens to the brain.
     /// It moves the NPC with a NavMeshAgent, so the scene needs a baked NavMesh. It listens to the
     /// brain and never decides anything itself.
     /// </summary>
@@ -44,6 +45,18 @@ namespace MidManStudio.Gtg.Managed.NPC
         [SerializeField] private float _turnSpeedDegrees = 360f;
         [Tooltip("Seconds between refreshing the chase destination.")]
         [SerializeField] private float _repathIntervalSeconds = 0.25f;
+        [Tooltip("A hit lands only when the target is within the attack range plus this, measured to where the target really is now and not to where it was last seen.")]
+        [SerializeField] private float _hitLeewayMeters = 0.75f;
+
+        [Header("Engagement")]
+        [Tooltip("How far outside the melee ring the waiting ring lies. An attacker with no turn to strike stands and circles there.")]
+        [SerializeField] private float _waitDistance = 2.5f;
+        [Tooltip("Arc length kept free for each waiting attacker. Roughly twice the agent radius. A crowd of waiters widens the ring to keep it.")]
+        [SerializeField] private float _ringSpacing = 1.2f;
+        [Tooltip("How fast a waiting attacker circles the target, in meters per second. Zero makes it stand still on the ring.")]
+        [SerializeField] private float _circleSpeed = 1.5f;
+        [Tooltip("Seconds without moving toward its place before an attacker asks for another place on the ring.")]
+        [SerializeField] private float _blockedSeconds = 1f;
 
         [Header("Retreat")]
         [SerializeField] private float _retreatDistance = 12f;
@@ -71,6 +84,40 @@ namespace MidManStudio.Gtg.Managed.NPC
         private bool _warnedNoNavMesh;
         private bool _dead;
 
+        // Where an attacker stands, see ManagedCombatEngagement.
+        private ManagedCombatEngagement _engagement;
+        private ManagedCombatEngagement.Member _member;
+        private bool _autoRotation = true;
+        private int _basePriority = 50;
+        private int _priority = 50;
+        private bool _inRange;
+        private float _inRangeSince;
+        private Vector3 _lastGoal;
+        private float _progressCheckTime;
+        private Vector3 _progressAnchor;
+        private int _stuckSamples;
+
+        // The melee ring sits at 70 percent of the attack range. The agent stops up to SlotStoppingDistance short of its
+        // place, so the worst case is still inside the attack range with room to spare.
+        private const float MeleeRingFraction = 0.7f;
+        private const float SlotStoppingDistance = 0.25f;
+        // A place further than this from the NavMesh counts as unreachable and the attacker asks for another one.
+        private const float SlotSampleMeters = 1.5f;
+        // An attacker this close to the waiting ring turns to face the target, see UpdateAttack.
+        private const float EngagedMargin = 3f;
+        // A holder strikes once it is this close to its place, or after SettleSeconds in range whatever the place.
+        private const float SlotToleranceMeters = 0.6f;
+        private const float SettleSeconds = 1.5f;
+        // A waiter within this of its ring moves at the circling speed.
+        private const float RingBandMeters = 1f;
+        // A new place closer than this to the last one is not worth a new path.
+        private const float GoalToleranceMeters = 0.4f;
+        private const float ProgressSampleSeconds = 0.5f;
+        private const float StuckMovementMeters = 0.1f;
+        private const float StuckSlotDistanceMeters = 1f;
+        // Holders push through, waiters give way.
+        private const int PriorityStep = 10;
+
         /// <summary>(this, what was hit). Raised for every melee hit, for an animation or a sound.</summary>
         public event Action<ManagedNpcActor, IManagedDamageable> Attacked;
 
@@ -83,6 +130,15 @@ namespace MidManStudio.Gtg.Managed.NPC
         public float RetreatDistance { get { return _retreatDistance; } }
         public float FollowDistance { get { return _followDistance; } }
         public int WaypointCount { get { return _waypoints != null ? _waypoints.Length : 0; } }
+        /// <summary>True while this attacker is part of its target's engagement. For debug tools.</summary>
+        public bool IsEngaged { get { return _member != null; } }
+
+        /// <summary>True while this attacker holds a place to strike from. For debug tools.</summary>
+        public bool HasAttackToken { get { return _member != null && _member.HasToken; } }
+
+        /// <summary>The place the engagement gave this attacker, or its own position when it has none. For debug tools.</summary>
+        public Vector3 EngagementSlot { get { return _member != null ? _engagement.SlotPosition(_member) : transform.position; } }
+
         public int NextWaypointIndex { get { return WaypointCount > 0 ? _nextWaypoint % WaypointCount : 0; } }
 
         public Transform GetWaypoint(int index)
@@ -110,6 +166,8 @@ namespace MidManStudio.Gtg.Managed.NPC
             _agent = GetComponent<NavMeshAgent>();
             _health = GetComponent<ManagedHealth>();
             _home = transform.position;
+            _basePriority = _agent.avoidancePriority;
+            _priority = _basePriority;
         }
 
         private void OnEnable()
@@ -130,6 +188,8 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 _health.Died -= OnDied;
             }
+
+            LeaveEngagement();
         }
 
         private void OnValidate()
@@ -143,6 +203,11 @@ namespace MidManStudio.Gtg.Managed.NPC
             _attackRange = Mathf.Max(0.1f, _attackRange);
             _attackCooldownSeconds = Mathf.Max(0f, _attackCooldownSeconds);
             _repathIntervalSeconds = Mathf.Max(0.05f, _repathIntervalSeconds);
+            _hitLeewayMeters = Mathf.Max(0f, _hitLeewayMeters);
+            _waitDistance = Mathf.Max(0f, _waitDistance);
+            _ringSpacing = Mathf.Max(0.1f, _ringSpacing);
+            _circleSpeed = Mathf.Max(0f, _circleSpeed);
+            _blockedSeconds = Mathf.Max(ProgressSampleSeconds, _blockedSeconds);
         }
 
         private void OnActionChanged(ManagedNpcBrain brain, NpcAction previous, NpcAction next)
@@ -162,6 +227,7 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         private void EnterMode(NpcAction mode)
         {
+            LeaveEngagement();
             _mode = _dead ? NpcAction.Idle : mode;
             _hasDestination = false;
             _nextRepathTime = 0f;
@@ -179,6 +245,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         private void Configure()
         {
             _configured = true;
+            SetAutoRotation(true);
             switch (_mode)
             {
                 case NpcAction.Patrol:
@@ -186,8 +253,9 @@ namespace MidManStudio.Gtg.Managed.NPC
                     _agent.stoppingDistance = 0.3f;
                     break;
                 case NpcAction.Attack:
+                    // The agent walks to a place on a ring, so it stops at that place and not at the melee range.
                     _agent.speed = _chaseSpeed;
-                    _agent.stoppingDistance = _attackRange * 0.8f;
+                    _agent.stoppingDistance = SlotStoppingDistance;
                     break;
                 case NpcAction.Retreat:
                     _agent.speed = _retreatSpeed;
@@ -335,8 +403,10 @@ namespace MidManStudio.Gtg.Managed.NPC
         private void UpdateAttack(float now)
         {
             ManagedNpcThreatSource threat = _brain.Threat;
-            if (threat == null)
+            if (threat == null || !threat.IsActive)
             {
+                LeaveEngagement();
+
                 // The target is gone. Walk to where it was last seen, then wait for the next decision.
                 if (_hasDestination && (_agent.pathPending || _agent.remainingDistance > _agent.stoppingDistance + 0.2f))
                 {
@@ -351,37 +421,131 @@ namespace MidManStudio.Gtg.Managed.NPC
                 return;
             }
 
+            ManagedCombatEngagement engagement = threat.Engagement;
+            if (_member == null || !ReferenceEquals(_engagement, engagement))
+            {
+                LeaveEngagement();
+                _engagement = engagement;
+                _member = engagement.Join(this, _brain, now, _attackRange * MeleeRingFraction, _waitDistance, _ringSpacing, _circleSpeed);
+                _hasDestination = false;
+                _nextRepathTime = 0f;
+            }
+
+            engagement.Refresh(now);
+
             // Where the threat was last seen, not where it is now, so hiding works.
             Vector3 targetPosition = _brain.LastKnownThreatPosition;
             Vector3 toTarget = targetPosition - transform.position;
             toTarget.y = 0f;
             float distance = toTarget.magnitude;
 
-            if (distance <= _attackRange)
+            // Close to the target the NPC keeps facing it. An agent turns to where it walks, so an NPC that circles or
+            // flanks would turn its side to the target, leave its view cone, lose sight and drop out of the fight.
+            bool close = distance <= _member.WaitRadius + EngagedMargin;
+            SetAutoRotation(!close);
+            if (close)
             {
-                if (!_stopped)
-                {
-                    Stop();
-                }
-
                 FaceTowards(toTarget);
-                if (now >= _nextAttackTime)
+            }
+
+            SetPriority(_member.HasToken ? _basePriority - PriorityStep : _basePriority + PriorityStep);
+
+            Vector3 slot = engagement.SlotPosition(_member);
+            Vector3 toSlot = slot - transform.position;
+            toSlot.y = 0f;
+            float slotDistance = toSlot.magnitude;
+
+            if (_member.HasToken && distance <= _attackRange)
+            {
+                if (!_inRange)
                 {
-                    _nextAttackTime = now + _attackCooldownSeconds;
-                    Hit(threat);
+                    _inRange = true;
+                    _inRangeSince = now;
                 }
 
-                return;
+                // Strike from the place the engagement gave. An NPC that cannot settle there within a moment strikes
+                // from where it is, so a blocked place never leaves it standing idle in reach of the target.
+                if (slotDistance <= SlotToleranceMeters || now - _inRangeSince >= SettleSeconds)
+                {
+                    if (!_stopped)
+                    {
+                        Stop();
+                    }
+
+                    if (now >= _nextAttackTime)
+                    {
+                        _nextAttackTime = now + _attackCooldownSeconds;
+                        Hit(threat);
+                    }
+
+                    return;
+                }
             }
+            else
+            {
+                _inRange = false;
+            }
+
+            // A waiter on its ring circles slowly. Everyone else closes in at the chase speed.
+            bool onRing = !_member.HasToken && Mathf.Abs(distance - _member.Radius) <= RingBandMeters;
+            float speed = onRing ? _circleSpeed : _chaseSpeed;
+            if (_agent.speed != speed)
+            {
+                _agent.speed = speed;
+            }
+
+            bool needsToMove = slotDistance > StuckSlotDistanceMeters || (_member.HasToken && distance > _attackRange);
+            TrackProgress(now, needsToMove);
 
             if (!_hasDestination || now >= _nextRepathTime)
             {
                 _nextRepathTime = now + _repathIntervalSeconds;
                 Vector3 destination;
-                if (TrySample(targetPosition, 2f, out destination))
+                if (TrySample(slot, SlotSampleMeters, out destination))
                 {
-                    Go(destination);
+                    Vector3 shift = destination - _lastGoal;
+                    shift.y = 0f;
+                    if (!_hasDestination || _stopped || shift.sqrMagnitude > GoalToleranceMeters * GoalToleranceMeters)
+                    {
+                        _lastGoal = destination;
+                        Go(destination);
+                    }
                 }
+                else
+                {
+                    // The place is off the NavMesh, for instance inside a wall. Ask for another one.
+                    _member.Blocked = true;
+                }
+            }
+        }
+
+        // An attacker that is walking to its place and has not moved for _blockedSeconds is stuck, behind a neighbour or a
+        // corner. It tells the engagement, which moves the place a little along the ring, and it plans a new path.
+        private void TrackProgress(float now, bool needsToMove)
+        {
+            if (now < _progressCheckTime)
+            {
+                return;
+            }
+
+            _progressCheckTime = now + ProgressSampleSeconds;
+            Vector3 moved = transform.position - _progressAnchor;
+            moved.y = 0f;
+            _progressAnchor = transform.position;
+
+            bool trying = !_stopped && _agent.speed > 0.01f && needsToMove;
+            if (!trying || moved.sqrMagnitude > StuckMovementMeters * StuckMovementMeters)
+            {
+                _stuckSamples = 0;
+                return;
+            }
+
+            _stuckSamples++;
+            if (_stuckSamples >= Mathf.RoundToInt(_blockedSeconds / ProgressSampleSeconds))
+            {
+                _stuckSamples = 0;
+                _member.Blocked = true;
+                _hasDestination = false;
             }
         }
 
@@ -393,11 +557,58 @@ namespace MidManStudio.Gtg.Managed.NPC
                 return;
             }
 
+            // The attack aims at where the target was last seen, and the target may have stepped away since. The swing
+            // misses when the target really is out of reach.
+            Vector3 away = threat.transform.position - transform.position;
+            away.y = 0f;
+            if (away.magnitude > _attackRange + _hitLeewayMeters)
+            {
+                return;
+            }
+
             target.TakeDamage(_attackDamage, gameObject);
             Action<ManagedNpcActor, IManagedDamageable> handler = Attacked;
             if (handler != null)
             {
                 handler(this, target);
+            }
+        }
+
+        // Gives up the place in the target's engagement and puts the agent back the way other modes expect it.
+        private void LeaveEngagement()
+        {
+            if (_member != null)
+            {
+                _engagement.Leave(_member);
+                _member = null;
+                _engagement = null;
+            }
+
+            _inRange = false;
+            _stuckSamples = 0;
+            if (_agent != null)
+            {
+                SetAutoRotation(true);
+                SetPriority(_basePriority);
+            }
+        }
+
+        private void SetAutoRotation(bool on)
+        {
+            if (_autoRotation != on)
+            {
+                _autoRotation = on;
+                _agent.updateRotation = on;
+            }
+        }
+
+        private void SetPriority(int priority)
+        {
+            priority = Mathf.Clamp(priority, 0, 99);
+            if (_priority != priority)
+            {
+                _priority = priority;
+                _agent.avoidancePriority = priority;
             }
         }
 

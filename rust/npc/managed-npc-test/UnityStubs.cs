@@ -75,6 +75,7 @@ namespace UnityEngine
     {
         public static Color color;
         public static void DrawWireSphere(Vector3 c, float r) { }
+        public static void DrawWireCube(Vector3 c, Vector3 size) { }
         public static void DrawRay(Vector3 a, Vector3 b) { }
     }
     public static class GUI { public static void Label(Rect r, string s) { } }
@@ -91,6 +92,7 @@ namespace UnityEngine
         public static float Cos(float f) { return (float)Math.Cos(f); }
         public static float Sin(float f) { return (float)Math.Sin(f); }
         public static float Acos(float f) { return (float)Math.Acos(f); }
+        public static float Atan2(float y, float x) { return (float)Math.Atan2(y, x); }
         public static float Abs(float f) { return f < 0f ? -f : f; }
         public static int RoundToInt(float f) { return (int)Math.Round(f, MidpointRounding.ToEven); }
         public static float Sqrt(float f) { return (float)Math.Sqrt(f); }
@@ -203,6 +205,11 @@ namespace UnityEngine
         public List<Component> Components = new List<Component>();
         public GameObject(string n) { name = n; transform = new Transform { gameObject = this }; }
         public T GetComponent<T>() where T : class { foreach (Component c in Components) { T t = c as T; if (t != null) return t; } return null; }
+        public T GetComponentInParent<T>() where T : class
+        {
+            for (Transform t = transform; t != null; t = t.parent) { T found = t.gameObject.GetComponent<T>(); if (found != null) return found; }
+            return null;
+        }
         public T AddComponent<T>() where T : Behaviour, new()
         {
             T c = new T();
@@ -275,6 +282,10 @@ namespace UnityEngine.AI
     {
         public bool isOnNavMesh = true;
         public bool isStopped;
+        public bool updateRotation = true;
+        public int avoidancePriority = 50;
+        /// <summary>Test only: while set, Simulate does not move the agent, as if something were in its way.</summary>
+        public bool Frozen;
         public float speed = 3.5f;
         public float stoppingDistance;
         public bool pathPending;
@@ -299,7 +310,7 @@ namespace UnityEngine.AI
         // Test only: a straight-line mover that stops at the stopping distance.
         public void Simulate(float dt)
         {
-            if (!isOnNavMesh || isStopped || !hasDestination) return;
+            if (!isOnNavMesh || isStopped || !hasDestination || Frozen) return;
             Vector3 flat = new Vector3(destination.x - transform.position.x, 0, destination.z - transform.position.z);
             float dist = flat.magnitude;
             if (dist > stoppingDistance)

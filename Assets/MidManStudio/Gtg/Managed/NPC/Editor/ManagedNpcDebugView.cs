@@ -4,6 +4,7 @@
 // ============================================================================
 
 using System.Collections.Generic;
+using MidManStudio.Gtg.Managed.Crown;
 using MidManStudio.Gtg.NPC.Components;
 using UnityEditor;
 using UnityEngine;
@@ -115,6 +116,21 @@ namespace MidManStudio.Gtg.Managed.NPC
                 text += "  sees threat";
             }
 
+            if (brain.Role == NpcRole.Guard)
+            {
+                int tier = ManagedCrownRegion.TierAt(brain.transform.position);
+                if (tier > ManagedCrownTier.Clear)
+                {
+                    text += "  crown " + ManagedCrownTier.Name(tier);
+                }
+            }
+
+            ManagedNpcActor actor = brain.GetComponent<ManagedNpcActor>();
+            if (actor != null && actor.Mode == NpcAction.Attack && actor.IsEngaged)
+            {
+                text += actor.HasAttackToken ? "  striking" : "  waiting";
+            }
+
             return text;
         }
 
@@ -172,6 +188,7 @@ namespace MidManStudio.Gtg.Managed.NPC
                 if (options.Ranges)
                 {
                     DrawRanges(brain, actor, color);
+                    DrawSlot(brain, actor);
                 }
 
                 if (options.Paths)
@@ -221,6 +238,20 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 Handles.DrawWireDisc(brain.Leader.position, Vector3.up, actor.FollowDistance);
             }
+        }
+
+        // An attacker's place on its target's ring. Red when it holds a turn to strike, amber while it waits.
+        private static void DrawSlot(ManagedNpcBrain brain, ManagedNpcActor actor)
+        {
+            if (actor.Mode != NpcAction.Attack || !actor.IsEngaged)
+            {
+                return;
+            }
+
+            Vector3 slot = actor.EngagementSlot;
+            Handles.color = ColorFor(actor.HasAttackToken ? NpcAction.Attack : NpcAction.Retreat);
+            Handles.DrawWireDisc(slot, Vector3.up, 0.35f);
+            Handles.DrawDottedLine(brain.transform.position, slot, 3f);
         }
 
         private static void DrawPath(ManagedNpcBrain brain, ManagedNpcActor actor, Color color, List<Vector3> routeScratch)

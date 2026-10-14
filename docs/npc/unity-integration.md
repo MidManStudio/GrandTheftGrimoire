@@ -10,7 +10,7 @@ The four files marked shared have no ECS dependency and are compiled by both sta
 
 | File | Role |
 |---|---|
-| `Components/NPCEnums.cs` (shared) | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction`, plus `NpcDisposition` and `NpcOrder` (ABI v4 numbers) |
+| `Components/NPCEnums.cs` (shared) | `NpcRole`, `DecisionBackend`, `LearningMode`, `NpcAction`, plus `NpcDisposition` and `NpcOrder` (ABI v4 numbers, unchanged in v5) |
 | `Components/NPCComponents.cs` | `NPCTag`, `NPCIdentity`, `NPCObservation`, `NPCDecision` |
 | `Authoring/NPCAuthoring.cs` | Baker that adds the four components with default values |
 | `Native/NPCNativeTypes.cs` (shared) | 64-byte observation and 16-byte decision structs, explicit layout |
@@ -28,7 +28,8 @@ The four files marked shared have no ECS dependency and are compiled by both sta
 | `NPC/ManagedNpcSight.cs` | View cone test, then one `Physics.Raycast` from the eye to the point |
 | `NPC/ManagedNpcBrain.cs` | One NPC: settings, disposition, level, order, provoked, leader, sight, observation, last action, `ActionChanged` and `OrderRefused` events |
 | `NPC/ManagedNpcDirector.cs` | Batches the brains, one native call per tick, ray budget, rotation for large populations |
-| `NPC/ManagedNpcActor.cs` | Carries out the decision with a `NavMeshAgent`: patrol, chase and melee, retreat, follow the leader, hold, stand still |
+| `NPC/ManagedCombatEngagement.cs` | Where each attacker of one target stands: places on a melee ring, attack tokens with a limit and rotation, a waiting ring with circling |
+| `NPC/ManagedNpcActor.cs` | Carries out the decision with a `NavMeshAgent`: patrol, attack from a place on the target's ring with a live reach check, retreat, follow the leader, hold, stand still |
 | `Magic/ManagedSpellDamage.cs` | Fireball explosion damage with falloff, through `IManagedDamageable` |
 | `NPC/Editor/ManagedNpcDebugView.cs`, `ManagedNpcDebuggerWindow.cs` | Editor-only live list and Scene view drawing of paths, routes, ranges and sight |
 
@@ -48,7 +49,7 @@ Each Managed tick (every 0.1 s): take up to 256 brains from a rotating cursor, r
 | C# struct sizes (64/16) and every field offset match the Rust ABI | `Marshal.SizeOf` and `Marshal.OffsetOf` in the ABI test, plus the runtime size check in `NPCNativeLib` | CI job `csharp-abi` |
 | `NPCNativeLib` can load the real `gtg_npc_ffi`, pass the ABI check, pin arrays and get correct results | 16384 mixed NPCs sent in batches of 256 through the real library | CI job `csharp-abi` |
 | The managed fallback makes the same decision as Rust for valid input | Native and fallback compared on all 16384 NPCs, zero differences allowed | CI job `csharp-abi` |
-| Rust, C and C# agree on the mixed workload | Same generator in all three; action histogram and FNV-1a hash of all decisions compared (`0xef210c5c4e3c6198` in the authoring sandbox) | Rust and C in the bench workflow; C# in `csharp-abi` |
+| Rust, C and C# agree on the mixed workload | Same generator in all three; action histogram and FNV-1a hash of all decisions compared (`0x9e47645dd2412b08` in the authoring sandbox, ABI version 5) | Rust and C in the bench workflow; C# in `csharp-abi` |
 | Bad input is rejected atomically, count 0 succeeds, count above 4096 throws | Same test | CI job `csharp-abi` |
 | The changed Unity files (system, authoring, components, fallback) compile | Built once with .NET 8 against hand-written stubs of the Unity types | Authoring sandbox only, not CI |
 
@@ -83,6 +84,8 @@ Decided (2026-10-04 and 2026-10-05):
 - Health is its own component. The Managed stack has `ManagedHealth`. The ECS stack still has none, and it is on the ECS backlog.
 - Gameplay is built on the Managed stack first, the ECS stack stays frozen.
 - Patrol and Attack are wired through `ManagedNpcActor`, and fireballs damage anything with a `ManagedHealth`.
+- A group attacking one target does not stack. At most three strike at once (a setting on the target's `ManagedNpcThreatSource`), the rest wait on a wider ring and circle, and the turn rotates every five seconds. This is a Unity-side layer after the Rust decision: Rust still returns Attack for every attacker. Targets are chosen nearest first, with a preference for the current target and for whatever hurt the NPC. See `managed.md`.
+- Crown Heat (2026-10-14) is a regional meter in Unity, never a per-NPC value. A `ManagedCrownRegion` box volume counts crimes the player commits in view of a guard (assault and murder of a merchant, civilian or guard), turns the meter into a tier (1 wanted, 2 hunted, 3 outlaw), and lets it fade after 20 s without being seen. The guard's brain reads the tier of the region it stands in and sends it as `crown_heat`, for guards only. Rust has one rule on it. See `crown-heat.md`.
 - The movement engine is Unity's NavMesh for now, see `navigation.md`.
 
 Still open, game-design choices that were not guessed:

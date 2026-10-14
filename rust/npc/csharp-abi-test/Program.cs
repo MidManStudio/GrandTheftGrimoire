@@ -66,7 +66,8 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     Affinity = role == 5 ? (float)((r3 >> 12) % 1001) / 1000f : 0f,
                     PaySatisfaction = role == 5 ? (float)((r3 >> 24) % 1001) / 1000f : 0f,
                     Noise = role == 5 ? (uint)(r3 >> 32) : 0u,
-                    BetrayalOpportunity = (byte)(role == 5 && (r2 >> 40) % 100 < 30 ? 1 : 0)
+                    BetrayalOpportunity = (byte)(role == 5 && (r2 >> 40) % 100 < 30 ? 1 : 0),
+                    CrownHeat = (byte)(((r2 >> 48) % 100) < 55 ? 0 : ((r2 >> 48) % 100) < 75 ? 1 : ((r2 >> 48) % 100) < 90 ? 2 : 3)
                 };
             }
             return pool;
@@ -78,7 +79,7 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             Check(Marshal.SizeOf<NPCNativeObservation>() == 64, "observation size is 64");
             Check(Marshal.SizeOf<NPCNativeDecision>() == 16, "decision size is 16");
             string[] obsFields = { "NpcId", "Role", "Backend", "ThreatVisible", "HealthFraction", "CanMove", "Reserved",
-                "Disposition", "Order", "Provoked", "ReservedByte", "Level", "OrderLevel", "Trustworthiness", "Affinity", "PaySatisfaction",
+                "Disposition", "Order", "Provoked", "CrownHeat", "Level", "OrderLevel", "Trustworthiness", "Affinity", "PaySatisfaction",
                 "Noise", "BetrayalOpportunity", "ReservedA", "ReservedB", "ReservedC" };
             int[] obsOffsets = { 0, 8, 12, 16, 20, 24, 28, 32, 33, 34, 35, 36, 38, 40, 44, 48, 52, 56, 57, 58, 60 };
             for (int i = 0; i < obsFields.Length; i++)
@@ -115,6 +116,9 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             }
             Check(mismatches == 0, "managed fallback matches native for all " + Pool + " NPCs (" + mismatches + " differ)");
             foreach (ulong n in hist) Check(n > 0, "every action occurs in the mixed pool");
+            var tiers = new ulong[4];
+            foreach (var o in pool) tiers[o.CrownHeat]++;
+            for (int t = 0; t < 4; t++) Check(tiers[t] > 0, "crown heat tier " + t + " occurs in the mixed pool");
             Console.WriteLine("# mixed_actions idle={0} trade={1} patrol={2} attack={3} retreat={4} follow={5} hold={6} refuse={7} mission={8} betray={9} fnv1a=0x{10:x16}",
                 hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8], hist[9], hash);
 
@@ -132,7 +136,7 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             Check(native[0].Action == 9 && native[1].Action == 9, "rejected batch leaves outputs untouched");
 
             // Each field added in version 3 is validated by the native side. A bad value is rejected as a whole.
-            string[] badNames = { "disposition 3", "order 6", "provoked 2", "reserved byte", "reserved a", "reserved c", "opportunity 2", "trust nan", "affinity infinity" };
+            string[] badNames = { "disposition 3", "order 6", "provoked 2", "crown heat 4", "reserved a", "reserved c", "opportunity 2", "trust nan", "affinity infinity" };
             for (int k = 0; k < badNames.Length; k++)
             {
                 Array.Copy(pool, 0, input, 0, 2);
@@ -141,7 +145,7 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     case 0: input[1].Disposition = 3; break;
                     case 1: input[1].Order = 6; break;
                     case 2: input[1].Provoked = 2; break;
-                    case 3: input[1].ReservedByte = 1; break;
+                    case 3: input[1].CrownHeat = 4; break;
                     case 4: input[1].ReservedA = 1; break;
                     case 5: input[1].ReservedC = 1; break;
                     case 6: input[1].BetrayalOpportunity = 2; break;
@@ -161,6 +165,19 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                 input[0] = new NPCNativeObservation { NpcId = 5, Role = 5, Backend = 1, HealthFraction = 1f, CanMove = 1, Level = 10, Order = (byte)c[0], OrderLevel = (ushort)c[1], Trustworthiness = 1f, Affinity = 1f, PaySatisfaction = 1f };
                 Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == c[2], "native: order " + c[0] + " at level " + c[1] + " gives action " + c[2] + ", got " + native[0].Action);
                 Check(NPCManagedFallback.Decide(input[0]).Action == c[2], "fallback: order " + c[0] + " at level " + c[1] + " gives action " + c[2]);
+            }
+
+            // Crown Heat: a retaliatory guard that sees a threat ignores it at tier 0 and fights it from tier 1 on, and no
+            // other role reads the tier. C# and Rust agree, and both tiers of every kind are checked on their own.
+            for (byte tier = 0; tier <= 3; tier++)
+            {
+                foreach (uint role in new uint[] { 0, 1, 2, 3, 4, 5 })
+                {
+                    input[0] = new NPCNativeObservation { NpcId = 8, Role = role, Backend = 1, ThreatVisible = 1, HealthFraction = 1f, CanMove = 1, Level = 10, Disposition = 1, CrownHeat = tier };
+                    int expected = role == 2 && tier >= 1 ? 3 : role == 3 || role == 4 ? 2 : role == 2 ? 2 : role == 0 ? 0 : role == 1 ? 4 : 5;
+                    Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == expected, "native: role " + role + " retaliatory at crown heat " + tier + " gives " + expected + ", got " + native[0].Action);
+                    Check(NPCManagedFallback.Decide(input[0]).Action == expected, "fallback: role " + role + " retaliatory at crown heat " + tier + " gives " + expected);
+                }
             }
 
             // The betrayal line, exactly. A companion with no loyalty has a chance of 0.5, so the roll

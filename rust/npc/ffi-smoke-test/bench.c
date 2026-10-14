@@ -51,6 +51,7 @@ static void fill_mixed(GtgNpcObservation *p) {
   p[i].pay_satisfaction = role==5 ? (float)((r3 >> 24) % 1001) / 1000.0f : 0.0f;
   p[i].noise = role==5 ? (uint32_t)(r3 >> 32) : 0;
   p[i].betrayal_opportunity = (role==5 && (r2 >> 40) % 100 < 30) ? 1 : 0;
+  { uint64_t h = (r2 >> 48) % 100; p[i].crown_heat = h < 55 ? 0 : h < 75 ? 1 : h < 90 ? 2 : 3; }
  }
 }
 static int verify(const GtgNpcObservation *pool) {

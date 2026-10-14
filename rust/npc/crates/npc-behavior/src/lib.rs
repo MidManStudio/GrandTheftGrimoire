@@ -32,6 +32,10 @@ pub const BETRAY_LOYALTY_CEILING: f32 = 0.5;
 /// The chance of betrayal for a companion with no loyalty at all, at an opportunity. Placeholder value.
 pub const BETRAY_MAX_CHANCE: f32 = 0.5;
 
+/// The lowest Crown Heat tier at which a guard treats a visible threat as a wanted criminal and fights it,
+/// whatever its disposition says about unprovoked threats. Tier 0 changes nothing. Placeholder value.
+pub const WANTED_CROWN_HEAT: u8 = 1;
+
 /// Chooses what one NPC does next. Pure: the same observation always gives the same decision.
 pub fn decide(o: Observation) -> Decision {
     let health = if o.health_fraction.is_finite() {
@@ -79,7 +83,14 @@ fn follow_or_idle(can_move: bool) -> NpcAction {
     }
 }
 
-// Guards, enemies and bosses. Disposition decides whether a visible threat is fought at all.
+// A guard in a region where the player is wanted. Only guards enforce the law, so no other role reads the
+// tier, and a peaceful guard still never fights.
+fn enforces_crown_heat(o: &Observation) -> bool {
+    o.role == NpcRole::Guard && o.crown_heat >= WANTED_CROWN_HEAT
+}
+
+// Guards, enemies and bosses. Disposition decides whether a visible threat is fought at all. A retaliatory
+// guard also fights a visible threat when the region's Crown Heat has reached the wanted tier.
 fn combatant(o: &Observation, health: f32) -> NpcAction {
     if !o.threat_visible {
         return wander(o.can_move);
@@ -92,7 +103,7 @@ fn combatant(o: &Observation, health: f32) -> NpcAction {
                 NpcAction::Idle
             }
         }
-        NpcDisposition::Retaliatory if !o.provoked => wander(o.can_move),
+        NpcDisposition::Retaliatory if !o.provoked && !enforces_crown_heat(o) => wander(o.can_move),
         NpcDisposition::Hostile | NpcDisposition::Retaliatory => fight(o, health),
     }
 }
@@ -265,6 +276,7 @@ pub fn resolve_mission(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gtg_npc_core::MAX_CROWN_HEAT;
 
     fn obs(role: NpcRole) -> Observation {
         Observation {
@@ -284,6 +296,7 @@ mod tests {
             pay_satisfaction: 0.5,
             noise: 0,
             betrayal_opportunity: false,
+            crown_heat: 0,
         }
     }
 
@@ -391,6 +404,140 @@ mod tests {
         assert_eq!(act(o), NpcAction::Idle, "cannot run, so stands still");
         o.threat_visible = false;
         assert_eq!(act(o), NpcAction::Idle);
+    }
+
+    #[test]
+    fn a_retaliatory_guard_fights_a_wanted_player_on_sight() {
+        let mut o = obs(NpcRole::Guard);
+        o.disposition = NpcDisposition::Retaliatory;
+        o.threat_visible = true;
+        assert_eq!(act(o), NpcAction::Patrol, "no heat: ignored until attacked");
+        for tier in 1..=MAX_CROWN_HEAT {
+            o.crown_heat = tier;
+            assert_eq!(act(o), NpcAction::Attack, "tier {tier}");
+        }
+        o.crown_heat = 1;
+        o.threat_visible = false;
+        assert_eq!(act(o), NpcAction::Patrol, "nothing in view means no fight");
+        o.threat_visible = true;
+        o.health_fraction = 0.1;
+        assert_eq!(act(o), NpcAction::Retreat, "a hurt guard still runs");
+        o.health_fraction = 1.0;
+        o.can_move = false;
+        assert_eq!(
+            act(o),
+            NpcAction::Attack,
+            "and one that cannot move holds its ground"
+        );
+    }
+
+    #[test]
+    fn crown_heat_does_not_change_hostile_or_peaceful_guards() {
+        for tier in 0..=MAX_CROWN_HEAT {
+            let mut hostile = obs(NpcRole::Guard);
+            hostile.threat_visible = true;
+            hostile.crown_heat = tier;
+            assert_eq!(act(hostile), NpcAction::Attack, "hostile, tier {tier}");
+            let mut peaceful = hostile;
+            peaceful.disposition = NpcDisposition::Peaceful;
+            assert_eq!(act(peaceful), NpcAction::Retreat, "peaceful, tier {tier}");
+            peaceful.provoked = true;
+            assert_eq!(
+                act(peaceful),
+                NpcAction::Retreat,
+                "peaceful and attacked, tier {tier}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_guards_read_crown_heat() {
+        for role in [NpcRole::Enemy, NpcRole::Boss] {
+            let mut o = obs(role);
+            o.disposition = NpcDisposition::Retaliatory;
+            o.threat_visible = true;
+            o.crown_heat = MAX_CROWN_HEAT;
+            assert_eq!(act(o), NpcAction::Patrol, "{role:?} ignores Crown Heat");
+        }
+    }
+
+    // Every combination of the inputs that matter. A tier changes the decision in exactly one case: a
+    // guard with a retaliatory disposition that sees a threat and was not attacked. There it gives what
+    // the same guard gives once it has been attacked. Everywhere else the decision is the one at tier 0.
+    #[test]
+    fn crown_heat_changes_one_case_and_nothing_else() {
+        let roles = [
+            NpcRole::Merchant,
+            NpcRole::Civilian,
+            NpcRole::Guard,
+            NpcRole::Enemy,
+            NpcRole::Boss,
+            NpcRole::Companion,
+        ];
+        let dispositions = [
+            NpcDisposition::Hostile,
+            NpcDisposition::Retaliatory,
+            NpcDisposition::Peaceful,
+        ];
+        let orders = [
+            NpcOrder::None,
+            NpcOrder::Follow,
+            NpcOrder::Hold,
+            NpcOrder::Attack,
+            NpcOrder::Deliver,
+            NpcOrder::Raid,
+        ];
+        let backends = [
+            DecisionBackend::StateMachine,
+            DecisionBackend::Utility,
+            DecisionBackend::HybridMl,
+        ];
+        let mut changed = 0u32;
+        let mut checked = 0u32;
+        for role in roles {
+            for disposition in dispositions {
+                for order in orders {
+                    for backend in backends {
+                        for bits in 0..16u32 {
+                            let mut base = obs(role);
+                            base.disposition = disposition;
+                            base.order = order;
+                            base.backend = backend;
+                            base.threat_visible = bits & 1 != 0;
+                            base.provoked = bits & 2 != 0;
+                            base.can_move = bits & 4 != 0;
+                            base.health_fraction = if bits & 8 != 0 { 1.0 } else { 0.3 };
+                            let expected = act(base);
+                            for tier in 1..=MAX_CROWN_HEAT {
+                                let mut hot = base;
+                                hot.crown_heat = tier;
+                                checked += 1;
+                                let the_case = role == NpcRole::Guard
+                                    && disposition == NpcDisposition::Retaliatory
+                                    && base.threat_visible
+                                    && !base.provoked;
+                                if the_case {
+                                    let mut attacked = base;
+                                    attacked.provoked = true;
+                                    assert_eq!(act(hot), act(attacked), "{role:?} tier {tier}");
+                                    if act(hot) != expected {
+                                        changed += 1;
+                                    }
+                                } else {
+                                    assert_eq!(
+                                        act(hot),
+                                        expected,
+                                        "{role:?} {disposition:?} tier {tier}"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(changed > 0, "the one case must actually change something");
+        assert!(checked > 5000, "checked {checked}");
     }
 
     #[test]
@@ -626,6 +773,7 @@ mod companion_v4_tests {
             pay_satisfaction: 0.0,
             noise: 0,
             betrayal_opportunity: true,
+            crown_heat: 0,
         }
     }
 

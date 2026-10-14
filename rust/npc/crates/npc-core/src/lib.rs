@@ -5,6 +5,11 @@
 
 //! Shared decision contract. Keep the C ABI representation in npc-ffi.
 
+/// The highest Crown Heat tier. The tiers are 0 none, 1 wanted, 2 hunted and 3 outlaw. Only the step from
+/// 0 to 1 changes a decision today, see `WANTED_CROWN_HEAT` in `gtg-npc-behavior`. A larger value is
+/// rejected at the C boundary, so a host built for more tiers fails loudly.
+pub const MAX_CROWN_HEAT: u8 = 3;
+
 /// What an NPC is. The role picks the rule set in `gtg-npc-behavior`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NpcRole {
@@ -136,6 +141,10 @@ pub struct Observation {
     /// The companion could betray the player now. The game decides that, for instance when it is alone
     /// with something valuable, and never sets it for a companion the story protects.
     pub betrayal_opportunity: bool,
+    /// The Crown Heat tier of the region the NPC stands in, from 0 to [`MAX_CROWN_HEAT`]. The game keeps
+    /// the meter and sends the tier. Zero means no heat, or no information, so a caller that never sets
+    /// it gets the behavior from before the field existed. Only guards read it.
+    pub crown_heat: u8,
 }
 
 /// The result of one decision.

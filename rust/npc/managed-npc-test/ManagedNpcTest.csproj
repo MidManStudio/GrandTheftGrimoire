@@ -13,8 +13,9 @@
     <RootNamespace>MidManStudio.Gtg.Managed.NPC.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;Tests.cs;UnityStubs.cs;EditorStubs.cs;CasterStub.cs" />
+    <Compile Include="Program.cs;Tests.cs;TestsCombat.cs;TestsCrown.cs;UnityStubs.cs;EditorStubs.cs;CasterStub.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Health/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Crown/*.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/*.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/Editor/*.cs" />
     <!-- Only the spell files that have no camera or rendering dependency. The caster itself is stubbed. -->

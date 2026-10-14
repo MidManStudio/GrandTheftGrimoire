@@ -7,8 +7,10 @@
 #include <stdint.h>
 
 /* Must equal ABI_VERSION in rust/npc/crates/npc-ffi/src/lib.rs. */
-#define GTG_NPC_ABI_VERSION 4u
+#define GTG_NPC_ABI_VERSION 5u
 #define GTG_NPC_MAX_BATCH 4096u
+/* The highest Crown Heat tier: 0 none, 1 wanted, 2 hunted, 3 outlaw. A larger value is rejected. */
+#define GTG_NPC_CROWN_HEAT_MAX 3u
 
 /* Status codes returned by gtg_npc_decide_batch. */
 #define GTG_NPC_OK 0
@@ -51,13 +53,13 @@
 #define GTG_NPC_MISSION_KILLED 3
 
 /* One NPC, 64 bytes. Booleans are 0 or 1. Every reserved field must be zero. A zero in every field
-   after `reserved` means: hostile, no order, not provoked, level 0, no betrayal opportunity. */
+   after `reserved` means: hostile, no order, not provoked, level 0, no betrayal opportunity, no Crown Heat. */
 typedef struct {
     uint64_t npc_id;
     uint32_t role, backend, threat_visible;
     float health_fraction;
     uint32_t can_move, reserved;
-    uint8_t disposition, order, provoked, reserved_byte;
+    uint8_t disposition, order, provoked, crown_heat;
     uint16_t level, order_level;
     float trustworthiness, affinity, pay_satisfaction;
     uint32_t noise;

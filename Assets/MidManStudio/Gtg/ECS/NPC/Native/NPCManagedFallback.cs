@@ -101,12 +101,17 @@ namespace MidManStudio.Gtg.NPC.Native
             return mobile ? NpcAction.Mission : NpcAction.Idle;
         }
 
+        // The lowest Crown Heat tier at which a guard fights a visible threat whatever its disposition says. Same as
+        // WANTED_CROWN_HEAT in npc-behavior.
+        internal const int WantedCrownHeat = 1;
+
         private static NpcAction Combatant(NPCNativeObservation o, bool threat, bool mobile, float health)
         {
             if (!threat) return Wander(mobile);
             var disposition = (NpcDisposition)o.Disposition;
             if (disposition == NpcDisposition.Peaceful) return mobile ? NpcAction.Retreat : NpcAction.Idle;
-            if (disposition == NpcDisposition.Retaliatory && o.Provoked == 0) return Wander(mobile);
+            bool wantedByGuard = (NpcRole)o.Role == NpcRole.Guard && o.CrownHeat >= WantedCrownHeat;
+            if (disposition == NpcDisposition.Retaliatory && o.Provoked == 0 && !wantedByGuard) return Wander(mobile);
             return Fight(o, mobile, health);
         }
 

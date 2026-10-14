@@ -1,4 +1,4 @@
-// CI harness for the Managed NPC code (Managed/Health and Managed/NPC). It compiles those files with plain .NET
+// CI harness for the Managed NPC code (Managed/Health, Managed/NPC and Managed/Crown). It compiles those files with plain .NET
 // against the hand written UnityEngine stand-ins in UnityStubs.cs and runs the checks below. The stub raycast is a
 // callback, so these checks cover the logic around the ray (cone, budget, lingering, dead and self sources,
 // rotation, events), not real colliders or layers. Unity itself is never involved.
@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using MidManStudio.Gtg.Managed.Crown;
 using MidManStudio.Gtg.Managed.Health;
 using MidManStudio.Gtg.Managed.Magic;
 using MidManStudio.Gtg.Managed.NPC;
@@ -14,7 +15,7 @@ using MidManStudio.Gtg.NPC.Native;
 using UnityEngine;
 using UnityEngine.AI;
 
-internal static class Tests
+internal static partial class Tests
 {
     static int failures, checks;
     static bool sawNative, sawFallback;
@@ -39,6 +40,7 @@ internal static class Tests
         UnityEngine.Object.All.Clear();
         typeof(ManagedNpcDirector).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
         typeof(ManagedNpcThreatSource).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+        typeof(ManagedCrownRegion).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
         Time.time = 0; Time.deltaTime = 0.02f; Debug.Logs.Clear(); Debug.Warnings.Clear(); Physics.RayCount = 0; Physics.OnRaycast = null;
         UnityEngine.Object.Destroyed.Clear(); NavMesh.IsWalkable = null; UnityEngine.Random.Seed(7);
         ManagedSpellDamage.Enabled = true; ManagedSpellDamage.HurtCaster = false; ManagedSpellCaster.ClearForTest();
@@ -271,7 +273,7 @@ internal static class Tests
             ManagedNpcDirector d = Director();
             if (d != null) { Update(d); Note(d); }
             List<UnityEngine.Component> all = new List<UnityEngine.Component>(UnityEngine.Object.All);
-            foreach (UnityEngine.Component c in all) if (c is ManagedNpcActor && ((Behaviour)c).enabled) UnityEngine.Component.Invoke(c, "Update");
+            foreach (UnityEngine.Component c in all) if ((c is ManagedNpcActor || c is ManagedCrownRegion) && ((Behaviour)c).enabled) UnityEngine.Component.Invoke(c, "Update");
             foreach (UnityEngine.Component c in all) { NavMeshAgent a = c as NavMeshAgent; if (a != null) a.Simulate(dt); }
         }
     }
@@ -335,8 +337,8 @@ internal static class Tests
         Fighter f = Goblin(Vector3.zero);
         Advance(0.3f);
         Check(f.Brain.Action == NpcAction.Attack && f.Actor.Mode == NpcAction.Attack, "a visible threat means attack");
-        Check(System.Math.Abs(f.Agent.destination.z - 10f) < 0.01f && System.Math.Abs(f.Agent.speed - 3.8f) < 0.001f, "it chases at the chase speed toward the threat");
-        Check(System.Math.Abs(f.Agent.stoppingDistance - 1.44f) < 0.01f, "it stops inside the attack range");
+        Check(System.Math.Abs(f.Agent.destination.z - 8.74f) < 0.01f && System.Math.Abs(f.Agent.destination.x) < 0.01f && System.Math.Abs(f.Agent.speed - 3.8f) < 0.001f, "it chases at the chase speed to its place on the melee ring, 1.26 m short of the threat, got " + f.Agent.destination.z);
+        Check(System.Math.Abs(f.Agent.stoppingDistance - 0.25f) < 0.01f, "it stops at its place and not at the melee range");
         Advance(3.7f);
         Check(Dist(f.Go.transform.position, player.transform.position) < 1.8f, "it closes to melee range");
         Check(f.Hits >= 2 && f.Hits <= 3, "melee hits land on the cooldown, got " + f.Hits);
@@ -362,7 +364,7 @@ internal static class Tests
         ResetWorld();
         GameObject victim = Player(2f, true); Clear(victim);
         Fighter h = Goblin(Vector3.zero);
-        Advance(0.3f);
+        Advance(0.5f);
         Check(h.Hits >= 1, "the goblin hits a target in range");
         int landed = h.Hits;
         Set(h.Actor, "_nextAttackTime", 0f);
@@ -377,11 +379,17 @@ internal static class Tests
         GameObject player = Player(10f, true); Clear(player);
         Fighter f = Goblin(Vector3.zero);
         Advance(0.3f);
+        int callsBefore = f.Agent.SetDestinationCalls;
+        player.transform.position = new Vector3(3, 0, 10);
+        Advance(0.5f);
+        Check(f.Agent.SetDestinationCalls > callsBefore && f.Agent.destination.x > 2f, "a visible target that moves gives the chase a new destination");
+        int callsSteady = f.Agent.SetDestinationCalls;
+        Advance(0.5f);
+        Check(f.Agent.SetDestinationCalls == callsSteady, "a target that stands still costs no new path");
         player.transform.position = new Vector3(6, 0, 10);
         Wall();
         Advance(0.4f);
-        Check(f.Agent.SetDestinationCalls >= 2, "the chase destination is refreshed while the target is remembered");
-        Check(Dist(f.Agent.destination, new Vector3(0, 0, 10)) < 0.01f, "out of sight, the NPC goes to where it last saw the target, not to the live position");
+        Check(Dist(f.Agent.destination, new Vector3(3, 0, 10)) < 1.4f && Dist(f.Agent.destination, new Vector3(6, 0, 10)) > 2.5f, "out of sight, the NPC goes to where it last saw the target, not to the live position");
         Advance(2.0f);
         Check(f.Brain.Action == NpcAction.Patrol, "after the memory runs out it patrols again, got " + f.Brain.Action);
 
@@ -707,7 +715,7 @@ internal static class Tests
         GameObject g = new GameObject("g"); g.AddComponent<ManagedHealth>();
         ManagedNpcBrain b = g.AddComponent<ManagedNpcBrain>();
         NPCNativeObservation o = b.BuildObservation();
-        Check(o.Disposition == 0 && o.Order == 0 && o.Provoked == 0 && o.Level == 1 && o.OrderLevel == 0 && o.ReservedByte == 0 && o.ReservedA == 0 && o.ReservedB == 0 && o.ReservedC == 0, "defaults are hostile, no order, not provoked, level 1");
+        Check(o.Disposition == 0 && o.Order == 0 && o.Provoked == 0 && o.Level == 1 && o.OrderLevel == 0 && o.CrownHeat == 0 && o.ReservedA == 0 && o.ReservedB == 0 && o.ReservedC == 0, "defaults are hostile, no order, not provoked, level 1");
         b.Disposition = NpcDisposition.Peaceful; b.Level = 7; b.SetOrder(NpcOrder.Attack, 9);
         o = b.BuildObservation();
         Check(o.Disposition == 2 && o.Level == 7 && o.Order == 3 && o.OrderLevel == 9, "the settings reach the observation");
@@ -1097,6 +1105,9 @@ internal static class Tests
         DebugView(); DebugFilter(); DebugRoute(); DebugDraw(); DebugWindow();
         ObservationV3(); Provocation(); CompanionFollow(); CompanionOrders(); DebugViewV3();
         ObservationV4(); Betrayal(); OrderTypes(); Missions(); DebugViewV4();
+        EngagementGeometry(); EngagementSpacing(); EngagementUnlimited(); EngagementRotation(); EngagementLone(); EngagementCircling();
+        EngagementBlocked(); EngagementLeave(); EngagementHandover(); TargetChoice(); HitReach(); EngagementDebug(); EngagementRules(); EngagementCost();
+        CrownRegionArea(); CrownCrimes(); CrownTiers(); CrownHeatFade(); CrownObservation(); CrownGuards();
         Console.WriteLine("decision path in director batches: " + (sawNative && sawFallback ? "mixed" : sawNative ? "native" : sawFallback ? "managed fallback" : "none"));
         if (expectPath == "native") Check(sawNative && !sawFallback, "every batch used the native library");
         else if (expectPath == "fallback") Check(sawFallback && !sawNative, "every batch used the managed fallback");
