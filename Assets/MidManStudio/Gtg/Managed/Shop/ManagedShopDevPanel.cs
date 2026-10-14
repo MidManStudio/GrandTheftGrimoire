@@ -34,6 +34,7 @@ namespace MidManStudio.Gtg.Managed.Shop
         private float _nextWalletSearch;
         private bool _open;
         private bool _wasLocked;
+        private readonly ManagedCursorBlock _cursorBlock = new ManagedCursorBlock();
 
         public bool IsOpen { get { return _open; } }
 
@@ -123,7 +124,7 @@ namespace MidManStudio.Gtg.Managed.Shop
             }
 
             _open = open;
-            ManagedCameraRig.CursorCaptureBlocked = open;
+            _cursorBlock.Set(open);
 
             if (open)
             {

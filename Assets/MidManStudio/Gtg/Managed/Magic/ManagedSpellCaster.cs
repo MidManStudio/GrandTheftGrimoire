@@ -109,6 +109,18 @@ namespace MidManStudio.Gtg.Managed.Magic
             get { return _belt.Describe(_selected); }
         }
 
+        /// <summary>True when the selected belt slot holds a vessel. The HUD reads it.</summary>
+        public bool HasSelectedVessel
+        {
+            get { return _belt != null && _belt.IsInUse(_selected); }
+        }
+
+        /// <summary>How full the selected vessel is, 0 through 1, or 0 with no vessel. The HUD reads it.</summary>
+        public float SelectedVesselFraction
+        {
+            get { return _belt != null ? _belt.FractionAt(_selected) : 0f; }
+        }
+
         public int ShotCount { get { return _flight.Count; } }
 
         // Static state survives a play session when domain reload is off.

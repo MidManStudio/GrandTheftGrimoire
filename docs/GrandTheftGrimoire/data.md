@@ -51,7 +51,8 @@ Files are in `Assets/MidManStudio/Gtg/Data/`.
 - `Weight` is a float because the file derives it from the value with a division.
 - `ManagedItemDatabaseCatalog` in `Managed/Items` shows this table to the shop and the bag
   as an `IManagedItemCatalog`. It reads `Value` as silver and `Stackable` with `MaxStackSize`
-  for the stack size. Nothing builds one in a scene yet.
+  for the stack size. `ManagedPlayerItemBag` builds one from an assigned `ItemDatabase`, or
+  from an asset named `ItemDatabase` in a Resources folder.
 
 ### `NpcArchetypeDatabase.cs`
 

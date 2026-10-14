@@ -26,11 +26,7 @@ namespace MidManStudio.Gtg.Managed.Shop
         /// </summary>
         public static ManagedItemCatalog Catalog()
         {
-            var catalog = new ManagedItemCatalog();
-            catalog.Add(new ManagedItemInfo(1, "Iron Sword", 50, 1));
-            catalog.Add(new ManagedItemInfo(2, "Health Potion", 25, 99));
-            catalog.Add(new ManagedItemInfo(3, "Dragon Scale", 5000, 1));
-            return catalog;
+            return ManagedItemSamples.Catalog();
         }
 
         public static List<ManagedShopDefinition> Shops()
