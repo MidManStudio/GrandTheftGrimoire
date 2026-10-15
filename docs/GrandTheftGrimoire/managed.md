@@ -159,6 +159,11 @@ To give a town a Crown Heat meter, add `ManagedCrownRegion` to an empty object a
 town's center and size its box to cover the town. Guards inside the box enforce the law
 there. The rules, the numbers and the debugger line are in `crown-heat.md`.
 
+To show Crown Heat on the HUD's crowns, add `ManagedCrownHudHeat` to any object, one is enough.
+To fill the missions panel, add `ManagedMissionBoard` to any object and list missions in the
+Inspector, or add them from code through its `Tracker`. A scene with neither still works, and the
+HUD's `SetHeat` and `SetMissions` and the dev keys drive the panels as before.
+
 To place stations, add `ManagedBuildMode` to any GameObject and press B in Play mode.
 The setup, controls and layer advice are in `building.md`. While the tray is open the HUD hides
 the health and SP bars and the quick slots, and shows them again when it closes.
@@ -182,7 +187,8 @@ the health and SP bars and the quick slots, and shows them again when it closes.
 | Currency: gold, silver and SP crystals | design notes in `magic.md` | done, `ManagedWallet` and `ManagedVesselCharging` |
 | Cheat code manager | backlog | done, Editor and development builds only, `ManagedCheatManager` |
 | Shops, item bag, flags | backlog | engine and test panel done, no shop window yet, `ManagedShop` |
-| HUD: missions, crown heat, coins, bars, compass, quick slots, item wheel | backlog | frame done with placeholders, `ManagedHud`; nothing yet fills the missions, the heat or the wheel |
+| HUD: missions, crown heat, coins, bars, compass, quick slots, item wheel | backlog | frame done with placeholders, `ManagedHud`; the heat follows Crown Heat through `ManagedCrownHudHeat`, the missions follow `ManagedMissionBoard`, nothing yet fills the wheel |
+| Mission list for the HUD panel | backlog | done, a plain tracker, `ManagedMissionTracker`; a quest package attaches behind `IManagedMissionSource` later |
 | Station placement, tray UI, instanced pieces | backlog | done, see `building.md` |
 | Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
 | Ice recipe and Freeze hazard | backlog | done |
@@ -208,16 +214,17 @@ the arrows pointing one way, and put a new link in this table when it is added.
 
 | Folder | Reads from |
 |---|---|
-| `Economy`, `Flags`, `Health`, `Rendering`, `CharacterController` | nothing |
+| `Economy`, `Flags`, `Health`, `Rendering`, `CharacterController`, `Missions` | nothing |
 | `Items` | `Data`, in two files: the catalog adapter and `ManagedPlayerItemBag` |
 | `NPC` | `Health` |
+| `Crown` | `Health`, `NPC`; `Hud` in `ManagedCrownHudHeat.cs` only, which implements the interface of `ManagedHudHeatSource.cs` |
 | `Magic` | `CharacterController`, `Economy`, `Health`, `Rendering` |
 | `Chemistry` | `Magic`, `Rendering` |
 | `Camera` | `CharacterController`, `Economy`, `Magic` |
 | `Shop` | `Economy`, `Items`, `Flags`, and `Camera` in the test panel only |
 | `Cheats` | `Camera`, `CharacterController`, `Chemistry`, `Economy`, `Health`, `Magic`, `NPC` |
 | `Building` | `Camera` (cursor block), `CharacterController` |
-| `Hud` | `Camera` (cursor block), `Items` (quick slots and bag); `Building`, `CharacterController`, `Economy`, `Health` and `Magic` in `ManagedHudFeed.cs` only |
+| `Hud` | `Camera` (cursor block), `Items` (quick slots and bag), `Missions` (the empty panel text in `ManagedHud.cs`); `Building`, `CharacterController`, `Economy`, `Health`, `Magic` and `Missions` in `ManagedHudFeed.cs` only. Never `Crown` |
 
 The shop reaches all four of its neighbours through small interfaces:
 `IManagedItemCatalog`, `IManagedItemHolder`, `IManagedFlagSource` and
@@ -227,8 +234,11 @@ event queue, dependency injection) is not used yet. These interfaces and the pla
 events are the places it would attach to.
 
 The HUD reads the game through one file. `ManagedHudFeed.cs` is the only file of `Hud/`
-that touches the character, health, the caster, the wallet or build mode, and it copies
-what it finds into `ManagedHudState`, which the widgets read. The math, the state, the layout and the
+that touches the character, health, the caster, the wallet, build mode or a mission source,
+and it copies what it finds into `ManagedHudState`, which the widgets read. The heat comes
+the other way round. `Hud/` holds a one file interface, `IManagedHudHeatSource`, and a
+system that knows the heat registers an implementation of it, so `Hud/` never names `Crown/`
+and `Crown/` names only that one file of `Hud/`. The math, the state, the layout and the
 wheel and quick slot models have no scene dependency. Dragging uses `ManagedItemDrag`, a
 static carrier in `Items/`, so a slot and a future bag window never reference each other.
 
@@ -1169,7 +1179,7 @@ crown sections, compass offset and fade, and the wheel hit test.
 ### `ManagedHudState.cs`
 
 **What it does:** The numbers and text the widgets draw: health, the SP bar, coins, heat, yaw,
-the mission text and whether the bottom group is hidden. The feed and the callers write it. The
+the mission text, a version of it, and whether the bottom group is hidden. The feed and the callers write it. The
 widgets read it. It has no Unity types.
 
 **Decisions:**
@@ -1183,6 +1193,10 @@ widgets read it. It has no Unity types.
   empty.
 - `BottomHidden` is false until the feed or a caller sets it with `SetBottomHidden`. It is true
   while another screen, such as the build tray, needs the bottom of the display.
+- `SetMissions` with what the panel shows already changes nothing and does not count.
+  `MissionsVersion` goes up once for each real change, so the panel redraws when the version
+  differs from the one it drew, and the feed may set the missions every frame at no cost. The
+  lines compared are the first four, so a change only in a line that is cut does not count.
 
 ### `ManagedHudLayout.cs`
 
@@ -1307,10 +1321,12 @@ it, and it can be dragged, and dropped on.
 
 **What it does:** Copies the game into `ManagedHudState` each frame: the character's yaw, the
 health, the selected vessel's charge, the wallet and whether build mode is open. It finds the
-player and their health, caster and bag, and the build mode component.
+player and their health, caster and bag, and the build mode component. It also copies the heat
+of the registered heat source and the lines of the registered mission source, when there are any.
 
 **Decisions:**
-- It is the only HUD file that reads the character, health, the caster, the wallet or build mode.
+- It is the only HUD file that reads the character, health, the caster, the wallet, build mode or
+  a mission source.
 - Build mode is optional. The feed looks for a `ManagedBuildMode` in the scene every
   `BuildSearchSeconds` (2 seconds) while it has none, which is slower than the player search
   because the search walks the scene. While one is found and `BuildModeActive` is true the state
@@ -1319,8 +1335,36 @@ player and their health, caster and bag, and the build mode component.
 - It searches again every half second while anything is missing, and not every frame, so a scene
   with no player costs almost nothing. A lost player clears everything it held.
 - With no health it zeroes the health bar. With no caster it shows no vessel and no coins.
+- Heat. While a heat source is registered the feed asks it for the sections at the player's
+  position every frame and sets the heat, 0 when there is no player to place. While none is
+  registered the feed does not touch the heat, so `SetHeat` from code and the dev keys work. When
+  a source that was read goes away the heat is cleared once, so crowns that nothing owns do not
+  stay lit, and after that it is the caller's again. A registered source overwrites a `SetHeat` or
+  a dev key press within the frame.
+- Missions. The same rules: with a mission source the title and the first four lines are copied
+  every frame, nothing is touched without one, and when a source that was read goes away the
+  panel shows "Missions" and "No active mission" once, then belongs to the caller again.
 - The bag it finds is the one on the player. When there is none and the HUD's option is on, it
   adds a `ManagedPlayerItemBag`.
+
+### `ManagedHudHeatSource.cs`
+
+**What it does:** The seam between the HUD and whatever knows how wanted the player is. It holds
+`IManagedHudHeatSource`, one method, `SectionsAt(point)`, which answers with the filled heat
+sections, 0 to 9, for a player standing at the point, and `ManagedHudHeatSources`, a static class
+that keeps the one registered source. It needs only `UnityEngine.Vector3`.
+
+**Decisions:**
+- A source registers itself when it is enabled and unregisters when it is disabled. The feed
+  reads `Current` every frame.
+- The last source to register wins. A source that is displaced does not come back when the newer
+  one leaves, because the registry keeps one reference and not a list. Unregistering a source
+  that is not the current one, and registering null, change nothing.
+- The interface is in `Hud/` so that `Hud/` never names the system behind it. The file has no
+  other dependency, which is why the NPC harness can compile it with a single line.
+- The value a source returns is held to 0 through 9 by the state, so a source cannot overflow the
+  crowns.
+- The registry is cleared at `SubsystemRegistration`, as in the other static registries.
 
 ### `ManagedHud.cs`
 
@@ -1363,8 +1407,14 @@ draws from `ManagedHudState`, the wheel model and the quick slots.
   still works, because only the keys are gated. A drag that started on a quick slot is dropped
   when the group hides, because the slot cannot receive the end of the drag once it is
   inactive. A drag from anywhere else, such as a future bag window, is left alone.
+- The missions panel redraws when `ManagedHudState.MissionsVersion` differs from the version it
+  drew, and not when `SetMissions` is called. Earlier the call set a flag, so a feed that wrote to
+  the state directly never refreshed the panel. A change from any writer shows on the next frame
+  and setting what is shown already redraws nothing.
 - `SetHeat`, `SetMissions`, `Wheel`, `QuickSlots`, `Bag` and `QuickSlotUsed` are the public
-  surface. Nothing else in the game feeds the missions, the heat or the wheel yet.
+  surface. The heat follows a registered heat source and the missions a registered mission source,
+  see `ManagedHudFeed.cs`. Both calls still work while no source is registered. Nothing feeds
+  the wheel yet.
 
 ### `ManagedHudDevKeys.cs`
 
@@ -1378,6 +1428,64 @@ Fireball, an Ice, an Iron Sword and a Health Potion.
 - It logs a `[GTG HUD]` line for every wheel pick and every quick slot use, so what the HUD does
   can be seen in the Console before anything is wired to it.
 - With no player bag yet, the stock key logs that and changes nothing.
+- The heat keys change the heat the dev way. While a heat source is registered, for instance
+  `ManagedCrownHudHeat`, the feed overwrites the heat on the next frame, so the keys then show
+  nothing. Disable the source to try the crowns by hand.
+
+### `ManagedMissionSource.cs`
+
+**What it does:** The seam between the missions panel and whatever holds the missions. It holds
+`IManagedMissionSource`, a title, a line count and a line by index, and `ManagedMissionSources`,
+a static class that keeps the one registered source. The tracker of this folder implements the
+interface, and so can an adapter for a quest package.
+
+**Decisions:**
+- The same registry as `ManagedHudHeatSource.cs`: the last source to register wins, a displaced
+  source does not come back, unregistering a source that is not current and registering null
+  change nothing, and the registry is cleared at `SubsystemRegistration`.
+- The interface says nothing about what a mission is. A quest package that has its own model
+  implements three members over it and registers itself, and nothing in `Hud/` changes.
+- It has no dependency, so `Missions/` reads from no other folder.
+
+### `ManagedMissionTracker.cs`
+
+**What it does:** A plain list of missions with one active. Each mission has an id, a title and
+a list of objectives, each of which is done or not. The active mission is what the panel shows:
+its title, then its objectives as lines, with " (done)" added to the ones that are done. With no
+active mission the title is "Missions" and the one line is "No active mission". It has no Unity
+types.
+
+**Decisions:**
+- The first mission added becomes the active one when none is. A later one waits until
+  `SetActive` or until the active one is complete or removed, when the first mission that is not
+  complete, in the order they were added, takes over. With none left there is no active mission.
+- An id must be non-empty and unique. A null or empty title is the id, a null list has no
+  objectives, and a null objective is an empty line. The objectives are copied, so a list the
+  caller changes later does not change the mission.
+- Ticking off the last open objective completes the mission. A mission with no objectives
+  completes only through `Complete`, which also ticks every objective. A complete mission takes no
+  more ticks, cannot be made active again, and stays held, so `IsComplete` can still be asked.
+- Every call that cannot do its job (an unknown id, an index out of range, an objective that is
+  done already) changes nothing and returns false.
+- Nothing here decides what a mission is for or who gives it. A caller adds and ticks them. There
+  is no saving and no event, the feed polls the tracker each frame.
+
+### `ManagedMissionBoard.cs`
+
+**What it does:** The scene component. It owns a `ManagedMissionTracker`, registers it as the
+HUD's mission source while it is enabled, and loads the missions listed in the Inspector.
+
+**Decisions:**
+- `Tracker` is created on first use, so code may add a mission before the component has started.
+- The Inspector list is loaded once, in `Awake`. An entry with no id, a null entry and an id used
+  before are skipped. Missions removed or completed in play do not come back when the component is
+  disabled and enabled again.
+- It unregisters only itself. A board that another source displaced leaves the current source
+  alone when it goes.
+- To add a mission from game code: `board.Tracker.Add("id", "Title", new[] { "Objective" })`. The
+  board is found like any scene component, `FindFirstObjectByType<ManagedMissionBoard>()`.
+- Placeholders: there are no missions in the project yet, so the list starts empty and the panel
+  shows "No active mission". The names and wording of real missions are not decided.
 
 ### `ManagedChemistryTypes.cs`
 
@@ -1600,6 +1708,49 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - The thresholds are clamped in `OnValidate` so wanted is at most hunted is at most outlaw is at most the cap, and nothing can be negative.
 - The region list is static and cleared at `SubsystemRegistration`, as in the other registries. `OnDrawGizmosSelected` draws the box, yellow when clear and red while wanted or worse.
 - The meter is not saved. Persistence is a game system that does not exist yet.
+- `WantedAt`, `HuntedAt` and `OutlawAt` are read-only properties over the three tier thresholds,
+  next to `MaxHeat`. They were added for `ManagedCrownHeatMap.cs`, which measures its thirds from
+  them. They change no behaviour.
+
+### `ManagedCrownHeatMap.cs`
+
+**What it does:** Turns the heat of a region into the nine sections of the HUD, three crowns of
+three. One static function, `Sections(tier, heat, wantedAt, huntedAt, outlawAt, maxHeat)`. It
+is plain arithmetic with no Unity or NPC types.
+
+**Decisions:**
+- One crown for each tier: wanted lights the first, hunted the second, outlaw the third, and the
+  crowns before it are full. Inside a tier the three sections fill in thirds as the heat climbs
+  from the tier's threshold to the next one. The outlaw tier runs up to the most heat the region
+  holds. With the defaults 10, 40, 75 and 100: heat 10 shows 1 section, 20 shows 2, 30 shows 3, 40
+  shows 4, 75 shows 7, and 92 and more shows 9.
+- A tier of clear or less is 0, because the HUD hides the crowns then. From wanted on, at least
+  one section is lit, so the crowns appear the moment the player is wanted.
+- The tier is a parameter, so the map always agrees with the region's own tier rule and does not
+  copy it. A tier above outlaw counts as outlaw.
+- A heat exactly on a third falls in the upper third. The comparisons multiply and do not divide,
+  so a whole number heat on a whole number band is exact.
+- A band with no width, which the region's `OnValidate` allows, is full. A heat that is not a
+  number is 0. The function never divides by zero.
+- Placeholders: the thirds, and the choice of one crown for each tier. The HUD has no say in it.
+
+### `ManagedCrownHudHeat.cs`
+
+**What it does:** The component that feeds the HUD's crowns from Crown Heat. It implements
+`IManagedHudHeatSource` and registers itself while it is enabled. When the HUD asks, it finds the
+region around the player's position with `ManagedCrownRegion.Find` and answers with
+`ManagedCrownHeatMap.Sections` of that region, or 0 outside every region.
+
+**Decisions:**
+- Add it to any object, one is enough. If more than one is enabled the last to register is the
+  one the HUD asks.
+- The player's position comes from the HUD, which already knows the player. This file does not
+  look for the player or the HUD, and names no type of `CharacterController/`.
+- The heat is the region the player stands in. Walking out of a town shows no crowns, though the
+  heat stays in the region. Walking back in shows it again.
+- Its only reference to `Hud/` is the interface of `ManagedHudHeatSource.cs`. The component itself
+  needs `ManagedCrownRegion`, so the building harness does not compile it. The NPC harness does,
+  see CI and Workflows.
 
 ## CI and Workflows
 
@@ -1623,13 +1774,27 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   every system in Unity, and nothing else in CI catches it. The `managed-compile` job builds
   `building-test/BuildingTest.csproj` and runs it. The project compiles every file under
   `Managed/` except `NPC/`, `Crown/` and `Chemistry/` (the first two need the NPC native
-  bindings and have their own job above, the third needs the Alembic package), plus
-  `Data/ItemDatabase.cs`, at C# 9 with .NET 8, against hand written stand-ins for
-  `UnityEngine`, uGUI, TextMeshPro and the Input System in `building-test/`. Then it runs the
-  checks in that folder: 601 at the time of writing, covering building, the camera rig's cursor
-  hook, the cursor block, the HUD and the bottom group. It runs on a push or pull request that
-  touches `Managed/`, `Data/`, `building-test/` or the workflow, and by hand. The folder is
-  named for the first system it covered and now covers the whole core stack.
+  bindings and are compiled by the `managed-npc-fallback` job below, the third needs the
+  Alembic package), plus `Data/ItemDatabase.cs` and the two plain arithmetic files of `Crown/`,
+  `ManagedCrownTypes.cs` and `ManagedCrownHeatMap.cs`, at C# 9 with .NET 8, against hand written
+  stand-ins for `UnityEngine`, uGUI, TextMeshPro and the Input System in `building-test/`. Then
+  it runs the checks in that folder: 803 at the time of writing, covering building, the camera
+  rig's cursor hook, the cursor block, the HUD and the bottom group, the Crown heat map, the heat
+  and mission sources, the mission tracker and board, and how the feed and the HUD read them. It
+  runs on a push or pull request that touches `Managed/`, `Data/`, `building-test/`,
+  `rust/npc/managed-npc-test/` or the workflow, and by hand. The folder is named for the first
+  system it covered and now covers the whole core stack.
+  - The `managed-npc-fallback` job runs `rust/npc/managed-npc-test` on the managed fallback,
+    which needs no native library. It compiles `Health/`, `NPC/` and `Crown/`, which includes
+    `ManagedCrownHudHeat.cs`, and runs their checks (836 at the time of writing). The path filter
+    of `npc-rust-ci.yml` does not list `Managed/Crown/` or `Managed/Hud/`, so without this job a
+    change to the heat interface in `Hud/` would break `Crown/` unseen. That workflow stays the one
+    that runs the real native library.
+  - The NPC harness project has one extra line for the HUD: it includes
+    `Hud/ManagedHudHeatSource.cs`, the interface that `ManagedCrownHudHeat` implements. Without it
+    that file does not compile there. The bridge itself, which is `Find` and the map and no more,
+    has no check in that harness. It was checked once by hand there and the map has its own
+    checks in `building-test/`.
   - It needs no network. `building-test/nuget.config` clears every package source and the
     project has no package references.
   - A red compile step means a Managed file would break the Unity compile, or it uses a Unity
@@ -1642,8 +1807,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   - The check files are `Tests*.cs`. The stand-ins are `UnityStubs.cs`, `UnityMoreStubs.cs`,
     `UguiStubs.cs`, `UiStubs.cs` and `PackageStubs.cs`. `RigStubs.cs` is a comment only and the
     project skips it. It stays because the replacements Action replaces files and cannot delete one.
-  - `Managed/Crown/` and `Managed/NPC/` are checked by `managed-npc` only. When this was written the path
-    filter of `npc-rust-ci.yml` did not list `Managed/Crown/`, so a change there alone did not start it.
+  - Neither job covers `Managed/Chemistry/`, which needs Alembic.
 
 ## Fixes and Problems
 
@@ -1983,6 +2147,49 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - Edits to existing files: `ManagedCameraRig.cs` (the crosshair check and a comment),
   `ManagedBuildMode.cs` (the block), `ManagedHudState.cs`, `ManagedHudFeed.cs` and `ManagedHud.cs`
   (the bottom group), `managed.md` and `building.md`.
+
+### Heat and missions feeders (`Hud/`, `Missions/`, `Crown/`)
+
+- Asked for: the systems that drive the HUD's `SetHeat` and `SetMissions`, which nothing called
+  yet. Decided with Su: one crown for each Crown Heat tier with the thirds filling by the meter
+  inside a tier, a bridge file in `Crown/` and not a `Hud/` file that names Crown, and a small
+  mission tracker of our own with a quest package attaching behind an interface later.
+- Now: `Hud/ManagedHudHeatSource.cs` (the heat interface and its registry), `Crown/ManagedCrownHeatMap.cs`
+  (tier and meter to nine sections), `Crown/ManagedCrownHudHeat.cs` (the component), and a
+  `Missions/` folder: `ManagedMissionSource.cs`, `ManagedMissionTracker.cs` and `ManagedMissionBoard.cs`.
+  The feed copies both sources when they are registered.
+- The design differs from the first idea in one way. The bridge does not call `SetHeat`. The HUD
+  asks the registered source through the interface, because the HUD already knows where the player
+  is and this keeps `Crown/` from looking for the player or the HUD, which would have needed the
+  character and the HUD in the NPC harness.
+- Found on the way: the missions panel redrew only through `ManagedHud.SetMissions`, which set a
+  flag. A feed that writes to the state directly would never have refreshed it. The panel now
+  redraws on `ManagedHudState.MissionsVersion`, which goes up only on a real change.
+- Existing Crown file edited, with Su's approval: `ManagedCrownRegion.cs` gained `WantedAt`,
+  `HuntedAt` and `OutlawAt`, read-only. They were private and the thirds need them. If another
+  chat ships a whole `ManagedCrownRegion.cs` that lacks them, `ManagedCrownHudHeat.cs` stops
+  compiling, and the `managed-npc-fallback` job says so on the push.
+- Checked with the building harness: 803 checks pass, 202 of them new. They cover every boundary of
+  the heat map (each third, each tier, a retuned region, a band with no width, a tier above the
+  highest, a sweep of the whole range for order and range), both registries, the tracker's
+  rules, the board, and the feed and the HUD reading the sources (heat and missions follow, clear
+  when the source goes, stay when it never came, redraw on a change from the feed). 49 deliberate
+  breaks were applied one at a time and each fails a check. Two were missed at first and needed a
+  sharper check, and a third attempt changed nothing and was dropped. The NPC harness compiles the new Crown
+  component and passes its 836 checks, and a scratch copy of it with a hand written check ran the
+  component against real regions: default and retuned thresholds, outside every region, a second
+  region, enabling and disabling. That check is not in the repo.
+- Not verified in the Editor: that the crowns and the panel look right when fed, the component
+  on a real scene, and that Unity serializes the Inspector mission list as intended.
+- Known limits. Only one source of each kind is read, the last to register. The heat shown is the
+  region the player stands in, so leaving a town hides the crowns while the heat stays there. Heat
+  is not saved. The missions have no saving, no rewards and no giver, the tracker only holds what a
+  caller puts in it. The dev keys cannot move the heat while a heat source is registered.
+- The ECS stack is unchanged.
+- Edits to existing files: `ManagedCrownRegion.cs` (three getters), `ManagedHudState.cs`,
+  `ManagedHudFeed.cs`, `ManagedHud.cs`, `BuildingTest.csproj`, `Tests.cs` (the new checks and the
+  registries in `Reset`), `ManagedNpcTest.csproj` (one include line), `managed-csharp-ci.yml`,
+  `managed.md` and `crown-heat.md`.
 
 ### `ManagedChemicalHazardField.cs`
 

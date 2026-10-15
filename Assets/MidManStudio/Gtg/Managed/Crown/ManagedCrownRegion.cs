@@ -82,6 +82,15 @@ namespace MidManStudio.Gtg.Managed.Crown
 
         public float MaxHeat { get { return _maxHeat; } }
 
+        /// <summary>Heat at which the tier becomes 1, wanted.</summary>
+        public float WantedAt { get { return _wantedAt; } }
+
+        /// <summary>Heat at which the tier becomes 2, hunted.</summary>
+        public float HuntedAt { get { return _huntedAt; } }
+
+        /// <summary>Heat at which the tier becomes 3, outlaw.</summary>
+        public float OutlawAt { get { return _outlawAt; } }
+
         /// <summary>0 clear, 1 wanted, 2 hunted, 3 outlaw. See <see cref="ManagedCrownTier"/>.</summary>
         public int Tier { get { return _tier; } }
 

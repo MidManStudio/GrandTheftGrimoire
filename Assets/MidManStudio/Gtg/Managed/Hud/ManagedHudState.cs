@@ -40,6 +40,13 @@ namespace MidManStudio.Gtg.Managed.Hud
         public string MissionTitle { get; private set; }
 
         /// <summary>
+        /// Counts the times the missions panel changed. <see cref="SetMissions"/> with what is shown already
+        /// does not count, so a widget can redraw when this differs from the value it drew, and a feed may set
+        /// the missions every frame.
+        /// </summary>
+        public int MissionsVersion { get; private set; }
+
+        /// <summary>
         /// True while the health bar, the vessel bar and the quick slots are hidden to make room
         /// for another screen at the bottom, such as the build tray.
         /// </summary>
@@ -114,17 +121,28 @@ namespace MidManStudio.Gtg.Managed.Hud
         /// </summary>
         public void SetMissions(string title, IList<string> lines)
         {
-            MissionTitle = title ?? string.Empty;
-            _missionLines.Clear();
-            if (lines == null)
+            string newTitle = title ?? string.Empty;
+            int newCount = lines == null ? 0 : (lines.Count < MaxMissionLines ? lines.Count : MaxMissionLines);
+
+            bool same = newTitle == MissionTitle && newCount == _missionLines.Count;
+            for (int i = 0; same && i < newCount; i++)
+            {
+                same = (lines[i] ?? string.Empty) == _missionLines[i];
+            }
+
+            if (same)
             {
                 return;
             }
 
-            for (int i = 0; i < lines.Count && _missionLines.Count < MaxMissionLines; i++)
+            MissionTitle = newTitle;
+            _missionLines.Clear();
+            for (int i = 0; i < newCount; i++)
             {
                 _missionLines.Add(lines[i] ?? string.Empty);
             }
+
+            MissionsVersion++;
         }
     }
 }

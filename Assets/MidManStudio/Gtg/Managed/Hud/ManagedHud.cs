@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using MidManStudio.Gtg.Managed.Camera;
 using MidManStudio.Gtg.Managed.Items;
+using MidManStudio.Gtg.Managed.Missions;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -21,8 +22,10 @@ namespace MidManStudio.Gtg.Managed.Hud
     /// a drawn sprite from <c>Resources/GtgHud</c> when one exists and a flat placeholder when it
     /// does not. Health, vessel charge, coins and heading are read from the player each frame.
     /// The bars and the quick slots hide while build mode is open, because its tray sits there.
-    /// Missions, heat and the wheel's contents have no system behind them yet, so they are set
-    /// through <see cref="SetMissions"/>, <see cref="SetHeat"/> and <see cref="Wheel"/>.
+    /// The heat crowns follow a registered <see cref="IManagedHudHeatSource"/> and the missions panel
+    /// a registered <see cref="IManagedMissionSource"/>, see <see cref="ManagedHudFeed"/>. While none
+    /// is registered they are set through <see cref="SetHeat"/> and <see cref="SetMissions"/>. The
+    /// wheel's contents have no system behind them yet and are set through <see cref="Wheel"/>.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class ManagedHud : MonoBehaviour
@@ -51,7 +54,7 @@ namespace MidManStudio.Gtg.Managed.Hud
         // Missions and compass.
         private ManagedHudText _missionTitle;
         private ManagedHudText _missionBody;
-        private bool _missionsDirty = true;
+        private int _drawnMissions = -1;
         private CompassMark[] _marks;
         private float _drawnYaw = float.NaN;
 
@@ -159,19 +162,21 @@ namespace MidManStudio.Gtg.Managed.Hud
 
         /// <summary>
         /// Sets how many of the nine heat sections are filled. The crowns show while it is above 0
-        /// and fill crown by crown. Nothing drives heat yet, so whatever makes the player wanted
-        /// calls this.
+        /// and fill crown by crown. While a heat source is registered the feed overwrites it every
+        /// frame, so this is for a scene without one and for the dev keys.
         /// </summary>
         public void SetHeat(int sections)
         {
             _state.SetHeat(sections);
         }
 
-        /// <summary>Sets the missions panel. See <see cref="ManagedHudState.SetMissions"/> for the limits.</summary>
+        /// <summary>
+        /// Sets the missions panel. See <see cref="ManagedHudState.SetMissions"/> for the limits. While a
+        /// mission source is registered the feed overwrites it every frame.
+        /// </summary>
         public void SetMissions(string title, IList<string> lines)
         {
             _state.SetMissions(title, lines);
-            _missionsDirty = true;
         }
 
         public void ToggleWheel()
@@ -302,7 +307,7 @@ namespace MidManStudio.Gtg.Managed.Hud
         private void Start()
         {
             _feed = new ManagedHudFeed(_createPlayerBag);
-            _state.SetMissions("Missions", new[] { "No active mission" });
+            _state.SetMissions(ManagedMissionTracker.DefaultTitle, new[] { ManagedMissionTracker.NoMissionLine });
             _wheel.Changed += OnWheelChanged;
             _wheel.Picked += OnWheelPicked;
             Build();
@@ -545,12 +550,12 @@ namespace MidManStudio.Gtg.Managed.Hud
 
         private void RefreshMissions()
         {
-            if (!_missionsDirty)
+            if (_state.MissionsVersion == _drawnMissions)
             {
                 return;
             }
 
-            _missionsDirty = false;
+            _drawnMissions = _state.MissionsVersion;
             _missionTitle.Text = _state.MissionTitle;
             var body = new System.Text.StringBuilder();
             for (int i = 0; i < _state.MissionLineCount; i++)

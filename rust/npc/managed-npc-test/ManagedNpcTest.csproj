@@ -26,6 +26,8 @@
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellModifiers.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselTypes.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDamage.cs" />
+    <!-- The heat source interface of the HUD, which ManagedCrownHudHeat implements. It has no other dependency. -->
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudHeatSource.cs" />
     <!-- Shared with the ECS stack, no ECS dependency. -->
     <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Native/*.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />

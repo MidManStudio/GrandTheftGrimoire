@@ -89,6 +89,8 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             UnityEngine.Camera.main = null;
             Stub.Reset();
             MidManStudio.Gtg.Managed.Camera.ManagedCursorBlock.Reset();
+            CallStatic(typeof(MidManStudio.Gtg.Managed.Hud.ManagedHudHeatSources), "ResetStatics");
+            CallStatic(typeof(MidManStudio.Gtg.Managed.Missions.ManagedMissionSources), "ResetStatics");
             Material.LitProps = new HashSet<string> { "_BaseColor" };
             Shader.Known = new HashSet<string> { "Universal Render Pipeline/Lit", "Standard", "Sprites/Default" };
             Resources.HasLegacyRuntime = true;
@@ -112,6 +114,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             UiHostTests();
             ModeTests();
             HudTests();
+            FeederTests();
             Console.WriteLine(_checks + " checks, " + _failures + " failed");
             return _failures == 0 ? 0 : 1;
         }

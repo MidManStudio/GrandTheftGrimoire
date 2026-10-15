@@ -3,12 +3,14 @@
 // live in docs/GrandTheftGrimoire/managed.md, section "ManagedHudFeed.cs"
 // ============================================================================
 
+using System.Collections.Generic;
 using MidManStudio.Gtg.Managed.Building;
 using MidManStudio.Gtg.Managed.CharacterController;
 using MidManStudio.Gtg.Managed.Economy;
 using MidManStudio.Gtg.Managed.Health;
 using MidManStudio.Gtg.Managed.Items;
 using MidManStudio.Gtg.Managed.Magic;
+using MidManStudio.Gtg.Managed.Missions;
 using UnityEngine;
 
 namespace MidManStudio.Gtg.Managed.Hud
@@ -16,9 +18,11 @@ namespace MidManStudio.Gtg.Managed.Hud
     /// <summary>
     /// The one place the HUD reads the game. It finds the player and copies health, vessel charge,
     /// coins and heading into a <see cref="ManagedHudState"/>, finds the player's item bag, and
-    /// copies whether build mode is open, which hides the bottom group. Everything else in the HUD
-    /// reads the state and knows none of these systems. Nothing here writes to the game except
-    /// adding a bag to the player when the player has none.
+    /// copies whether build mode is open, which hides the bottom group. It also copies the heat of
+    /// the registered <see cref="IManagedHudHeatSource"/> and the lines of the registered
+    /// <see cref="IManagedMissionSource"/>, when there are any. Everything else in the HUD reads the
+    /// state and knows none of these systems. Nothing here writes to the game except adding a bag to
+    /// the player when the player has none.
     /// </summary>
     public sealed class ManagedHudFeed
     {
@@ -39,6 +43,9 @@ namespace MidManStudio.Gtg.Managed.Hud
         private ManagedBuildMode _buildMode;
         private float _nextSearch;
         private float _nextBuildSearch;
+        private bool _hadHeatSource;
+        private bool _hadMissionSource;
+        private readonly List<string> _missionLines = new List<string>(ManagedHudState.MaxMissionLines);
 
         /// <summary>
         /// With <paramref name="createBag"/> the feed adds a <see cref="ManagedPlayerItemBag"/> to
@@ -108,6 +115,57 @@ namespace MidManStudio.Gtg.Managed.Hud
             }
 
             state.SetBottomHidden(_buildMode != null && _buildMode.BuildModeActive);
+
+            CopyHeat(state);
+            CopyMissions(state);
+        }
+
+        // With a heat source the heat follows it every frame, and is 0 while there is no player to place.
+        // When the source goes away the crowns clear, so a heat that nothing owns does not stay lit.
+        private void CopyHeat(ManagedHudState state)
+        {
+            IManagedHudHeatSource source = ManagedHudHeatSources.Current;
+            if (source != null)
+            {
+                _hadHeatSource = true;
+                state.SetHeat(_character != null ? source.SectionsAt(_character.transform.position) : 0);
+            }
+            else if (_hadHeatSource)
+            {
+                _hadHeatSource = false;
+                state.SetHeat(0);
+            }
+        }
+
+        // With a mission source the panel follows it every frame. When the source goes away the panel
+        // shows the empty state again, so the last mission does not stay up.
+        private void CopyMissions(ManagedHudState state)
+        {
+            IManagedMissionSource source = ManagedMissionSources.Current;
+            if (source != null)
+            {
+                _hadMissionSource = true;
+                _missionLines.Clear();
+                int count = source.LineCount;
+                if (count > ManagedHudState.MaxMissionLines)
+                {
+                    count = ManagedHudState.MaxMissionLines;
+                }
+
+                for (int i = 0; i < count; i++)
+                {
+                    _missionLines.Add(source.LineAt(i));
+                }
+
+                state.SetMissions(source.Title, _missionLines);
+            }
+            else if (_hadMissionSource)
+            {
+                _hadMissionSource = false;
+                _missionLines.Clear();
+                _missionLines.Add(ManagedMissionTracker.NoMissionLine);
+                state.SetMissions(ManagedMissionTracker.DefaultTitle, _missionLines);
+            }
         }
 
         private void Find()

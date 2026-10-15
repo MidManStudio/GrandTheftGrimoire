@@ -18,6 +18,8 @@
   <ItemGroup>
     <Compile Include="*.cs" Exclude="RigStubs.cs" />
     <Compile Include="$(GtgRoot)Managed/**/*.cs" Exclude="$(GtgRoot)Managed/NPC/**;$(GtgRoot)Managed/Crown/**;$(GtgRoot)Managed/Chemistry/**" />
+    <!-- Crown needs the NPC types, but these two files are plain arithmetic and the HUD heat feeder is checked through them. -->
+    <Compile Include="$(GtgRoot)Managed/Crown/ManagedCrownTypes.cs;$(GtgRoot)Managed/Crown/ManagedCrownHeatMap.cs" />
     <Compile Include="$(GtgRoot)Data/ItemDatabase.cs" />
   </ItemGroup>
 </Project>
