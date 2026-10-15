@@ -3,8 +3,10 @@
 # Managed file stops every system in Unity. This job compiles Managed/ (all folders except NPC, Crown and
 # Chemistry) at C# 9, the language level of Unity 2022.3, with plain .NET against hand written stand-ins for
 # UnityEngine, uGUI, TextMeshPro and the Input System, and then runs the checks in building-test/.
-# NPC, Crown and Health have their own job in npc-rust-ci.yml. Chemistry needs the Alembic package and is not
-# compiled here. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
+# NPC, Crown and Health are compiled by the second job, with the NPC harness on its managed fallback, because the
+# path filter of npc-rust-ci.yml does not list Managed/Crown/ or Managed/Hud/ and the Crown heat component
+# implements an interface of Hud. That workflow still runs the real native library. Chemistry needs the Alembic
+# package and is not compiled by either. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
 
 name: Managed C# CI
 
@@ -15,12 +17,14 @@ on:
       - 'Assets/MidManStudio/Gtg/Managed/**'
       - 'Assets/MidManStudio/Gtg/Data/**'
       - 'building-test/**'
+      - 'rust/npc/managed-npc-test/**'
       - '.github/workflows/managed-csharp-ci.yml'
   pull_request:
     paths:
       - 'Assets/MidManStudio/Gtg/Managed/**'
       - 'Assets/MidManStudio/Gtg/Data/**'
       - 'building-test/**'
+      - 'rust/npc/managed-npc-test/**'
       - '.github/workflows/managed-csharp-ci.yml'
 
 permissions:
@@ -64,5 +68,33 @@ jobs:
             echo '### Checks'
             echo '```text'
             tail -n 60 ci-out/checks.txt 2>/dev/null | head -c 20000 || echo '(no check output captured)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  managed-npc-fallback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      # The managed fallback of the NPC decision needs no native library. The run against the real library
+      # stays in npc-rust-ci.yml.
+      - name: Compile Crown, NPC and Health and run their checks on the managed fallback
+        run: |
+          set -o pipefail
+          mkdir -p ci-out
+          dotnet run --project rust/npc/managed-npc-test -c Release -- fallback 2>&1 | tee ci-out/managed-npc-fallback.txt
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          {
+            echo '## GTG Managed NPC compile and checks (managed fallback)'
+            echo
+            echo 'Crown, NPC and Health compiled at C# 9 with plain .NET against the NPC harness stand-ins, which includes the Crown heat component of the HUD. Checks run on the managed fallback only.'
+            echo '```text'
+            tail -n 40 ci-out/managed-npc-fallback.txt 2>/dev/null | head -c 20000 || echo '(no output captured)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
