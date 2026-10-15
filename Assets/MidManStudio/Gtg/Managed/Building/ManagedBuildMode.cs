@@ -38,8 +38,6 @@ namespace MidManStudio.Gtg.Managed.Building
         [Header("Scene references (all optional)")]
         [Tooltip("Reach is measured from this character, and the camera ray ignores it. Found automatically when empty.")]
         [SerializeField] private ManagedCharacter _player;
-        [Tooltip("Frees the cursor while the tray is open. Found automatically when empty. Without one this component sets the cursor itself.")]
-        [SerializeField] private ManagedCameraRig _cameraRig;
         [Tooltip("The camera the pointer ray starts from. The main camera when empty.")]
         [SerializeField] private UnityEngine.Camera _aimCamera;
 
@@ -88,6 +86,9 @@ namespace MidManStudio.Gtg.Managed.Building
         private UnityEngine.UIElements.PanelSettings _createdPanelSettings;
         private GameObject _piecesRoot;
         private GameObject _uiRoot;
+
+        // Keeps the camera rig from taking the cursor back on a click while the tray is open.
+        private readonly ManagedCursorBlock _cursorBlock = new ManagedCursorBlock();
 
         private bool _built;
         private bool _active;
@@ -232,11 +233,6 @@ namespace MidManStudio.Gtg.Managed.Building
             if (_player == null)
             {
                 _player = FindFirstObjectByType<ManagedCharacter>();
-            }
-
-            if (_cameraRig == null)
-            {
-                _cameraRig = FindFirstObjectByType<ManagedCameraRig>();
             }
 
             if (_customStock != null)
@@ -495,36 +491,26 @@ namespace MidManStudio.Gtg.Managed.Building
             }
         }
 
+        // The same way the cheat and shop panels do it: hold a block so the rig does not capture the
+        // cursor on a click, and free the cursor here.
         private void TakeCursorForUi()
         {
             _restoreCursorLock = Cursor.lockState == CursorLockMode.Locked;
-            if (_cameraRig != null)
-            {
-                _cameraRig.CursorHeldByUi = true;
-                _cameraRig.ReleaseCursor();
-            }
-            else
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
+            _cursorBlock.Set(true);
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
 
         private void GiveCursorBack()
         {
-            if (_cameraRig != null)
-            {
-                _cameraRig.CursorHeldByUi = false;
-                if (_restoreCursorLock)
-                {
-                    _cameraRig.CaptureCursor();
-                }
-            }
-            else if (_restoreCursorLock)
+            _cursorBlock.Set(false);
+            if (_restoreCursorLock)
             {
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
+
+            _restoreCursorLock = false;
         }
 
         // The keyboard and gamepad still cast with a free cursor, so the module is switched off while the tray is open.

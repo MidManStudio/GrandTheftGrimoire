@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Verification harness, never shipped. Compiles the Managed Building code without Unity against hand written
-       UnityEngine stand-ins. LangVersion 9 matches Unity 2022.3. -->
+  <!-- Verification harness, never shipped. Compiles the core Managed sources without Unity against
+       hand written UnityEngine stand-ins and runs the checks in this folder. LangVersion 9 matches
+       Unity 2022.3. NPC and Crown stay out because they need the NPC native bindings, and Chemistry because it needs Alembic. The NPC job has its own harness. -->
   <PropertyGroup>
-    <BuildingDir Condition="'$(BuildingDir)' == ''">/home/claude/work/GrandTheftGrimoire/Assets/MidManStudio/Gtg/Managed/Building</BuildingDir>
-    <RigFile Condition="'$(RigFile)' == ''">/home/claude/work/GrandTheftGrimoire/Assets/MidManStudio/Gtg/Managed/Camera/ManagedCameraRig.cs</RigFile>
+    <GtgRoot>$(MSBuildThisFileDirectory)../Assets/MidManStudio/Gtg/</GtgRoot>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>9.0</LangVersion>
@@ -16,9 +16,8 @@
     <RootNamespace>MidManStudio.Gtg.Managed.Building.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;Tests.cs;TestsController.cs;TestsWorld.cs;TestsUi.cs;TestsMode.cs;UnityStubs.cs;UiStubs.cs;RigStubs.cs" />
-    <Compile Include="$(BuildingDir)/*.cs" />
-    <Compile Include="$(RigFile)" />
-    <Compile Include="/home/claude/work/GrandTheftGrimoire/Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacterFeature.cs" />
+    <Compile Include="*.cs" Exclude="RigStubs.cs" />
+    <Compile Include="$(GtgRoot)Managed/**/*.cs" Exclude="$(GtgRoot)Managed/NPC/**;$(GtgRoot)Managed/Crown/**;$(GtgRoot)Managed/Chemistry/**" />
+    <Compile Include="$(GtgRoot)Data/ItemDatabase.cs" />
   </ItemGroup>
 </Project>

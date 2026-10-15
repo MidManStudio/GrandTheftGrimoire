@@ -55,8 +55,9 @@ namespace MidManStudio.Gtg.Managed.Camera
         private readonly StringBuilder _text = new StringBuilder(384);
 
         /// <summary>
-        /// While true, a click does not capture the cursor. A panel that needs the mouse holds a
-        /// <see cref="ManagedCursorBlock"/> while it is open, and this is true while any panel does.
+        /// While true, a click does not capture the cursor and the crosshair is hidden. A panel that
+        /// needs the mouse holds a <see cref="ManagedCursorBlock"/> while it is open, and this is
+        /// true while any panel does.
         /// </summary>
         public static bool CursorCaptureBlocked { get { return ManagedCursorBlock.Active; } }
 
@@ -217,7 +218,7 @@ namespace MidManStudio.Gtg.Managed.Camera
 
         private void OnGUI()
         {
-            if (_showCrosshair && _player != null)
+            if (_showCrosshair && _player != null && !CursorCaptureBlocked)
             {
                 DrawCrosshair();
             }

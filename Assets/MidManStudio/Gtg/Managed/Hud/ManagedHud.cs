@@ -20,6 +20,7 @@ namespace MidManStudio.Gtg.Managed.Hud
     /// and vessel bars, the quick slots, and the corner button of the item wheel. Every piece uses
     /// a drawn sprite from <c>Resources/GtgHud</c> when one exists and a flat placeholder when it
     /// does not. Health, vessel charge, coins and heading are read from the player each frame.
+    /// The bars and the quick slots hide while build mode is open, because its tray sits there.
     /// Missions, heat and the wheel's contents have no system behind them yet, so they are set
     /// through <see cref="SetMissions"/>, <see cref="SetHeat"/> and <see cref="Wheel"/>.
     /// </summary>
@@ -64,6 +65,9 @@ namespace MidManStudio.Gtg.Managed.Hud
         private int _drawnSilver = -1;
 
         // Bars.
+        // The bars and the quick slots share one parent, so they hide together.
+        private GameObject _bottomGroup;
+        private bool _bottomHidden;
         private Image _hpFill;
         private Image _spFill;
         private ManagedHudText _hpText;
@@ -325,7 +329,8 @@ namespace MidManStudio.Gtg.Managed.Hud
                     ToggleWheel();
                 }
 
-                if (!_wheelOpen)
+                // A hidden slot must not be used by its key.
+                if (!_wheelOpen && !_bottomHidden)
                 {
                     PollQuickKeys(keyboard);
                 }
@@ -347,6 +352,7 @@ namespace MidManStudio.Gtg.Managed.Hud
             }
 
             _feed.Refresh(_state, Time.unscaledTime);
+            ApplyBottomGroup();
             BindQuick();
 
             RefreshMissions();
@@ -355,6 +361,26 @@ namespace MidManStudio.Gtg.Managed.Hud
             RefreshBars();
             RefreshSlots();
             RefreshWheel();
+        }
+
+        // Shows or hides the bars and the quick slots to match the state. A drag that started on a
+        // slot cannot end once the slot is inactive, so it is dropped here.
+        private void ApplyBottomGroup()
+        {
+            bool hide = _state.BottomHidden;
+            if (hide == _bottomHidden)
+            {
+                return;
+            }
+
+            _bottomHidden = hide;
+            if (hide && ManagedItemDrag.Active && ManagedItemDrag.Payload.Origin == ManagedItemDragOrigin.QuickSlot)
+            {
+                ManagedItemDrag.Reset();
+                HideGhost();
+            }
+
+            _bottomGroup.SetActive(!hide);
         }
 
         // ---- input --------------------------------------------------------------------------------
@@ -726,8 +752,11 @@ namespace MidManStudio.Gtg.Managed.Hud
             BuildMissions(root);
             BuildCompass(root);
             BuildStatus(root);
-            BuildBars(root);
-            BuildSlots(root);
+
+            // One stretched parent for the bars and the slots. It has no graphic, so it takes no clicks.
+            _bottomGroup = ManagedHudBuilder.NewStretch(root, "Bottom Group").gameObject;
+            BuildBars(_bottomGroup.transform);
+            BuildSlots(_bottomGroup.transform);
             BuildWheelButton(root);
             BuildWheelOverlay(root);
             BuildGhost(root);

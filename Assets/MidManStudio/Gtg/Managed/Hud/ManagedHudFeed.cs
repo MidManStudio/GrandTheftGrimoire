@@ -3,6 +3,7 @@
 // live in docs/GrandTheftGrimoire/managed.md, section "ManagedHudFeed.cs"
 // ============================================================================
 
+using MidManStudio.Gtg.Managed.Building;
 using MidManStudio.Gtg.Managed.CharacterController;
 using MidManStudio.Gtg.Managed.Economy;
 using MidManStudio.Gtg.Managed.Health;
@@ -14,21 +15,30 @@ namespace MidManStudio.Gtg.Managed.Hud
 {
     /// <summary>
     /// The one place the HUD reads the game. It finds the player and copies health, vessel charge,
-    /// coins and heading into a <see cref="ManagedHudState"/>, and finds the player's item bag.
-    /// Everything else in the HUD reads the state and knows none of these systems. Nothing here
-    /// writes to the game except adding a bag to the player when the player has none.
+    /// coins and heading into a <see cref="ManagedHudState"/>, finds the player's item bag, and
+    /// copies whether build mode is open, which hides the bottom group. Everything else in the HUD
+    /// reads the state and knows none of these systems. Nothing here writes to the game except
+    /// adding a bag to the player when the player has none.
     /// </summary>
     public sealed class ManagedHudFeed
     {
         /// <summary>Seconds between searches for the parts of the player that are missing.</summary>
         public const float SearchSeconds = 0.5f;
 
+        /// <summary>
+        /// Seconds between searches for the build mode component while there is none. It is
+        /// optional and the search walks the scene, so it runs less often than the player search.
+        /// </summary>
+        public const float BuildSearchSeconds = 2f;
+
         private readonly bool _createBag;
         private ManagedCharacter _character;
         private ManagedHealth _health;
         private ManagedSpellCaster _caster;
         private ManagedPlayerItemBag _bag;
+        private ManagedBuildMode _buildMode;
         private float _nextSearch;
+        private float _nextBuildSearch;
 
         /// <summary>
         /// With <paramref name="createBag"/> the feed adds a <see cref="ManagedPlayerItemBag"/> to
@@ -90,6 +100,14 @@ namespace MidManStudio.Gtg.Managed.Hud
                 state.SetVessel(false, 0f);
                 state.SetCoins(0L, 0);
             }
+
+            if (_buildMode == null && now >= _nextBuildSearch)
+            {
+                _nextBuildSearch = now + BuildSearchSeconds;
+                _buildMode = Object.FindFirstObjectByType<ManagedBuildMode>();
+            }
+
+            state.SetBottomHidden(_buildMode != null && _buildMode.BuildModeActive);
         }
 
         private void Find()

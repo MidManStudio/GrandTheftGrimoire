@@ -39,6 +39,12 @@ namespace MidManStudio.Gtg.Managed.Hud
 
         public string MissionTitle { get; private set; }
 
+        /// <summary>
+        /// True while the health bar, the vessel bar and the quick slots are hidden to make room
+        /// for another screen at the bottom, such as the build tray.
+        /// </summary>
+        public bool BottomHidden { get; private set; }
+
         public ManagedHudState()
         {
             MissionTitle = string.Empty;
@@ -90,6 +96,11 @@ namespace MidManStudio.Gtg.Managed.Hud
         public void SetHeat(int sections)
         {
             HeatSections = ManagedHudMath.ClampHeat(sections);
+        }
+
+        public void SetBottomHidden(bool hidden)
+        {
+            BottomHidden = hidden;
         }
 
         public void SetYaw(float degrees)

@@ -106,14 +106,15 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             w.Key_B();
             Check(w.Mode.BuildModeActive, "B opens build mode"); Eq(w.ModeChanges, 1, "event raised");
             Eq(Cursor.lockState, CursorLockMode.None, "the cursor is freed"); Check(Cursor.visible, "and visible");
-            Check(w.Rig.CursorHeldByUi, "the rig is told the UI holds the cursor");
+            Check(ManagedCursorBlock.Active, "the tray holds a cursor block, so the rig does not recapture");
+            Eq(ManagedCursorBlock.Holders, 1, "and holds exactly one");
             Check(!w.Player.Has(ManagedCharacterFeature.Cast), "casting is off while the tray is open");
             Check(w.Player.Has(ManagedCharacterFeature.Move) && w.Player.Has(ManagedCharacterFeature.Look), "movement and look stay on");
             Check(w.Panel.Visible, "the tray is shown");
             w.Key_B();
             Check(!w.Mode.BuildModeActive, "B closes it"); Eq(w.ModeChanges, 2, "second event");
             Eq(Cursor.lockState, CursorLockMode.Locked, "the lock is restored"); Check(!Cursor.visible, "and the cursor hidden again");
-            Check(!w.Rig.CursorHeldByUi, "the rig is released"); Check(w.Player.Has(ManagedCharacterFeature.Cast), "casting is back");
+            Check(!ManagedCursorBlock.Active, "the cursor block is released"); Check(w.Player.Has(ManagedCharacterFeature.Cast), "casting is back");
             Check(!w.Panel.Visible, "the tray is hidden again");
             w.Mode.SetBuildMode(true); w.Mode.SetBuildMode(true);
             Eq(w.ModeChanges, 3, "setting the same state twice raises once");
@@ -123,24 +124,36 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
             w.Key_B(); w.Key_B();
             Eq(Cursor.lockState, CursorLockMode.None, "an unlocked cursor is not captured on exit");
-            Check(!w.Rig.CursorHeldByUi, "hold is cleared");
+            Check(!ManagedCursorBlock.Active, "hold is cleared");
+
+            // Another panel holds a block of its own: closing the tray leaves that one standing.
+            w = NewWorld(true);
+            var otherPanel = new ManagedCursorBlock();
+            otherPanel.Set(true);
+            w.Key_B();
+            Eq(ManagedCursorBlock.Holders, 2, "the tray and another panel hold one each");
+            w.Key_B();
+            Eq(ManagedCursorBlock.Holders, 1, "closing the tray releases only its own hold");
+            Check(ManagedCursorBlock.Active, "so the other panel keeps the cursor");
+            otherPanel.Set(false);
 
             // Cast was off before: it stays off.
             w = NewWorld(true, null, true, false);
             w.Key_B(); w.Key_B();
             Check(!w.Player.Has(ManagedCharacterFeature.Cast), "a Cast flag that was off is not switched on by closing the tray");
 
-            // Without a rig the cursor is handled directly.
+            // The tray does not need the rig: the block and the cursor are handled here.
             w = NewWorld(false);
             w.Key_B();
-            Eq(Cursor.lockState, CursorLockMode.None, "no rig: cursor freed"); w.Key_B();
+            Eq(Cursor.lockState, CursorLockMode.None, "no rig: cursor freed"); Check(ManagedCursorBlock.Active, "no rig: block held"); w.Key_B();
             Eq(Cursor.lockState, CursorLockMode.Locked, "no rig: cursor locked again"); Check(!Cursor.visible, "no rig: hidden");
+            Check(!ManagedCursorBlock.Active, "no rig: block released");
 
             // Disabling while open restores everything.
             w = NewWorld(true);
             w.Key_B();
             Call(w.Mode, "OnDisable");
-            Check(!w.Mode.BuildModeActive && !w.Rig.CursorHeldByUi && w.Player.Has(ManagedCharacterFeature.Cast) && Cursor.lockState == CursorLockMode.Locked, "OnDisable leaves build mode cleanly");
+            Check(!w.Mode.BuildModeActive && !ManagedCursorBlock.Active && w.Player.Has(ManagedCharacterFeature.Cast) && Cursor.lockState == CursorLockMode.Locked, "OnDisable leaves build mode cleanly");
 
             // Before Start.
             w = NewWorld(true, m => m.SetBuildMode(true));
@@ -358,24 +371,44 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             Time.frameCount = 1;
             Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
             w.Ms.leftButton.wasPressedThisFrame = true;
-            w.Rig.CursorHeldByUi = true;
+            var panelBlock = new ManagedCursorBlock();
+            panelBlock.Set(true);
+            Check(ManagedCameraRig.CursorCaptureBlocked, "the rig reads a held block");
             Call(w.Rig, "LateUpdate");
-            Eq(Cursor.lockState, CursorLockMode.None, "a click does not recapture the cursor while the UI holds it");
-            w.Rig.CursorHeldByUi = false;
+            Eq(Cursor.lockState, CursorLockMode.None, "a click does not recapture the cursor while a panel holds a block");
+            panelBlock.Set(false);
+            Check(!ManagedCameraRig.CursorCaptureBlocked, "the rig reads no block once it is released");
             Call(w.Rig, "LateUpdate");
             Eq(Cursor.lockState, CursorLockMode.Locked, "without the hold a click recaptures it as before"); Check(!Cursor.visible, "and hides it");
-            w.Rig.ReleaseCursor();
-            Eq(Cursor.lockState, CursorLockMode.None, "ReleaseCursor frees"); Check(Cursor.visible, "and shows the cursor");
-            w.Rig.CaptureCursor();
-            Eq(Cursor.lockState, CursorLockMode.Locked, "CaptureCursor locks");
             GUI.TextureDraws = 0;
-            w.Rig.CursorHeldByUi = false;
             Call(w.Rig, "OnGUI");
             Check(GUI.TextureDraws == 4, "the crosshair is drawn as four bars normally");
             GUI.TextureDraws = 0;
-            w.Rig.CursorHeldByUi = true;
+            panelBlock.Set(true);
             Call(w.Rig, "OnGUI");
-            Eq(GUI.TextureDraws, 0, "the crosshair is hidden while the UI holds the cursor");
+            Eq(GUI.TextureDraws, 0, "the crosshair is hidden while a panel holds the cursor");
+            panelBlock.Set(false);
+
+            // The tray itself hides the crosshair, through the same block.
+            w = NewWorld(true);
+            Call(w.Rig, "Awake");
+            SetField(w.Rig, "_player", w.Player);
+            w.Key_B();
+            GUI.TextureDraws = 0;
+            Call(w.Rig, "OnGUI");
+            Eq(GUI.TextureDraws, 0, "build mode hides the crosshair");
+            w.Key_B();
+            GUI.TextureDraws = 0;
+            Call(w.Rig, "OnGUI");
+            Check(GUI.TextureDraws == 4, "and the crosshair returns when it closes");
+
+            // ResetStatics, the hook that clears the holders when play starts.
+            var staleHolder = new ManagedCursorBlock();
+            staleHolder.Set(true);
+            CallStatic(typeof(ManagedCameraRig), "ResetStatics");
+            Check(!ManagedCursorBlock.Active, "starting play clears a holder left over from an earlier session");
+            staleHolder.Set(false);
+            Check(!ManagedCursorBlock.Active && ManagedCursorBlock.Holders == 0, "and the stale holder does not count out a second time");
 
             Section("mode validate");
             var host = new GameObject("v").AddComponent<ManagedBuildMode>();

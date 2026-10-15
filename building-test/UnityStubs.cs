@@ -22,10 +22,13 @@ namespace UnityEngine
         public float x, y;
         public Vector2(float x, float y) { this.x = x; this.y = y; }
         public static Vector2 zero { get { return new Vector2(0, 0); } }
+        public static Vector2 one { get { return new Vector2(1, 1); } }
         public float magnitude { get { return (float)Math.Sqrt(x * x + y * y); } }
+        public Vector2 normalized { get { float m = magnitude; return m > 1e-5f ? new Vector2(x / m, y / m) : new Vector2(0, 0); } }
         public static Vector2 operator +(Vector2 a, Vector2 b) { return new Vector2(a.x + b.x, a.y + b.y); }
         public static Vector2 operator -(Vector2 a, Vector2 b) { return new Vector2(a.x - b.x, a.y - b.y); }
         public static Vector2 operator *(Vector2 a, float f) { return new Vector2(a.x * f, a.y * f); }
+        public static Vector2 operator /(Vector2 a, float f) { return new Vector2(a.x / f, a.y / f); }
         public static implicit operator Vector3(Vector2 v) { return new Vector3(v.x, v.y, 0); }
         public static implicit operator Vector2(Vector3 v) { return new Vector2(v.x, v.y); }
     }
@@ -46,6 +49,25 @@ namespace UnityEngine
         public static Vector3 operator -(Vector3 a, Vector3 b) { return new Vector3(a.x - b.x, a.y - b.y, a.z - b.z); }
         public static Vector3 operator *(Vector3 a, float f) { return new Vector3(a.x * f, a.y * f, a.z * f); }
         public static Vector3 operator *(float f, Vector3 a) { return new Vector3(a.x * f, a.y * f, a.z * f); }
+        public static Vector3 operator /(Vector3 a, float f) { return new Vector3(a.x / f, a.y / f, a.z / f); }
+        public static Vector3 operator -(Vector3 a) { return new Vector3(-a.x, -a.y, -a.z); }
+        public Vector3 normalized { get { float m = magnitude; return m > 1e-5f ? new Vector3(x / m, y / m, z / m) : new Vector3(0, 0, 0); } }
+        public static float Dot(Vector3 a, Vector3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+        public static Vector3 Cross(Vector3 a, Vector3 b) { return new Vector3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
+        public static float Distance(Vector3 a, Vector3 b) { return (a - b).magnitude; }
+        public static Vector3 Lerp(Vector3 a, Vector3 b, float t) { t = t < 0f ? 0f : (t > 1f ? 1f : t); return a + (b - a) * t; }
+        public static float Angle(Vector3 from, Vector3 to)
+        {
+            float d = (float)Math.Sqrt(from.sqrMagnitude * to.sqrMagnitude);
+            if (d < 1e-15f) return 0f;
+            float c = Dot(from, to) / d; c = c < -1f ? -1f : (c > 1f ? 1f : c);
+            return (float)(Math.Acos(c) * 180.0 / Math.PI);
+        }
+        public static Vector3 MoveTowards(Vector3 current, Vector3 target, float maxDistanceDelta)
+        {
+            Vector3 d = target - current; float m = d.magnitude;
+            return m <= maxDistanceDelta || m < 1e-5f ? target : current + d / m * maxDistanceDelta;
+        }
         public float sqrMagnitude { get { return x * x + y * y + z * z; } }
         public float magnitude { get { return (float)Math.Sqrt(sqrMagnitude); } }
         public override string ToString() { return "(" + x + ", " + y + ", " + z + ")"; }
@@ -134,7 +156,17 @@ namespace UnityEngine
         public float r, g, b, a;
         public Color(float r, float g, float b, float a) { this.r = r; this.g = g; this.b = b; this.a = a; }
         public static Color white { get { return new Color(1, 1, 1, 1); } }
+        public static Color black { get { return new Color(0, 0, 0, 1); } }
+        public static Color clear { get { return new Color(0, 0, 0, 0); } }
+        public static Color red { get { return new Color(1, 0, 0, 1); } }
+        public static Color yellow { get { return new Color(1, 0.92156863f, 0.015686275f, 1); } }
+        public static Color Lerp(Color a, Color b, float t)
+        {
+            t = t < 0f ? 0f : (t > 1f ? 1f : t);
+            return new Color(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
+        }
         public static implicit operator Color(Color32 c) { return new Color(c.r / 255f, c.g / 255f, c.b / 255f, c.a / 255f); }
+        public static implicit operator Color32(Color c) { return new Color32((byte)Math.Round(c.r * 255f), (byte)Math.Round(c.g * 255f), (byte)Math.Round(c.b * 255f), (byte)Math.Round(c.a * 255f)); }
     }
     public struct Color32 { public byte r, g, b, a; public Color32(byte r, byte g, byte b, byte a) { this.r = r; this.g = g; this.b = b; this.a = a; } }
 
@@ -151,6 +183,27 @@ namespace UnityEngine
         public static float Min(float a, float b) { return a < b ? a : b; }
         public static float Clamp(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
         public static float Abs(float v) { return Math.Abs(v); }
+        public const float PI = (float)Math.PI;
+        public const float Deg2Rad = (float)(Math.PI / 180.0);
+        public const float Rad2Deg = (float)(180.0 / Math.PI);
+        public static int Max(int a, int b) { return a > b ? a : b; }
+        public static int Min(int a, int b) { return a < b ? a : b; }
+        public static int Clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+        public static int Abs(int v) { return Math.Abs(v); }
+        public static float Clamp01(float v) { return v < 0f ? 0f : v > 1f ? 1f : v; }
+        public static float Lerp(float a, float b, float t) { return a + (b - a) * Clamp01(t); }
+        public static float Sqrt(float v) { return (float)Math.Sqrt(v); }
+        public static float Sin(float v) { return (float)Math.Sin(v); }
+        public static float Cos(float v) { return (float)Math.Cos(v); }
+        public static float Acos(float v) { return (float)Math.Acos(v); }
+        public static float Atan2(float y, float x) { return (float)Math.Atan2(y, x); }
+        public static float Pow(float a, float b) { return (float)Math.Pow(a, b); }
+        public static float Floor(float v) { return (float)Math.Floor(v); }
+        public static float Ceil(float v) { return (float)Math.Ceiling(v); }
+        public static int FloorToInt(float v) { return (int)Math.Floor(v); }
+        public static int CeilToInt(float v) { return (int)Math.Ceiling(v); }
+        public static int RoundToInt(float v) { return (int)Math.Round(v, MidpointRounding.ToEven); }
+        public static bool Approximately(float a, float b) { return Math.Abs(b - a) < Math.Max(1E-06f * Math.Max(Math.Abs(a), Math.Abs(b)), 1.121039E-44f * 8f); }
     }
 
     // ---- object model ----------------------------------------------------------------------------------------
@@ -158,6 +211,7 @@ namespace UnityEngine
     {
         internal static readonly List<GameObject> Registry = new List<GameObject>();
         public string name;
+        public HideFlags hideFlags;
         internal bool Destroyed;
         public static implicit operator bool(Object o) { return o != null && !o.Destroyed; }
         public static bool operator ==(Object a, Object b)
@@ -212,6 +266,11 @@ namespace UnityEngine
         }
         public T GetComponentInChildren<T>() where T : class { return GetComponent<T>(); }
         public T[] GetComponentsInChildren<T>() where T : class { var r = new List<T>(); var c = GetComponent<T>(); if (c != null) r.Add(c); return r.ToArray(); }
+        public T GetComponentInParent<T>() where T : class
+        {
+            for (Transform t = transform; t != null; t = t.parent) { T c = t.GetComponent<T>(); if (c != null) return c; }
+            return null;
+        }
     }
 
     public class Behaviour : Component { public bool enabled = true; }
@@ -238,6 +297,13 @@ namespace UnityEngine
         }
         internal IEnumerable<Transform> Children { get { return _children; } }
         public Vector3 eulerAngles { get { return Vector3.zero; } }
+        public Vector3 localPosition;
+        public Vector3 localScale = Vector3.one;
+        public Quaternion localRotation = Quaternion.identity;
+        public Vector3 forward { get { return rotation * Vector3.forward; } }
+        public Vector3 right { get { return rotation * Vector3.right; } }
+        public Vector3 up { get { return rotation * Vector3.up; } }
+        public Vector3 TransformPoint(Vector3 p) { return position + rotation * p; }
     }
 
     public class GameObject : Object
@@ -248,13 +314,30 @@ namespace UnityEngine
         private bool _self = true;
         public Transform transform;
         public GameObject() : this("GameObject") { }
-        public GameObject(string name)
+        public GameObject(string name, params Type[] components)
         {
             this.name = name;
-            var t = new Transform { gameObject = this };
+            bool rect = false;
+            foreach (Type c in components) { if (typeof(RectTransform).IsAssignableFrom(c)) rect = true; }
+            var t = rect ? new RectTransform { gameObject = this } : new Transform { gameObject = this };
             transform = t;
             Components.Add(t);
             Registry.Add(this);
+            foreach (Type c in components)
+            {
+                if (typeof(Transform).IsAssignableFrom(c)) continue;
+                var comp = (Component)Activator.CreateInstance(c);
+                comp.gameObject = this;
+                Components.Add(comp);
+                var init = comp as IStubLifecycle;
+                if (init != null) init.OnAdded();
+            }
+        }
+        public static GameObject CreatePrimitive(PrimitiveType type)
+        {
+            var go = new GameObject(type.ToString());
+            go.AddComponent<BoxCollider>();
+            return go;
         }
         public bool activeSelf { get { return _self; } }
         public bool activeInHierarchy
@@ -305,11 +388,24 @@ namespace UnityEngine
         public Vector3 origin, direction;
         public Ray(Vector3 o, Vector3 d) { origin = o; direction = d; }
     }
-    public struct Bounds { public Vector3 min, max; }
+    public struct Bounds
+    {
+        public Vector3 min, max;
+        public Bounds(Vector3 center, Vector3 size) { min = center - size * 0.5f; max = center + size * 0.5f; }
+        public Vector3 center { get { return (min + max) * 0.5f; } }
+        public Vector3 size { get { return max - min; } }
+        public Vector3 extents { get { return (max - min) * 0.5f; } }
+        public Vector3 ClosestPoint(Vector3 p)
+        {
+            return new Vector3(Math.Min(Math.Max(p.x, min.x), max.x), Math.Min(Math.Max(p.y, min.y), max.y), Math.Min(Math.Max(p.z, min.z), max.z));
+        }
+    }
 
     public class Collider : Component
     {
         public bool isTrigger;
+        public bool enabled = true;
+        public Bounds bounds { get { return WorldBounds(); } }
         internal Bounds WorldBounds()
         {
             var box = this as BoxCollider;
@@ -402,12 +498,46 @@ namespace UnityEngine
             }
             return count;
         }
+        public static Vector3 gravity = new Vector3(0f, -9.81f, 0f);
+        public static int OverlapSphereNonAlloc(Vector3 position, float radius, Collider[] results, int layerMask, QueryTriggerInteraction q)
+        {
+            int count = 0;
+            foreach (Collider c in Active(layerMask, q))
+            {
+                Bounds b = c.WorldBounds();
+                float dx = Math.Max(Math.Max(b.min.x - position.x, 0f), position.x - b.max.x);
+                float dy = Math.Max(Math.Max(b.min.y - position.y, 0f), position.y - b.max.y);
+                float dz = Math.Max(Math.Max(b.min.z - position.z, 0f), position.z - b.max.z);
+                if (dx * dx + dy * dy + dz * dz <= radius * radius && count < results.Length) results[count++] = c;
+            }
+            return count;
+        }
+        public static bool SphereCast(Vector3 origin, float radius, Vector3 direction, out RaycastHit hit, float maxDistance, int layerMask, QueryTriggerInteraction q)
+        {
+            // A sphere cast is a ray against bounds grown by the radius, which is exact enough for the checks.
+            hit = default(RaycastHit);
+            float best = float.MaxValue; bool any = false;
+            foreach (Collider c in Active(layerMask, q))
+            {
+                Bounds b = c.WorldBounds();
+                var grown = new Bounds { min = b.min - new Vector3(radius, radius, radius), max = b.max + new Vector3(radius, radius, radius) };
+                float t; Vector3 n;
+                if (Slab(new Ray(origin, direction), grown, out t, out n) && t <= maxDistance && t < best)
+                {
+                    best = t; any = true;
+                    hit = new RaycastHit { collider = c, distance = t, point = origin + direction * t, normal = n };
+                }
+            }
+            return any;
+        }
         public static bool Linecast(Vector3 a, Vector3 b, out RaycastHit hit, int mask, QueryTriggerInteraction q) { hit = default(RaycastHit); return false; }
     }
 
     // ---- rendering -------------------------------------------------------------------------------------------
     public class Shader : Object
     {
+        public bool isSupported = true;
+        public static int PropertyToID(string name) { return name.GetHashCode(); }
         public static HashSet<string> Known = new HashSet<string> { "Universal Render Pipeline/Lit", "Standard", "Sprites/Default" };
         public static Shader Find(string n) { return Known.Contains(n) ? new Shader { name = n } : null; }
     }
@@ -415,6 +545,7 @@ namespace UnityEngine
     {
         public Shader shader;
         public bool enableInstancing;
+        public Color color { get { Color c; return Colors.TryGetValue("_Color", out c) ? c : Color.white; } set { Colors["_Color"] = value; } }
         public readonly Dictionary<string, Color> Colors = new Dictionary<string, Color>();
         public static HashSet<string> LitProps = new HashSet<string> { "_BaseColor" };
         public Material(Shader s) { shader = s; }
@@ -425,21 +556,64 @@ namespace UnityEngine
     public class Mesh : Object
     {
         public Vector3[] vertices, normals; public int[] triangles; public Color32[] colors32;
+        public Bounds bounds;
+        public Rendering.IndexFormat indexFormat;
         public void RecalculateBounds() { }
+        public void MarkDynamic() { }
+        public void Clear() { vertices = null; triangles = null; colors32 = null; }
+        public void SetVertices(Vector3[] inVertices, int start, int length) { vertices = new Vector3[length]; Array.Copy(inVertices, start, vertices, 0, length); }
+        public void SetColors(Color32[] inColors, int start, int length) { colors32 = new Color32[length]; Array.Copy(inColors, start, colors32, 0, length); }
+        public void SetTriangles(int[] inTriangles, int start, int length, int submesh) { triangles = new int[length]; Array.Copy(inTriangles, start, triangles, 0, length); }
     }
-    public class MaterialPropertyBlock { }
+    public class MaterialPropertyBlock
+    {
+        public void SetVectorArray(int nameID, Vector4[] values) { }
+        public void SetVectorArray(string name, Vector4[] values) { }
+    }
     public class Camera : Component
     {
         public static Camera main;
         public Rect pixelRect = new Rect(0, 0, 1920, 1080);
         public Func<Vector3, Ray> RayFactory;
         public Ray ScreenPointToRay(Vector3 p) { return RayFactory(p); }
+        public Ray ViewportPointToRay(Vector3 p) { return RayFactory(new Vector3(p.x * pixelRect.width, p.y * pixelRect.height, p.z)); }
     }
     public class Renderer : Component { public Rendering.ShadowCastingMode shadowCastingMode; }
-    public class Texture2D : Object { public static Texture2D whiteTexture = new Texture2D(); }
-    public class Font : Object { }
+    public class Texture : Object
+    {
+        public int width, height;
+        public FilterMode filterMode;
+        public TextureWrapMode wrapMode;
+    }
+    public class Texture2D : Texture
+    {
+        public static Texture2D whiteTexture = new Texture2D();
+        public Texture2D() { width = 1; height = 1; }
+        public Texture2D(int width, int height, TextureFormat format, bool mipChain) { this.width = width; this.height = height; }
+        public void SetPixels32(Color32[] colors) { }
+        public void Apply() { }
+    }
+    public class Font : Object { public static Font CreateDynamicFontFromOSFont(string fontname, int size) { return new Font { name = fontname }; } }
+    public enum FilterMode { Point, Bilinear, Trilinear }
+    public enum TextureWrapMode { Repeat, Clamp, Mirror, MirrorOnce }
+    public enum TextureFormat { RGBA32 = 4, ARGB32 = 5, RGB24 = 3, Alpha8 = 1 }
+    [Flags] public enum HideFlags { None = 0, HideInHierarchy = 1, HideInInspector = 2, DontSaveInEditor = 4, NotEditable = 8, DontSaveInBuild = 16, DontUnloadUnusedAsset = 32, DontSave = 52, HideAndDontSave = 61 }
+    public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
+    public static class SystemInfo { public static bool supportsInstancing = true; }
+    public static class Gizmos
+    {
+        public static Color color;
+        public static void DrawWireSphere(Vector3 center, float radius) { }
+        public static void DrawRay(Vector3 from, Vector3 direction) { }
+    }
     public static class Resources
     {
+        public static readonly Dictionary<string, Object> Assets = new Dictionary<string, Object>();
+        public static T Load<T>(string path) where T : Object
+        {
+            Object o;
+            return Assets.TryGetValue(path, out o) && o is T ? (T)o : null;
+        }
         public static bool HasLegacyRuntime = true;
         public static T GetBuiltinResource<T>(string path) where T : Object
         {
@@ -472,12 +646,18 @@ namespace UnityEngine
         public static void LogWarning(object m) { Warnings.Add(m.ToString()); }
         public static void LogWarning(object m, Object ctx) { Warnings.Add(m.ToString()); }
         public static void LogError(object m) { Errors.Add(m.ToString()); }
+        public static readonly List<string> Logs = new List<string>();
+        public static void Log(object m) { Logs.Add(m.ToString()); }
     }
     public static class Application { public static bool isPlaying = true; }
     public enum CursorLockMode { None, Locked, Confined }
     public static class Cursor { public static CursorLockMode lockState; public static bool visible = true; }
     public static class Screen { public static int width = 1920, height = 1080; }
-    public static class Time { public static int frameCount; }
+    public static class Time
+    {
+        public static int frameCount;
+        public static float unscaledTime, time, deltaTime = 0.016f, unscaledDeltaTime = 0.016f, timeScale = 1f;
+    }
 
     // IMGUI, only what ManagedCameraRig draws.
     public class GUIStyle { public int fontSize; public GUIStyle() { } public GUIStyle(GUIStyle o) { } }
@@ -507,23 +687,43 @@ namespace UnityEngine
 namespace UnityEngine.Rendering
 {
     public enum ShadowCastingMode { Off, On, TwoSided, ShadowsOnly }
+    public enum IndexFormat { UInt16, UInt32 }
 }
 
 namespace UnityEngine.EventSystems
 {
-    public class EventSystem : UnityEngine.MonoBehaviour { }
+    public class EventSystem : UnityEngine.MonoBehaviour
+    {
+        public static EventSystem current;
+        public bool PointerOver;
+        public bool IsPointerOverGameObject() { return PointerOver; }
+    }
     public class BaseInputModule : UnityEngine.MonoBehaviour { }
     public class StandaloneInputModule : BaseInputModule { }
 }
 
 namespace UnityEngine.InputSystem.UI
 {
-    public class InputSystemUIInputModule : UnityEngine.EventSystems.BaseInputModule { }
+    public class InputSystemUIInputModule : UnityEngine.EventSystems.BaseInputModule { public void AssignDefaultActions() { } }
 }
 
 namespace UnityEngine.InputSystem
 {
-    public enum Key { None = 0, Space = 1, B = 38, R = 50, Escape = 60, V = 53, Tab = 3, F = 42, IMESelected = 110 }
+    // Same order as the Input System enum. The keyboard indexer takes the value minus one, and throws for None and IMESelected.
+    public enum Key
+    {
+        None = 0, Space, Enter, Tab, Backquote, Quote, Semicolon, Comma, Period, Slash, Backslash, LeftBracket, RightBracket, Minus, Equals,
+        A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+        Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9, Digit0,
+        LeftShift, RightShift, LeftAlt, RightAlt, LeftCtrl, RightCtrl, LeftMeta, RightMeta, ContextMenu, Escape,
+        LeftArrow, RightArrow, UpArrow, DownArrow, Backspace, PageDown, PageUp, Home, End, Insert, Delete,
+        CapsLock, NumLock, PrintScreen, ScrollLock, Pause,
+        NumpadEnter, NumpadDivide, NumpadMultiply, NumpadPlus, NumpadMinus, NumpadPeriod, NumpadEquals,
+        Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9,
+        F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+        OEM1, OEM2, OEM3, OEM4, OEM5,
+        IMESelected,
+    }
 
     public class ButtonControl
     {
@@ -542,7 +742,7 @@ namespace UnityEngine.InputSystem
     public class Keyboard
     {
         public static Keyboard current;
-        private readonly KeyControl[] _keys = new KeyControl[109];
+        private readonly KeyControl[] _keys = new KeyControl[(int)Key.IMESelected - 1];
         public Keyboard() { for (int i = 0; i < _keys.Length; i++) _keys[i] = new KeyControl(); }
         public KeyControl this[Key key]
         {
@@ -554,23 +754,59 @@ namespace UnityEngine.InputSystem
             }
         }
         public ReadOnlyArray<KeyControl> allKeys { get { return new ReadOnlyArray<KeyControl>(_keys); } }
-        public KeyControl rKey { get { return this[Key.R]; } }
+        public KeyControl spaceKey { get { return this[Key.Space]; } }
+        public KeyControl tabKey { get { return this[Key.Tab]; } }
         public KeyControl escapeKey { get { return this[Key.Escape]; } }
+        public KeyControl leftArrowKey { get { return this[Key.LeftArrow]; } }
+        public KeyControl rightArrowKey { get { return this[Key.RightArrow]; } }
+        public KeyControl upArrowKey { get { return this[Key.UpArrow]; } }
+        public KeyControl downArrowKey { get { return this[Key.DownArrow]; } }
+        public KeyControl aKey { get { return this[Key.A]; } }
+        public KeyControl dKey { get { return this[Key.D]; } }
+        public KeyControl fKey { get { return this[Key.F]; } }
+        public KeyControl iKey { get { return this[Key.I]; } }
+        public KeyControl jKey { get { return this[Key.J]; } }
+        public KeyControl kKey { get { return this[Key.K]; } }
+        public KeyControl lKey { get { return this[Key.L]; } }
+        public KeyControl qKey { get { return this[Key.Q]; } }
+        public KeyControl rKey { get { return this[Key.R]; } }
+        public KeyControl sKey { get { return this[Key.S]; } }
         public KeyControl vKey { get { return this[Key.V]; } }
-        public KeyControl leftShiftKey = new KeyControl();
-        public KeyControl rightShiftKey = new KeyControl();
+        public KeyControl wKey { get { return this[Key.W]; } }
+        public KeyControl digit1Key { get { return this[Key.Digit1]; } }
+        public KeyControl digit2Key { get { return this[Key.Digit2]; } }
+        public KeyControl digit3Key { get { return this[Key.Digit3]; } }
+        public KeyControl digit4Key { get { return this[Key.Digit4]; } }
+        public KeyControl digit5Key { get { return this[Key.Digit5]; } }
+        public KeyControl digit6Key { get { return this[Key.Digit6]; } }
+        public KeyControl digit7Key { get { return this[Key.Digit7]; } }
+        public KeyControl digit8Key { get { return this[Key.Digit8]; } }
+        public KeyControl leftShiftKey { get { return this[Key.LeftShift]; } }
+        public KeyControl rightShiftKey { get { return this[Key.RightShift]; } }
+        public KeyControl backquoteKey { get { return this[Key.Backquote]; } }
+        public KeyControl leftBracketKey { get { return this[Key.LeftBracket]; } }
+        public KeyControl rightBracketKey { get { return this[Key.RightBracket]; } }
+        public KeyControl backslashKey { get { return this[Key.Backslash]; } }
+        public KeyControl f9Key { get { return this[Key.F9]; } }
     }
 
     public class Mouse
     {
         public static Mouse current;
         public ButtonControl leftButton = new ButtonControl(), rightButton = new ButtonControl();
-        public Vector2Control position = new Vector2Control(), scroll = new Vector2Control();
+        public Vector2Control position = new Vector2Control(), scroll = new Vector2Control(), delta = new Vector2Control();
     }
 
     public class Gamepad
     {
         public static Gamepad current;
         public ButtonControl rightStickButton = new ButtonControl();
+        public ButtonControl buttonSouth = new ButtonControl(), buttonWest = new ButtonControl(), rightTrigger = new ButtonControl();
+        public Vector2Control leftStick = new Vector2Control(), rightStick = new Vector2Control();
+        public DpadControl dpad = new DpadControl();
+    }
+    public class DpadControl
+    {
+        public ButtonControl up = new ButtonControl(), down = new ButtonControl(), left = new ButtonControl(), right = new ButtonControl();
     }
 }

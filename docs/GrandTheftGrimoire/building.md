@@ -38,7 +38,9 @@ Three decisions shape the system.
 
 While the tray is open the cursor is free, so mouse look stops and the Cast module of the character is
 switched off. Movement works as usual and the keys `I`, `J`, `K`, `L` still turn the view, which is
-how the player looks around without leaving build mode.
+how the player looks around without leaving build mode. The crosshair is hidden while the cursor is
+free, and the HUD hides its health and SP bars and its quick slots to leave the bottom of the screen
+to the tray. They come back when build mode closes.
 
 ### Scene setup
 
@@ -53,8 +55,10 @@ how the player looks around without leaving build mode.
    references that shader.
 4. Optional but needed for a player build: create a Panel Settings asset (Create, UI Toolkit, Panel
    Settings Asset) and assign it. Without one, a runtime copy is created, which works in the editor.
-5. `ManagedCameraRig` and `ManagedCharacter` are found automatically. A scene without the rig works
-   too, the component then sets the cursor itself.
+5. `ManagedCharacter` is found automatically. The component frees and restores the cursor itself and
+   holds a `ManagedCursorBlock` while the tray is open, so a `ManagedCameraRig` in the scene does not
+   take the cursor back on a click. It needs no reference to the rig, and a scene without the rig works
+   too.
 6. Press Play, press `B`.
 
 Unity creates `.meta` files for the new scripts on first import. Commit them.
@@ -254,8 +258,15 @@ name and count or cost, a status line and a hint line.
 - While the pointer is over the tray there is no aim, so no ghost shows behind the tray and a click
   on the tray never places.
 - A drop is re-aimed at the release position first, because the aim of the last frame can lag by one frame.
-- Opening build mode releases the cursor through `ManagedCameraRig` and remembers whether it was locked.
-  Closing restores that, so a cursor the player had unlocked with Esc stays unlocked.
+- Opening build mode frees the cursor, holds a `ManagedCursorBlock` and remembers whether the cursor
+  was locked. Closing releases the block and restores the lock, so a cursor the player had unlocked
+  with Esc stays unlocked. The block is the same claim the cheat panel, the shop panel and the HUD
+  use, and it keeps the camera rig from capturing the cursor on a click while the tray is open. The
+  rig has no build mode member. It reads the block and hides the crosshair while one is held.
+- Closing locks the cursor again without asking whether another panel holds a block. A panel opened
+  while the tray was open keeps the rig from recapturing, but the cursor is locked until a click.
+- `ManagedHudFeed` looks for this component and copies `BuildModeActive` into the HUD state, which
+  hides the HUD's bottom group. This component knows nothing about the HUD.
 - Opening switches the character's Cast flag off, and closing switches it back on only if this
   component switched it off. The mouse cannot fire with a free cursor, but `F` and the gamepad could.
 - `OnDisable` leaves build mode, so a disabled component never leaves the cursor or the Cast flag changed.
@@ -268,17 +279,19 @@ name and count or cost, a status line and a hint line.
 
 - `.github/workflows/apply-replacements.yml` applies the replacements archive that delivered these
   files. See `managed.md`.
-- No CI job compiles this system yet. It was verified with a harness that lives outside the repository,
-  see Fixes and Problems.
+- `.github/workflows/managed-csharp-ci.yml` compiles this system with the rest of `Managed/` at C# 9
+  and runs the checks in `building-test/`, see `managed.md`. A red run on a change here means the
+  change would break the Unity compile, or it uses a Unity member the stand-ins do not have yet.
 
 ## Fixes and Problems
 
 ### Verification
 
-- Not compiled by Unity and not run in the Editor. The Building files and the edited
-  `ManagedCameraRig.cs` compile with .NET 8 at C# 9, the language level of Unity 2022.3, against hand
-  written stand-ins for the `UnityEngine`, `UnityEngine.InputSystem`, `UnityEngine.EventSystems` and
-  `UnityEngine.UIElements` types they use. 553 checks pass there.
+- Not compiled by Unity and not run in the Editor. The whole core `Managed/` stack, which includes the
+  Building files, the camera rig and the HUD, compiles with .NET 8 at C# 9, the language level of Unity
+  2022.3, against hand written stand-ins for the `UnityEngine`, `UnityEngine.InputSystem`,
+  `UnityEngine.EventSystems`, `UnityEngine.UIElements`, uGUI and TextMeshPro types they use. 601 checks
+  pass there. The harness is `building-test/` in the repository and runs in CI, see `managed.md`.
 - The checks cover the grid, the store (a fuzz of 6000 random adds and removes, 2050 pieces across
   three blocks), box winding, every validator status, the controller flows (click, drag, blueprint with
   and without cost, carry, stash, cancel, rotate, payment rollback), the aim, the probe, the collider
@@ -286,6 +299,8 @@ name and count or cost, a status line and a hint line.
   against a small physics world, and the camera rig hook.
 - Thirty-three deliberate breaks were applied one at a time, and 32 made a check fail. The one that did not
   (removing the tray test from the click commit condition) changes nothing, because no aim exists over the tray.
+  The cursor breaks in that list went with the rig hook. They were redone for the cursor block, see
+  `managed.md`, Fixes and Problems.
 - The stand-ins prove the code is consistent with them and with the signatures read from the Unity C#
   reference source, not that Unity behaves the same. The physics stand-in uses axis aligned bounds, and
   the UI stand-in models capture, bubbling and stop propagation as the tray relies on them.
@@ -315,6 +330,11 @@ name and count or cost, a status line and a hint line.
 
 ### `ManagedBuildMode.cs`
 
+- Reported: the project did not compile, four errors in this file. It called `CursorHeldByUi`,
+  `CaptureCursor()` and `ReleaseCursor()` on the camera rig, and a later whole file replacement of the
+  rig had removed them. The cursor now goes through `ManagedCursorBlock` like the other panels, and the
+  `_cameraRig` field is gone, so a scene that serialized it drops the value without an error. See
+  `managed.md`, Fixes and Problems, for the cause and the compile check that now runs on every push.
 - A drag from the tray needs a mouse. Gamepad and touch cannot aim in the world.
 - Pieces stand on the ground only. The aim ignores placed pieces, so a station cannot be put on top of another.
 - Placed pieces are not saved. The store can be read and filled, but nothing writes it to disk.

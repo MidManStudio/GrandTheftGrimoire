@@ -88,6 +88,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             Gamepad.current = null;
             UnityEngine.Camera.main = null;
             Stub.Reset();
+            MidManStudio.Gtg.Managed.Camera.ManagedCursorBlock.Reset();
             Material.LitProps = new HashSet<string> { "_BaseColor" };
             Shader.Known = new HashSet<string> { "Universal Render Pipeline/Lit", "Standard", "Sprites/Default" };
             Resources.HasLegacyRuntime = true;
@@ -110,6 +111,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             PanelTests();
             UiHostTests();
             ModeTests();
+            HudTests();
             Console.WriteLine(_checks + " checks, " + _failures + " failed");
             return _failures == 0 ? 0 : 1;
         }
@@ -147,6 +149,14 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             MethodInfo m = o.GetType().GetMethod(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
             if (m == null) throw new Exception("no method " + name);
             try { return m.Invoke(o, args); }
+            catch (TargetInvocationException e) { throw e.InnerException; }
+        }
+
+        public static object CallStatic(Type type, string name, params object[] args)
+        {
+            MethodInfo m = type.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+            if (m == null) throw new Exception("no static method " + name);
+            try { return m.Invoke(null, args); }
             catch (TargetInvocationException e) { throw e.InnerException; }
         }
 

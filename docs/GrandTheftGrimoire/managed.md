@@ -159,6 +159,10 @@ To give a town a Crown Heat meter, add `ManagedCrownRegion` to an empty object a
 town's center and size its box to cover the town. Guards inside the box enforce the law
 there. The rules, the numbers and the debugger line are in `crown-heat.md`.
 
+To place stations, add `ManagedBuildMode` to any GameObject and press B in Play mode.
+The setup, controls and layer advice are in `building.md`. While the tray is open the HUD hides
+the health and SP bars and the quick slots, and shows them again when it closes.
+
 ### Parity with the ECS stack
 
 | System | ECS | Managed |
@@ -179,6 +183,7 @@ there. The rules, the numbers and the debugger line are in `crown-heat.md`.
 | Cheat code manager | backlog | done, Editor and development builds only, `ManagedCheatManager` |
 | Shops, item bag, flags | backlog | engine and test panel done, no shop window yet, `ManagedShop` |
 | HUD: missions, crown heat, coins, bars, compass, quick slots, item wheel | backlog | frame done with placeholders, `ManagedHud`; nothing yet fills the missions, the heat or the wheel |
+| Station placement, tray UI, instanced pieces | backlog | done, see `building.md` |
 | Chemistry | impact entity, hazard entity, presentation system | static event, hazard list, one draw call |
 | Ice recipe and Freeze hazard | backlog | done |
 | Instanced and combined mesh drawing | backlog, ECS draws through its own presentation | done |
@@ -211,7 +216,8 @@ the arrows pointing one way, and put a new link in this table when it is added.
 | `Camera` | `CharacterController`, `Economy`, `Magic` |
 | `Shop` | `Economy`, `Items`, `Flags`, and `Camera` in the test panel only |
 | `Cheats` | `Camera`, `CharacterController`, `Chemistry`, `Economy`, `Health`, `Magic`, `NPC` |
-| `Hud` | `Camera` (cursor block), `Items` (quick slots and bag); `CharacterController`, `Economy`, `Health` and `Magic` in `ManagedHudFeed.cs` only |
+| `Building` | `Camera` (cursor block), `CharacterController` |
+| `Hud` | `Camera` (cursor block), `Items` (quick slots and bag); `Building`, `CharacterController`, `Economy`, `Health` and `Magic` in `ManagedHudFeed.cs` only |
 
 The shop reaches all four of its neighbours through small interfaces:
 `IManagedItemCatalog`, `IManagedItemHolder`, `IManagedFlagSource` and
@@ -221,8 +227,8 @@ event queue, dependency injection) is not used yet. These interfaces and the pla
 events are the places it would attach to.
 
 The HUD reads the game through one file. `ManagedHudFeed.cs` is the only file of `Hud/`
-that touches the character, health, the caster or the wallet, and it copies what it finds
-into `ManagedHudState`, which the widgets read. The math, the state, the layout and the
+that touches the character, health, the caster, the wallet or build mode, and it copies
+what it finds into `ManagedHudState`, which the widgets read. The math, the state, the layout and the
 wheel and quick slot models have no scene dependency. Dragging uses `ManagedItemDrag`, a
 static carrier in `Items/`, so a slot and a future bag window never reference each other.
 
@@ -698,7 +704,8 @@ and draws the debug overlay with the module toggles and the selected spell.
 - The overlay drops the ECS world, physics and command buffer lines, because there
   is no world.
 - The crosshair is a small white cross at the screen center. It marks the point that
-  the caster aims at, so it must stay at the center.
+  the caster aims at, so it must stay at the center. It is hidden while any panel holds a
+  cursor block, because a free cursor does not aim at the center.
 - The spell hint in the overlay lists keys 1, 2 and 3 and the state of the selected
   vessel, such as `orb 62 percent` or `bottles 4 of 5`.
 - A purse line under the spell line shows gold, silver and crystals by size, and names
@@ -706,7 +713,7 @@ and draws the debug overlay with the module toggles and the selected spell.
 - `CursorCaptureBlocked` is a read-only static property that returns
   `ManagedCursorBlock.Active`. While any panel holds a block, a click does not capture
   the cursor, so a click on a panel button does not also lock the mouse. The cheat
-  panel, the shop panel and the HUD hold blocks. The rig knows nothing about them. The
+  panel, the shop panel, the HUD and build mode hold blocks. The rig knows nothing about them. The
   count is cleared at `SubsystemRegistration`, because static state survives a play
   session when domain reload is off.
 
@@ -728,8 +735,9 @@ camera rig does not capture the cursor then.
   does not take a count off a claim made after the reset.
 - The reset runs at `SubsystemRegistration`, because static state survives a play session
   when domain reload is off.
-- The holders today are the cheat panel, the shop panel, the HUD wheel and the HUD while the
-  pointer is over a clickable piece. The rig reads `Active` and knows no holder.
+- The holders today are the cheat panel, the shop panel, the HUD wheel, the HUD while the
+  pointer is over a clickable piece, and build mode while the tray is open. The rig reads
+  `Active` and knows no holder.
 
 ### `IManagedCheatHost.cs`
 
@@ -1160,9 +1168,9 @@ crown sections, compass offset and fade, and the wheel hit test.
 
 ### `ManagedHudState.cs`
 
-**What it does:** The numbers and text the widgets draw: health, the SP bar, coins, heat, yaw
-and the mission text. The feed and the callers write it. The widgets read it. It has no Unity
-types.
+**What it does:** The numbers and text the widgets draw: health, the SP bar, coins, heat, yaw,
+the mission text and whether the bottom group is hidden. The feed and the callers write it. The
+widgets read it. It has no Unity types.
 
 **Decisions:**
 - Every setter cleans its input. Health with a NaN or a maximum of 0 or less zeroes the bar and
@@ -1173,6 +1181,8 @@ types.
 - The missions are a title and at most four lines. A null line is an empty line, a null list
   clears the lines and a null title is empty. `MissionLineAt` of an index out of range is
   empty.
+- `BottomHidden` is false until the feed or a caller sets it with `SetBottomHidden`. It is true
+  while another screen, such as the build tray, needs the bottom of the display.
 
 ### `ManagedHudLayout.cs`
 
@@ -1296,11 +1306,16 @@ it, and it can be dragged, and dropped on.
 ### `ManagedHudFeed.cs`
 
 **What it does:** Copies the game into `ManagedHudState` each frame: the character's yaw, the
-health, the selected vessel's charge and the wallet. It finds the player and their health,
-caster and bag.
+health, the selected vessel's charge, the wallet and whether build mode is open. It finds the
+player and their health, caster and bag, and the build mode component.
 
 **Decisions:**
-- It is the only HUD file that reads the character, health, the caster or the wallet.
+- It is the only HUD file that reads the character, health, the caster, the wallet or build mode.
+- Build mode is optional. The feed looks for a `ManagedBuildMode` in the scene every
+  `BuildSearchSeconds` (2 seconds) while it has none, which is slower than the player search
+  because the search walks the scene. While one is found and `BuildModeActive` is true the state
+  says the bottom group is hidden. A destroyed build mode no longer hides anything, and a scene
+  without one never hides the group.
 - It searches again every half second while anything is missing, and not every frame, so a scene
   with no player costs almost nothing. A lost player clears everything it held.
 - With no health it zeroes the health bar. With no caster it shows no vessel and no coins.
@@ -1339,6 +1354,15 @@ draws from `ManagedHudState`, the wheel model and the quick slots.
   a click on a slot or on the wheel button does not also make the camera capture the cursor.
 - Only the five slots, the wheel button and the wheel's backdrop take clicks.
 - The quick slot keys are 4 to 8, because 1, 2 and 3 pick spells. The wheel key is Q.
+- The two bars and the five quick slots sit under one object, `Bottom Group`, directly under the
+  canvas root, so their anchors read as the canvas's. While `ManagedHudState.BottomHidden` is
+  true the group is switched off, which hides the bars and the slots and stops their clicks.
+  The missions, the compass, the crowns and coins, the wheel button and the wheel stay on. It
+  is applied in `LateUpdate` right after the refresh, and only when the value changed.
+- While the group is hidden the quick slot keys do nothing. `UseQuickSlot` called from code
+  still works, because only the keys are gated. A drag that started on a quick slot is dropped
+  when the group hides, because the slot cannot receive the end of the drag once it is
+  inactive. A drag from anywhere else, such as a future bag window, is left alone.
 - `SetHeat`, `SetMissions`, `Wheel`, `QuickSlots`, `Bag` and `QuickSlotUsed` are the public
   surface. Nothing else in the game feeds the missions, the heat or the wheel yet.
 
@@ -1594,6 +1618,32 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   once on the real library. The spell caster itself is replaced by a stub that has only
   the `Impact` event. The spell definition is compiled too, so the flight, payload,
   modifier and vessel type files that it depends on are part of the project.
+- `.github/workflows/managed-csharp-ci.yml` - the compile gate for the rest of `Managed/`.
+  The project has no assembly definitions, so one compile error in any Managed file stops
+  every system in Unity, and nothing else in CI catches it. The `managed-compile` job builds
+  `building-test/BuildingTest.csproj` and runs it. The project compiles every file under
+  `Managed/` except `NPC/`, `Crown/` and `Chemistry/` (the first two need the NPC native
+  bindings and have their own job above, the third needs the Alembic package), plus
+  `Data/ItemDatabase.cs`, at C# 9 with .NET 8, against hand written stand-ins for
+  `UnityEngine`, uGUI, TextMeshPro and the Input System in `building-test/`. Then it runs the
+  checks in that folder: 601 at the time of writing, covering building, the camera rig's cursor
+  hook, the cursor block, the HUD and the bottom group. It runs on a push or pull request that
+  touches `Managed/`, `Data/`, `building-test/` or the workflow, and by hand. The folder is
+  named for the first system it covered and now covers the whole core stack.
+  - It needs no network. `building-test/nuget.config` clears every package source and the
+    project has no package references.
+  - A red compile step means a Managed file would break the Unity compile, or it uses a Unity
+    member the stand-ins do not have yet. Read the first error. In the second case add the
+    member to a stand-in file in `building-test/` and keep it as close as possible to the
+    signature in the Unity reference source.
+  - It proves the code compiles at C# 9 against the stand-ins and that the checks pass. It does
+    not prove that Unity behaves the same, and the real TextMeshPro, uGUI and Input System
+    packages are not part of it.
+  - The check files are `Tests*.cs`. The stand-ins are `UnityStubs.cs`, `UnityMoreStubs.cs`,
+    `UguiStubs.cs`, `UiStubs.cs` and `PackageStubs.cs`. `RigStubs.cs` is a comment only and the
+    project skips it. It stays because the replacements Action replaces files and cannot delete one.
+  - `Managed/Crown/` and `Managed/NPC/` are checked by `managed-npc` only. When this was written the path
+    filter of `npc-rust-ci.yml` did not list `Managed/Crown/`, so a change there alone did not start it.
 
 ## Fixes and Problems
 
@@ -1894,6 +1944,45 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
   reset clears it), `ManagedCheatManager.cs` and `ManagedShopDevPanel.cs` (each holds a block),
   `ManagedSpellCaster.cs` (`HasSelectedVessel` and `SelectedVesselFraction`),
   `ManagedShopSamples.cs` (the items moved to `ManagedItemSamples.cs`), `managed.md` and `data.md`.
+
+### Build mode and the cursor block, the HUD bottom group, the Managed compile check (`Camera/`, `Building/`, `Hud/`, `building-test/`)
+
+- Reported: the project did not compile. `ManagedBuildMode.cs` used `CursorHeldByUi`,
+  `CaptureCursor()` and `ReleaseCursor()` on `ManagedCameraRig`, which no longer had them (four
+  CS1061 errors). The project has no assembly definitions, so that one file stopped every Managed
+  system in Unity.
+- Cause: drops are whole file replacements. Commit `6195f58` (the Building drop) added the three
+  members to the rig, and the Building paragraph and the parity row to this file. Commit `381c9b0`
+  (the HUD and cursor block drop) replaced `ManagedCameraRig.cs` and `managed.md` from copies that
+  predate the Building drop and removed all of it. The replacement of the rig also removed the
+  crosshair hide. Nothing compiled the Managed code in CI, so the break stayed until Unity opened.
+- Now: build mode holds a `ManagedCursorBlock` like the cheat panel, the shop panel and the HUD, and
+  frees and restores the cursor itself. The camera rig has no build mode hook, and it hides the
+  crosshair while any block is held. `ManagedBuildMode` lost its `_cameraRig` field, so a scene that
+  serialized it drops the value without an error. The Building paragraph and the parity row are back
+  in this file. The HUD hides its bottom group while build mode is open, see `ManagedHud.cs`.
+  `.github/workflows/managed-csharp-ci.yml` compiles `Managed/` on every push that touches it, see
+  CI and Workflows.
+- Checked with the harness in `building-test/` (C# 9, .NET 8, the Unity stand-ins): 601 checks pass.
+  The harness reproduces the four original errors on the old files. The checks cover the cursor
+  block holders and their release order with the cheat panel and the HUD, the rig hook, the feed
+  reading build mode (open, closed, destroyed, absent, paced search), the bottom group's members,
+  hide and show, the key gate, a drag from a quick slot and a drag from elsewhere. 23 deliberate
+  breakages for this change were applied one at a time and 22 failed a check. The survivor removes
+  the early return in `ManagedHud.ApplyBottomGroup` that skips an unchanged value. It changes
+  nothing visible, because switching a group to the state it already has does nothing. The earlier
+  breakages of the Building drop were not repeated.
+- Not verified in the Editor: that the project compiles in Unity (the harness proves it against the
+  stand-ins, not the real packages), the tray and the HUD together on screen, and the cursor
+  handoff when build mode and another panel are open at once.
+- Known limits. Closing build mode locks the cursor again when it was locked at the opening, even if
+  another panel took the cursor meanwhile, for example a cheat panel opened while the tray was open.
+  The block of that panel keeps the rig from recapturing, but the cursor stays locked until a click
+  frees it. The HUD wheel avoids this by checking for other holders, and build mode does not yet.
+- The ECS stack is unchanged.
+- Edits to existing files: `ManagedCameraRig.cs` (the crosshair check and a comment),
+  `ManagedBuildMode.cs` (the block), `ManagedHudState.cs`, `ManagedHudFeed.cs` and `ManagedHud.cs`
+  (the bottom group), `managed.md` and `building.md`.
 
 ### `ManagedChemicalHazardField.cs`
 
