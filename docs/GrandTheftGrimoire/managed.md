@@ -10,7 +10,8 @@ GTG keeps two implementations of the same gameplay systems side by side.
   wrapper and the new location changed.
 - `Assets/MidManStudio/Gtg/Managed/` holds a MonoBehaviour version with no ECS,
   Burst or Unity Physics dependency in its own code. It needs only `UnityEngine`,
-  the Input System package and, for chemistry, `com.midmanstudio.alembic`.
+  the Input System package and, for chemistry, `com.midmanstudio.alembic`. The studio
+  packages come in as pinned git URLs, see `GTG_REPO_CONVENTIONS.md` section 6.
 
 Why two: the ECS stack does not run on the current development machine, see the
 first entry in Fixes and Problems and `generalprobs.md`. Gameplay is built on the
@@ -1027,8 +1028,8 @@ in quick slot 0 and the sword in quick slot 1.
 - A shop asks this to learn whether it is open and never learns who set the flag.
 - `ManagedWorldFlags` is the plain answer today. The Questly package of `unity-chem-sim` has
   `QuestRuntime.GetQuestState(questId)` and a `QuestState.COMPLETED` value, so an adapter
-  can later answer `IsSet(id)` with "that quest is complete". Questly is not in this
-  project's `Packages/manifest.json`, and nothing here depends on it.
+  can later answer `IsSet(id)` with "that quest is complete". Questly is in this
+  project's `Packages/manifest.json` since 2026-10-16, and nothing here depends on it yet.
 
 ### `ManagedWorldFlags.cs`
 
@@ -2190,6 +2191,39 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   `ManagedHudFeed.cs`, `ManagedHud.cs`, `BuildingTest.csproj`, `Tests.cs` (the new checks and the
   registries in `Reset`), `ManagedNpcTest.csproj` (one include line), `managed-csharp-ci.yml`,
   `managed.md` and `crown-heat.md`.
+
+### Unity packages as git URLs (`Packages/manifest.json`, `Packages/packages-lock.json`)
+
+- Asked for: the studio packages of `unity-chem-sim` to be usable in GTG. Su asked to vendor
+  them, then chose git URLs in the manifest over copying them into the repo. The native
+  libraries of all of them come to about 250 MB, 175 MB of it for iOS and WebGL, and the repo
+  is worked on from GitHub only.
+- Now: the manifest lists `com.midmanstudio.mdix` (from `Mid-D-Man/DixScript-Rust`) and
+  `alembic`, `dragndrop`, `gensettings`, `hudman`, `inventorizz`, `nuclear` and `questly` (from
+  `MidManStudio/unity-chem-sim`). Every URL is pinned with `#<commit>`: `unity-chem-sim`
+  `0c5ce9e`, `DixScript-Rust` `1b692ec`. The old entry for Alembic was a `file:../../unity-chem-sim/...`
+  path that only resolved on the old laptop layout, so on any other machine Alembic did not
+  resolve. The lock file loses that stale entry and Unity writes the rest when it next opens the
+  project.
+- Found on the way: the asmdef of Alembic references `MidManStudio.Mdix.Runtime`, but its
+  `package.json` does not list mdix and the manifest has had no mdix entry since commit `6f6ef97`.
+  The entry is back, so that reference resolves.
+- Risk, not verified in Unity: Questly, Inventorizz, HudMan and GenSettings declare mdix and
+  dragndrop in their `package.json` as git URLs, and the Unity manual says Package Manager does
+  not support git dependencies between packages. The manifest lists every package itself, which
+  is the documented way round it, but how Unity treats the URL strings in those four files is
+  not tested. If the first open of the project in Unity reports an unresolved dependency, the
+  fix is to change those four `dependencies` values to plain versions (`"1.0.0"`) in
+  `unity-chem-sim`, or to take the new manifest lines out again. A package that fails to
+  resolve blocks every system.
+- Nothing in `Managed/` uses these packages yet. The Managed CI does not touch the manifest, so
+  its result does not say anything about package resolution.
+- To move a package on, change the commit after `#` in the manifest. The Package Manager needs
+  git installed on the machine that opens the project.
+- Earlier entries above (Vessels, Currency and cheats, Shop) say the packages are not in the
+  manifest. That was true when they were written and is no longer.
+- Edits to existing files: `Packages/manifest.json`, `Packages/packages-lock.json`, `managed.md`
+  and `GTG_REPO_CONVENTIONS.md` (new section 6).
 
 ### `ManagedChemicalHazardField.cs`
 

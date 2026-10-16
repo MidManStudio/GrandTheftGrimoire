@@ -241,3 +241,33 @@ simulation loop — movement and combat — need to be ECS-native. Something
 like Heat or Local Favor affecting a chemistry check doesn't need a
 rewrite; it just needs to be readable from wherever the ECS side queries
 it.
+
+## 6. Unity packages
+
+The reusable `com.midmanstudio.*` packages enter the project as git URLs in
+`Packages/manifest.json`. They are not copied into the repo and they are not `file:` paths.
+A `file:` path only resolves on a machine that has the sibling checkout, and this repo is
+also worked on from GitHub alone. Copying them in would add about 250 MB of native libraries,
+most of it iOS and WebGL.
+
+| Package | Repository and path |
+|---|---|
+| `com.midmanstudio.mdix` | `Mid-D-Man/DixScript-Rust`, `com.midmanstudio.mdix` |
+| `com.midmanstudio.alembic`, `.dragndrop`, `.gensettings`, `.hudman`, `.inventorizz`, `.nuclear`, `.questly` | `MidManStudio/unity-chem-sim`, `packages/<name>` |
+
+Rules:
+
+- Every URL ends in `#<commit>`. The native libraries of these packages are rebuilt and
+  committed to their repositories by workflows, so a URL without a commit would move under
+  the project. To update a package, change the commit in the manifest. Unity rewrites
+  `Packages/packages-lock.json` the next time it opens the project.
+- Every package is listed in the manifest, including the ones other packages depend on. Unity
+  does not support git dependencies between packages, so a package pulled in only through
+  another one's `package.json` does not resolve. mdix is needed by Alembic, Questly,
+  Inventorizz, HudMan and GenSettings.
+- The packages keep their own asmdefs and are auto referenced, so the no asmdef GTG code
+  calls them without a reference. The reverse does not work: a package cannot see GTG types,
+  so a package talks to the game through an interface the game implements.
+- Game side adapters live in the folder of the system they serve, in the `MidManStudio.Gtg`
+  namespaces, never inside a package.
+- The machine that opens the project needs git installed.
