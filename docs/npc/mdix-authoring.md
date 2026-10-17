@@ -21,12 +21,13 @@ Update (2026-10-07): the file has now been run through the real engine, the `lib
 | `NpcRole` | MERCHANT 0, CIVILIAN 1, GUARD 2, ENEMY 3, BOSS 4 | Same numbers as `NpcObservationAbi.role` |
 | `DecisionBackend` | STATE_MACHINE 0, UTILITY 1, HYBRID_ML 2 | Same numbers as `NpcObservationAbi.backend`. HYBRID_ML currently falls back to the deterministic path |
 | `LearningMode` | DISABLED 0, FIXED_WEIGHTS 1, ONLINE_UPDATES 2 | Authoring metadata only, not an ABI field and not an implemented ML feature |
+| `AttackStyle` | MELEE 0, RANGED 1, HYBRID 2 | Same numbers as `NpcObservationAbi.attack_style` (ABI v6) |
 
 Renumbering `NpcRole` or `DecisionBackend` requires an ABI version bump and matching changes in `npc-ffi` and the C# types.
 
 ## Design of `archetypes.mdix`
 
-- One `createArchetype(_id, _role, _backend, _can_move, _learning, _dialogue_ref = "")` QuickFunc. The empty default means "no fixed dialogue"; a loader must treat `""` as none.
+- One `createArchetype(_id, _role, _backend, _can_move, _learning, _attack_style, _dialogue_ref = "")` QuickFunc. `_attack_style` is how a combatant fights (melee, ranged or hybrid). Civilians carry `MELEE`, and so does a shopkeeper unless it fights back in another style; only a merchant with the retaliatory disposition fights at all, and only after it was attacked. The disposition itself is not an archetype field yet: it is a setting on the brain. The empty default means "no fixed dialogue"; a loader must treat `""` as none.
 - The function derives `uses_ml` (backend is HYBRID_ML) and `may_update_weights` (learning is ONLINE_UPDATES). They are computed from the stated fields, not new decisions.
 - `abi_version = 2` lets a loader refuse a file authored for a different ABI.
 - `@CONFIG features` is `"quickfuncs,enums,data"`. Adding a section without its keyword is a hard compile error.
@@ -43,17 +44,19 @@ To add an archetype, add one `createArchetype(...)` line to the group array. Add
 
 The native structs in `NPCNativeTypes.cs` stay raw `uint`/`int` on purpose: they mirror the C ABI byte for byte, and the decision system converts explicitly at that boundary. Their sizes and offsets were read against `npc-ffi` (32 and 16 bytes; offsets 0/8/12/16/20/24/28 and 0/8/12) and match. `NPCNativeLib` also checks the sizes at runtime.
 
-`scripts/check_npc_enum_sync.py` runs first in `npc-rust-ci.yml`. It compares names and values of the four enums across MDIX, C# and Rust (`parse()`, `action_code()` and the `LearningMode` declaration order in `npc-ml`) and fails on any difference, an unparsable source, or a missing file. It is CI tooling, not part of the game or the ML pipeline. Names are compared case-insensitively with underscores removed (`STATE_MACHINE` equals `StateMachine`). It does not check `AIType` or anything outside these four enums.
+`scripts/check_npc_enum_sync.py` runs first in `npc-rust-ci.yml`. It compares names and values of the enums (eight since version 6, which added `AttackStyle`) across MDIX, C# and Rust (`parse()`, `action_code()` and the `LearningMode` declaration order in `npc-ml`) and fails on any difference, an unparsable source, or a missing file. It is CI tooling, not part of the game or the ML pipeline. Names are compared case-insensitively with underscores removed (`STATE_MACHINE` equals `StateMachine`). It does not check `AIType` or anything outside these enums.
 
 ## Changes in this pass
 
 - `town_guard` now uses `LearningMode.DISABLED` (was `FIXED_WEIGHTS`). Only `HYBRID_ML` has a model path, and the architecture plan gives ordinary combatants no ML. `archetypes.mdix` declares `version -> "1.0.0"`, the only version the engine accepts. It first said 1.1.1, which fails to load.
 - C# uses the enums above.
+- 2026-10-17 (ABI v6): `AttackStyle` was added to the enums, to `createArchetype` (a required parameter before `_dialogue_ref`, so the three archetypes each pass `AttackStyle.MELEE`) and to `NpcArchetypeDefinition`. This edit has **not** been run through the real engine, because DixScript-Rust needs Rust 1.80 or newer and is not run in the authoring environment. It was read against the existing file and its enum sync check passes. Run `mdix validate` on it before relying on it.
 
 ## Still open
 
 - **Two different `Rarity` enums.** `game_enemies.mdix` has four values and `inventory_items.mdix` has five (with `EPIC`). Auto-numbering makes `LEGENDARY` 3 in one and 4 in the other. Harmless while nothing compares the raw integers. Needs a decision on the intended set before either file changes. The C# side keeps them apart (`EnemyRarity` and `ItemRarity` in `Assets/MidManStudio/Gtg/Data/`), so baked values stay right whichever way this is decided.
 - **Style drift in the two older files.** They lack the signature comment and use unprefixed QuickFunc parameters. `@CONFIG` has no `features` key; the source's default is `"advanced"`, so this should compile, but it was not run.
+- **`abi_version<int> = 2` in the file** has not followed the ABI since version 3 and was not touched in version 6. The archetype layout does not carry observation fields, so it may be meant as the archetype schema version. Decide what it should mean before a loader refuses on it.
 - **Candidate enums, not added.** A `Race` or faction enum fits the design docs, but the full race list is still open there. `dialogue_ref` stays a string because dialogue ids are open-ended content, not a fixed set.
 - **`LearningMode` on `NPCIdentity` is stored but not read by any system.** It carries authoring intent until an ML path exists.
 - **How C# was checked.** The changed C# compiles with .NET 8 against hand-written stubs of the Unity types, and the native layer plus managed fallback also run against the real Rust library in CI (`docs/npc/unity-integration.md`). None of that is a Unity build; Burst, source generators and the real ECS API were not exercised.

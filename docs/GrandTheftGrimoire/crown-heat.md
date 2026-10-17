@@ -139,5 +139,6 @@ guard standing in a region with heat shows `crown wanted` (or hunted, outlaw) in
 - The workflow `npc-rust-ci.yml` lists the folders that start it. `Assets/MidManStudio/Gtg/Managed/Crown/**` is not
   in the list yet, so a change to the region alone does not start the `managed-npc` job. The workflow file is
   outside the replacements archive on purpose, so add the line by hand in both places (push and pull request).
+- A shopkeeper that fights back (observation version 6, `observation.md`) changes no heat number. The player's blows still count as assault, and a kill as murder, whether or not the shopkeeper was hitting back. A shopkeeper only fights after it was hit, so it never starts a fight, and self defense by the player is not modelled.
 - Every number above is a placeholder, and the three design choices (regional meter, heat only when a guard
   sees the crime, fade only while unseen) are my reading of the design notes and need the owner's word.

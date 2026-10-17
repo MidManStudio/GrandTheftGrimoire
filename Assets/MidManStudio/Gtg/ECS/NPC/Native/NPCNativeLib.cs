@@ -10,7 +10,7 @@ namespace MidManStudio.Gtg.NPC.Native
 #else
         private const string Library = "gtg_npc_ffi";
 #endif
-        internal const uint AbiVersion = 5;
+        internal const uint AbiVersion = 6;
         internal const int MaxBatch = 4096;
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint gtg_npc_abi_version();

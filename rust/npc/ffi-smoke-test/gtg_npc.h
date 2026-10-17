@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 /* Must equal ABI_VERSION in rust/npc/crates/npc-ffi/src/lib.rs. */
-#define GTG_NPC_ABI_VERSION 5u
+#define GTG_NPC_ABI_VERSION 6u
 #define GTG_NPC_MAX_BATCH 4096u
 /* The highest Crown Heat tier: 0 none, 1 wanted, 2 hunted, 3 outlaw. A larger value is rejected. */
 #define GTG_NPC_CROWN_HEAT_MAX 3u
@@ -31,6 +31,9 @@
 #define GTG_NPC_DISPOSITION_HOSTILE 0
 #define GTG_NPC_DISPOSITION_RETALIATORY 1
 #define GTG_NPC_DISPOSITION_PEACEFUL 2
+#define GTG_NPC_ATTACK_STYLE_MELEE 0
+#define GTG_NPC_ATTACK_STYLE_RANGED 1
+#define GTG_NPC_ATTACK_STYLE_HYBRID 2
 #define GTG_NPC_ORDER_NONE 0
 #define GTG_NPC_ORDER_FOLLOW 1
 #define GTG_NPC_ORDER_HOLD 2
@@ -47,24 +50,30 @@
 #define GTG_NPC_ACTION_REFUSE_ORDER 7
 #define GTG_NPC_ACTION_MISSION 8
 #define GTG_NPC_ACTION_BETRAY 9
+#define GTG_NPC_ACTION_SHOOT 10
+#define GTG_NPC_ACTION_KITE 11
 #define GTG_NPC_MISSION_SUCCESS 0
 #define GTG_NPC_MISSION_FAILED 1
 #define GTG_NPC_MISSION_CAUGHT 2
 #define GTG_NPC_MISSION_KILLED 3
 
 /* One NPC, 64 bytes. Booleans are 0 or 1. Every reserved field must be zero. A zero in every field
-   after `reserved` means: hostile, no order, not provoked, level 0, no betrayal opportunity, no Crown Heat. */
+   added after version 2 means: hostile, no order, not provoked, level 0, no betrayal opportunity, no Crown Heat,
+   melee, nothing to shoot, not in a ranged stance, unknown distance to the threat.
+   `threat_distance` is meters to the threat, finite, zero or less means unknown (offset 28 was a reserved word up
+   to version 5). `attack_style`, `ranged_ready` and `ranged_stance` sit at offsets 57, 58 and 59 (reserved bytes
+   up to version 5). `reserved_c` at offset 60 is still reserved. */
 typedef struct {
     uint64_t npc_id;
     uint32_t role, backend, threat_visible;
     float health_fraction;
-    uint32_t can_move, reserved;
+    uint32_t can_move;
+    float threat_distance;
     uint8_t disposition, order, provoked, crown_heat;
     uint16_t level, order_level;
     float trustworthiness, affinity, pay_satisfaction;
     uint32_t noise;
-    uint8_t betrayal_opportunity, reserved_a;
-    uint16_t reserved_b;
+    uint8_t betrayal_opportunity, attack_style, ranged_ready, ranged_stance;
     uint32_t reserved_c;
 } GtgNpcObservation;
 

@@ -29,6 +29,8 @@ namespace MidManStudio.Gtg.Managed.NPC
         [SerializeField] private LearningMode _learningMode = LearningMode.Disabled;
         [Tooltip("How a guard, enemy or boss reacts to a threat. Hostile attacks on sight, Retaliatory only after being attacked, Peaceful never fights and runs.")]
         [SerializeField] private NpcDisposition _disposition = NpcDisposition.Hostile;
+        [Tooltip("How the NPC fights. Melee closes in, Ranged shoots from a distance and backs away when the threat comes close, Hybrid shoots from afar and fights by hand up close or when it has nothing left to shoot. Ranged and Hybrid need a ManagedNpcShooter on the same object.")]
+        [SerializeField] private AttackStyle _attackStyle = AttackStyle.Melee;
         [Tooltip("The NPC's level. A companion refuses an order whose level is above this by more than the gap for that order type: raid 1, attack 3, follow and hold 5, deliver 6.")]
         [SerializeField] private int _level = 1;
         [Tooltip("Seconds after being hit by something with a source that the NPC counts as provoked.")]
@@ -67,6 +69,8 @@ namespace MidManStudio.Gtg.Managed.NPC
         private const float AttackerTargetKeyFactor = 0.25f;
 
         private ManagedHealth _health;
+        private ManagedNpcShooter _shooter;
+        private bool _warnedNoShooter;
         private float _lastSeenTime = float.NegativeInfinity;
         private bool _threatVisible;
         private ManagedNpcThreatSource _threat;
@@ -103,6 +107,12 @@ namespace MidManStudio.Gtg.Managed.NPC
         public bool CanMove { get { return _canMove; } }
         public LearningMode LearningMode { get { return _learningMode; } }
         public NpcDisposition Disposition { get { return _disposition; } set { _disposition = value; } }
+
+        /// <summary>How the NPC fights. Rust reads it with every decision.</summary>
+        public AttackStyle AttackStyle { get { return _attackStyle; } set { _attackStyle = value; } }
+
+        /// <summary>The ranged weapon on this object, or null when there is none.</summary>
+        public ManagedNpcShooter Shooter { get { return _shooter; } }
 
         /// <summary>The NPC's level. Negative values count as zero.</summary>
         public int Level { get { return _level; } set { _level = Mathf.Max(0, value); } }
@@ -193,6 +203,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         private void Awake()
         {
             _health = GetComponent<ManagedHealth>();
+            _shooter = GetComponent<ManagedNpcShooter>();
         }
 
         private void OnEnable()
@@ -387,7 +398,7 @@ namespace MidManStudio.Gtg.Managed.NPC
                 ThreatVisible = _threatVisible ? 1u : 0u,
                 HealthFraction = HealthFraction,
                 CanMove = _canMove ? 1u : 0u,
-                Reserved = 0,
+                ThreatDistance = ThreatDistanceMeters(),
                 Disposition = (byte)_disposition,
                 Order = (byte)_order,
                 Provoked = Provoked ? (byte)1 : (byte)0,
@@ -400,8 +411,52 @@ namespace MidManStudio.Gtg.Managed.NPC
                 Noise = _role == NpcRole.Companion ? NextNoise() : 0u,
                 BetrayalOpportunity = _role == NpcRole.Companion && _betrayalOpportunity ? (byte)1 : (byte)0,
                 // Only guards enforce the law, so only they are told the Crown Heat of the region they stand in.
-                CrownHeat = _role == NpcRole.Guard ? (byte)ManagedCrownRegion.TierAt(transform.position) : (byte)0
+                CrownHeat = _role == NpcRole.Guard ? (byte)ManagedCrownRegion.TierAt(transform.position) : (byte)0,
+                // A melee fighter sends zeros for the shooting fields, which Rust ignores for it.
+                AttackStyle = (byte)_attackStyle,
+                RangedReady = _attackStyle != AttackStyle.Melee && RangedReady() ? (byte)1 : (byte)0,
+                RangedStance = _attackStyle != AttackStyle.Melee && (_action == NpcAction.Shoot || _action == NpcAction.Kite) ? (byte)1 : (byte)0
             };
+        }
+
+        // Meters to where the threat was last seen, along the ground like the rings of the engagement. Zero means unknown,
+        // which is what Rust is told when no threat is in sight or remembered. A threat standing on the NPC counts as a
+        // centimeter away, so a known distance is never mistaken for an unknown one.
+        private float ThreatDistanceMeters()
+        {
+            if (_threat == null || !_threatVisible)
+            {
+                return 0f;
+            }
+
+            Vector3 here = transform.position;
+            float dx = _lastKnownThreatPosition.x - here.x;
+            float dz = _lastKnownThreatPosition.z - here.z;
+            return Mathf.Max(Mathf.Sqrt(dx * dx + dz * dz), 0.01f);
+        }
+
+        // Whether the NPC has anything to shoot. A style that shoots with no weapon on the object is a setup mistake, so
+        // it is told once and the NPC fights by hand where Rust allows it and backs off where it does not.
+        private bool RangedReady()
+        {
+            // Looked up again while it is missing, so a weapon added in code after Awake is still found.
+            if (_shooter == null)
+            {
+                _shooter = GetComponent<ManagedNpcShooter>();
+            }
+
+            if (_shooter == null)
+            {
+                if (!_warnedNoShooter)
+                {
+                    _warnedNoShooter = true;
+                    Debug.LogWarning("[GTG NPC] " + name + " has the attack style " + _attackStyle + " but no ManagedNpcShooter, so it has nothing to shoot. Add the component, or set the style to Melee.");
+                }
+
+                return false;
+            }
+
+            return _shooter.IsReady;
         }
 
         // A random number for the next decision. Each brain has its own sequence, seeded from its id, so a run is

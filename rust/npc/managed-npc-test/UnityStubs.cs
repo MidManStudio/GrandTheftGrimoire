@@ -21,6 +21,7 @@ namespace UnityEngine
         public static Vector3 zero { get { return new Vector3(0, 0, 0); } }
         public static Vector3 up { get { return new Vector3(0, 1, 0); } }
         public static Vector3 right { get { return new Vector3(1, 0, 0); } }
+        public static Vector3 one { get { return new Vector3(1, 1, 1); } }
         public static Vector3 operator +(Vector3 a, Vector3 b) { return new Vector3(a.x + b.x, a.y + b.y, a.z + b.z); }
         public static Vector3 operator -(Vector3 a, Vector3 b) { return new Vector3(a.x - b.x, a.y - b.y, a.z - b.z); }
         public static Vector3 operator -(Vector3 a) { return new Vector3(-a.x, -a.y, -a.z); }
@@ -94,6 +95,7 @@ namespace UnityEngine
         public static float Acos(float f) { return (float)Math.Acos(f); }
         public static float Atan2(float y, float x) { return (float)Math.Atan2(y, x); }
         public static float Abs(float f) { return f < 0f ? -f : f; }
+        public static float Tan(float f) { return (float)Math.Tan(f); }
         public static int RoundToInt(float f) { return (int)Math.Round(f, MidpointRounding.ToEven); }
         public static float Sqrt(float f) { return (float)Math.Sqrt(f); }
         public static float DeltaAngle(float a, float b)
@@ -173,7 +175,7 @@ namespace UnityEngine
         public Vector3 center, extents = new Vector3(0.5f, 0.5f, 0.5f);
         public Bounds bounds { get { return new Bounds { center = transform.position + center, extents = extents }; } }
     }
-    public struct RaycastHit { public Collider collider; }
+    public struct RaycastHit { public Collider collider; public float distance; public Vector3 point; public Vector3 normal; }
     public static class Physics
     {
         public delegate bool Handler(Vector3 origin, Vector3 dir, out RaycastHit hit, float maxDistance, int mask);
@@ -184,6 +186,46 @@ namespace UnityEngine
             RayCount++;
             if (OnRaycast == null) { hit = default(RaycastHit); return false; }
             return OnRaycast(origin, dir, out hit, maxDistance, mask);
+        }
+        public static Vector3 gravity = new Vector3(0, -9.81f, 0);
+        public static int SphereCastCount;
+        // A sphere sweep against the axis aligned boxes of the enabled colliders. The box is grown by the radius, which is
+        // exact for a face hit and a little generous at the corners. A collider that already holds the start point is
+        // skipped, as the real engine does. Test only.
+        public static bool SphereCast(Vector3 origin, float radius, Vector3 dir, out RaycastHit hit, float maxDistance, int mask, QueryTriggerInteraction q)
+        {
+            SphereCastCount++;
+            hit = default(RaycastHit);
+            float best = maxDistance;
+            bool found = false;
+            foreach (Component c in Object.All)
+            {
+                Collider col = c as Collider;
+                if (col == null || !col.enabled) continue;
+                Bounds b = col.bounds;
+                float[] o = { origin.x, origin.y, origin.z };
+                float[] d = { dir.x, dir.y, dir.z };
+                float[] lo = { b.center.x - b.extents.x - radius, b.center.y - b.extents.y - radius, b.center.z - b.extents.z - radius };
+                float[] hi = { b.center.x + b.extents.x + radius, b.center.y + b.extents.y + radius, b.center.z + b.extents.z + radius };
+                float tMin = 0f, tMax = best;
+                bool inside = true, miss = false;
+                int axisIn = 0; float signIn = 0f;
+                for (int a = 0; a < 3 && !miss; a++)
+                {
+                    if (o[a] < lo[a] || o[a] > hi[a]) inside = false;
+                    if (Math.Abs(d[a]) < 1e-9f) { if (o[a] < lo[a] || o[a] > hi[a]) miss = true; continue; }
+                    float t1 = (lo[a] - o[a]) / d[a], t2 = (hi[a] - o[a]) / d[a];
+                    float near = Math.Min(t1, t2), far = Math.Max(t1, t2);
+                    if (near > tMin) { tMin = near; axisIn = a; signIn = d[a] > 0f ? -1f : 1f; }
+                    if (far < tMax) tMax = far;
+                    if (tMin > tMax) miss = true;
+                }
+                if (miss || inside) continue;
+                best = tMin; found = true;
+                Vector3 n = new Vector3(axisIn == 0 ? signIn : 0f, axisIn == 1 ? signIn : 0f, axisIn == 2 ? signIn : 0f);
+                hit = new RaycastHit { collider = col, distance = tMin, point = origin + dir * tMin, normal = n };
+            }
+            return found;
         }
         public static int OverlapSphereNonAlloc(Vector3 center, float radius, Collider[] results, int mask, QueryTriggerInteraction q)
         {
@@ -202,6 +244,7 @@ namespace UnityEngine
     public class GameObject : Object
     {
         public Transform transform;
+        public int layer;
         public List<Component> Components = new List<Component>();
         public GameObject(string n) { name = n; transform = new Transform { gameObject = this }; }
         public T GetComponent<T>() where T : class { foreach (Component c in Components) { T t = c as T; if (t != null) return t; } return null; }

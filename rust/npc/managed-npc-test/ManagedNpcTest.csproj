@@ -13,7 +13,7 @@
     <RootNamespace>MidManStudio.Gtg.Managed.NPC.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;Tests.cs;TestsCombat.cs;TestsCrown.cs;UnityStubs.cs;EditorStubs.cs;CasterStub.cs" />
+    <Compile Include="Program.cs;Tests.cs;TestsCombat.cs;TestsCrown.cs;TestsRanged.cs;UnityStubs.cs;EditorStubs.cs;CasterStub.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Health/*.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Crown/*.cs" />
     <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/*.cs" />

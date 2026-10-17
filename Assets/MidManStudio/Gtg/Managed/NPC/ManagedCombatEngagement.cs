@@ -11,9 +11,13 @@ namespace MidManStudio.Gtg.Managed.NPC
     /// <summary>
     /// Who is fighting one target and where each of them stands. Every NPC that is attacking the target
     /// holds a Member. A few members hold an attack token and take evenly spaced places on a ring just
-    /// inside melee range, the rest wait on a wider ring and circle until a token comes free. The actors
+    /// inside melee range, the rest wait on a wider ring and circle until a token comes free. Shooters, the NPCs
+    /// that fight from a distance, are a second class of member: they have their own token pool, with its own
+    /// limit and rotation, and their own rings, a ring at their stand-off distance for the holders and a wider one
+    /// for the waiters. A shooter never takes a melee token and a swordsman never takes a shooter's, so a crowd of
+    /// archers does not keep the swordsmen from the target. The actors
     /// read their place from here and walk to it. Nothing here moves an NPC or decides to fight, Rust
-    /// still chooses Attack, this only says where an attacker should be.
+    /// still chooses Attack or Shoot, this only says where an attacker should be.
     /// One engagement lives on each ManagedNpcThreatSource. It does its work in a pass every 0.2 s, run by
     /// whichever actor asks first, so there is no driver to add to the scene.
     /// </summary>
@@ -34,7 +38,8 @@ namespace MidManStudio.Gtg.Managed.NPC
             internal ManagedNpcActor Actor;
             internal ManagedNpcBrain Brain;
 
-            // Set by the actor at Join.
+            // Set by the actor at Join. A shooter's inner radius is its stand-off distance.
+            internal bool Ranged;
             internal float InnerRadius;
             internal float WaitRadius;
             internal float Spacing;
@@ -73,6 +78,7 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         internal int MemberCount { get { return _members.Count; } }
 
+        /// <summary>Melee members that hold a token. Shooters are counted by <see cref="ShooterTokenHolderCount"/>.</summary>
         internal int TokenHolderCount
         {
             get
@@ -80,7 +86,43 @@ namespace MidManStudio.Gtg.Managed.NPC
                 int holders = 0;
                 for (int i = 0; i < _members.Count; i++)
                 {
-                    if (_members[i].HasToken)
+                    if (!_members[i].Ranged && _members[i].HasToken)
+                    {
+                        holders++;
+                    }
+                }
+
+                return holders;
+            }
+        }
+
+        /// <summary>Members that are shooters, with or without a token.</summary>
+        internal int ShooterCount
+        {
+            get
+            {
+                int shooters = 0;
+                for (int i = 0; i < _members.Count; i++)
+                {
+                    if (_members[i].Ranged)
+                    {
+                        shooters++;
+                    }
+                }
+
+                return shooters;
+            }
+        }
+
+        /// <summary>Shooters that hold a token.</summary>
+        internal int ShooterTokenHolderCount
+        {
+            get
+            {
+                int holders = 0;
+                for (int i = 0; i < _members.Count; i++)
+                {
+                    if (_members[i].Ranged && _members[i].HasToken)
                     {
                         holders++;
                     }
@@ -91,10 +133,21 @@ namespace MidManStudio.Gtg.Managed.NPC
         }
 
         /// <summary>
-        /// Adds an attacker. It starts as a waiter and heads for the waiting ring, or stays put when it is already
+        /// Adds a melee attacker. It starts as a waiter and heads for the waiting ring, or stays put when it is already
         /// closer. The next pass, at most 0.2 s later, decides whether it gets a token.
         /// </summary>
         internal Member Join(ManagedNpcActor actor, ManagedNpcBrain brain, float now, float meleeRadius, float waitDistance, float spacing, float orbitSpeed)
+        {
+            return Join(actor, brain, now, meleeRadius, waitDistance, spacing, orbitSpeed, false);
+        }
+
+        /// <summary>
+        /// Adds an attacker of either class. A shooter passes its stand-off distance as the ring radius and takes its
+        /// place among the shooters, so its token and its ring are separate from the melee ones. Like a melee attacker
+        /// it starts as a waiter, and one that stands closer than its ring heads out to it, so a shooter that joins
+        /// at close range is already backing off before its first pass.
+        /// </summary>
+        internal Member Join(ManagedNpcActor actor, ManagedNpcBrain brain, float now, float ringRadius, float waitDistance, float spacing, float orbitSpeed, bool ranged)
         {
             // The first pass comes one interval after the first join, when the others that decided in the same tick
             // have joined too. So the attackers are weighed together, and the first to join gets no head start.
@@ -108,8 +161,9 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 Actor = actor,
                 Brain = brain,
-                InnerRadius = meleeRadius,
-                WaitRadius = meleeRadius + waitDistance,
+                Ranged = ranged,
+                InnerRadius = ringRadius,
+                WaitRadius = ringRadius + waitDistance,
                 Spacing = spacing,
                 OrbitSpeed = orbitSpeed,
                 WaitingSince = now
@@ -186,21 +240,42 @@ namespace MidManStudio.Gtg.Managed.NPC
 
             AssignTokens(now);
             ApplyBlocked(now);
-            AssignRing(true, now);
-            AssignRing(false, now);
+            AssignRing(true, false, now);
+            AssignRing(false, false, now);
+            AssignRing(true, true, now);
+            AssignRing(false, true, now);
         }
 
-        // Which members may strike. At most the target's limit, rotated so a waiter gets its turn.
+        // Which members may strike. Melee attackers and shooters are two pools, each with its own limit and rotation.
         private void AssignTokens(float now)
         {
-            int count = _members.Count;
-            int limit = _target.MaxMeleeAttackers;
+            AssignTokens(now, false, _target.MaxMeleeAttackers, _target.AttackerRotationSeconds);
+            AssignTokens(now, true, _target.MaxRangedAttackers, _target.RangedRotationSeconds);
+        }
+
+        // One pool: at most the limit, rotated so a waiter gets its turn.
+        private void AssignTokens(float now, bool ranged, int limit, float rotation)
+        {
+            int count = 0;
+            for (int i = 0; i < _members.Count; i++)
+            {
+                if (_members[i].Ranged == ranged)
+                {
+                    count++;
+                }
+            }
+
+            if (count == 0)
+            {
+                return;
+            }
+
             if (limit <= 0 || limit >= count)
             {
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < _members.Count; i++)
                 {
                     Member member = _members[i];
-                    if (!member.HasToken)
+                    if (member.Ranged == ranged && !member.HasToken)
                     {
                         member.HasToken = true;
                         member.TokenSince = now;
@@ -211,9 +286,9 @@ namespace MidManStudio.Gtg.Managed.NPC
             }
 
             int holders = 0;
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < _members.Count; i++)
             {
-                if (_members[i].HasToken)
+                if (_members[i].Ranged == ranged && _members[i].HasToken)
                 {
                     holders++;
                 }
@@ -223,10 +298,10 @@ namespace MidManStudio.Gtg.Managed.NPC
             while (holders > limit)
             {
                 Member farthest = null;
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < _members.Count; i++)
                 {
                     Member member = _members[i];
-                    if (member.HasToken && (farthest == null || member.Distance > farthest.Distance))
+                    if (member.Ranged == ranged && member.HasToken && (farthest == null || member.Distance > farthest.Distance))
                     {
                         farthest = member;
                     }
@@ -237,13 +312,12 @@ namespace MidManStudio.Gtg.Managed.NPC
             }
 
             // Rotation. A holder that kept its place for the rotation time gives it up, because some member is waiting.
-            float rotation = _target.AttackerRotationSeconds;
             if (rotation > 0f)
             {
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < _members.Count; i++)
                 {
                     Member member = _members[i];
-                    if (member.HasToken && now - member.TokenSince >= rotation)
+                    if (member.Ranged == ranged && member.HasToken && now - member.TokenSince >= rotation)
                     {
                         Release(member, now);
                         holders--;
@@ -256,10 +330,10 @@ namespace MidManStudio.Gtg.Managed.NPC
             while (holders < limit)
             {
                 Member best = null;
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < _members.Count; i++)
                 {
                     Member member = _members[i];
-                    if (member.HasToken)
+                    if (member.Ranged != ranged || member.HasToken)
                     {
                         continue;
                     }
@@ -307,16 +381,17 @@ namespace MidManStudio.Gtg.Managed.NPC
             }
         }
 
-        // Spaces the members of one group evenly around the ring. The circle is cut into as many equal steps as there
+        // Spaces the members of one group evenly around its ring. A group is the holders or the waiters of one class,
+        // melee or shooters, and each group has a ring of its own. The circle is cut into as many equal steps as there
         // are members, turned so that the members have the least to walk, and each member gets the step that keeps
         // the order they stand in. Waiters also get a step ahead along the circle, so they drift around the target.
-        private void AssignRing(bool holders, float now)
+        private void AssignRing(bool holders, bool ranged, float now)
         {
             int n = 0;
             for (int i = 0; i < _members.Count; i++)
             {
                 Member member = _members[i];
-                if (member.HasToken != holders)
+                if (member.HasToken != holders || member.Ranged != ranged)
                 {
                     continue;
                 }

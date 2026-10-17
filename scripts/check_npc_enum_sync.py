@@ -3,7 +3,7 @@
 
 CI tooling only: it never runs in the game and is not part of the NPC ML pipeline.
 
-Compares names and numeric values of NpcRole, DecisionBackend, LearningMode, NpcDisposition, NpcOrder, NpcAction and NpcMissionOutcome across:
+Compares names and numeric values of NpcRole, DecisionBackend, LearningMode, NpcDisposition, NpcOrder, AttackStyle, NpcAction and NpcMissionOutcome across:
   Assets/NPC/Archetypes/archetypes.mdix                          (@ENUMS)
   Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs         (C# enums, shared by both stacks)
   rust/npc/crates/npc-ffi/src/lib.rs                             (parse() and action_code())
@@ -33,6 +33,7 @@ ENUMS = {
     "LearningMode": True,
     "NpcDisposition": True,
     "NpcOrder": True,
+    "AttackStyle": True,
     "NpcAction": False,
     "NpcMissionOutcome": False,
 }
@@ -78,7 +79,7 @@ def parse_cs(text):
 
 def parse_rust(ffi, ml):
     out = {name: {} for name in ENUMS}
-    for enum in ("NpcRole", "DecisionBackend", "NpcDisposition", "NpcOrder"):
+    for enum in ("NpcRole", "DecisionBackend", "NpcDisposition", "NpcOrder", "AttackStyle"):
         for num, name in re.findall(r"(\d+)\s*=>\s*%s::(\w+)" % enum, ffi):
             out[enum][norm(name)] = int(num)
     m = re.search(r"fn action_code[^{]*\{(.*?)\n\}", ffi, re.S)

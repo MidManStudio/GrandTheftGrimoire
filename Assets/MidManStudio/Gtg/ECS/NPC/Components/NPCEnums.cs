@@ -1,6 +1,6 @@
 namespace MidManStudio.Gtg.NPC.Components
 {
-    // Values are the Rust ABI v4 values (rust/npc/crates/npc-ffi/src/lib.rs) and the numbers in
+    // Values are the Rust ABI v6 values (rust/npc/crates/npc-ffi/src/lib.rs) and the numbers in
     // Assets/NPC/Archetypes/archetypes.mdix. Do not renumber without bumping the ABI version.
     // scripts/check_npc_enum_sync.py fails CI if the three sources drift apart.
     // Serialized as integers by Unity, so switching a field from int to one of these enums keeps
@@ -40,6 +40,15 @@ namespace MidManStudio.Gtg.NPC.Components
         Peaceful = 2
     }
 
+    // How a combatant fights. Zero is Melee, so a caller that never sets it gets the behavior that existed before
+    // version 6. A ranged fighter shoots and backs away, a hybrid switches by distance and by what it has left to shoot.
+    public enum AttackStyle : byte
+    {
+        Melee = 0,
+        Ranged = 1,
+        Hybrid = 2
+    }
+
     // A standing order for a companion. Other roles ignore it. The type decides how far above its own level
     // a companion still accepts the order.
     public enum NpcOrder : byte
@@ -64,7 +73,9 @@ namespace MidManStudio.Gtg.NPC.Components
         Hold = 6,
         RefuseOrder = 7,
         Mission = 8,
-        Betray = 9
+        Betray = 9,
+        Shoot = 10,
+        Kite = 11
     }
 
     // How an off-screen mission ended. Matches gtg_npc_resolve_mission.

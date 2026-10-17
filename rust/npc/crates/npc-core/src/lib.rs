@@ -49,6 +49,18 @@ pub enum NpcDisposition {
     Peaceful,
 }
 
+/// How a combatant fights once it has chosen to. The style says which kinds of attack it has, and the
+/// rules in `gtg-npc-behavior` turn it into melee, shooting or keeping its distance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AttackStyle {
+    /// Closes in and strikes by hand. The default, and the only style before version 6.
+    Melee,
+    /// Stays away from the threat and shoots, with a bow, a crossbow or a spell.
+    Ranged,
+    /// Has both and switches between them by distance and by what it has left to shoot.
+    Hybrid,
+}
+
 /// A standing order given to a companion. Other roles ignore it. Every order has a type, and the type
 /// decides how far above its own level a companion still accepts it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,6 +102,12 @@ pub enum NpcAction {
     Mission,
     /// The companion turns on the player. The game decides what that means.
     Betray,
+    /// Fight from a distance: hold a place away from the threat and shoot at it. Only ranged and
+    /// hybrid fighters choose it.
+    Shoot,
+    /// Back away from a threat that has come too close, shooting when it can. Only ranged fighters
+    /// choose it.
+    Kite,
 }
 
 /// How a mission ended, as decided by `resolve_mission` in `gtg-npc-behavior`.
@@ -145,6 +163,18 @@ pub struct Observation {
     /// the meter and sends the tier. Zero means no heat, or no information, so a caller that never sets
     /// it gets the behavior from before the field existed. Only guards read it.
     pub crown_heat: u8,
+    /// How the NPC fights. Melee, the default, behaves as before version 6.
+    pub attack_style: AttackStyle,
+    /// The NPC has something to shoot: arrows in its quiver, or mana for its spell. Read by ranged and
+    /// hybrid fighters only.
+    pub ranged_ready: bool,
+    /// The NPC was fighting at range when it was last in a fight, so its last combat action was
+    /// [`NpcAction::Shoot`] or [`NpcAction::Kite`]. A hybrid keeps its stance while the threat is in
+    /// the buffer between the two distances. The game keeps this memory, not the decision.
+    pub ranged_stance: bool,
+    /// Distance in meters from the NPC to the threat it is fighting. Zero or less means unknown, and an
+    /// unknown distance counts as the buffer between the two ranges, so nothing switches.
+    pub threat_distance: f32,
 }
 
 /// The result of one decision.

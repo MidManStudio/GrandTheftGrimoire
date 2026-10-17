@@ -11,12 +11,12 @@
 #![allow(unsafe_code)]
 
 use gtg_npc_core::{
-    DecisionBackend, MissionOutcome, NpcAction, NpcDisposition, NpcOrder, NpcRole, Observation,
-    MAX_CROWN_HEAT,
+    AttackStyle, DecisionBackend, MissionOutcome, NpcAction, NpcDisposition, NpcOrder, NpcRole,
+    Observation, MAX_CROWN_HEAT,
 };
 
 /// Version of the C layout and meaning of every field. The host refuses a library with another version.
-pub const ABI_VERSION: u32 = 5;
+pub const ABI_VERSION: u32 = 6;
 /// Success.
 pub const STATUS_OK: i32 = 0;
 /// A pointer was null or not aligned for its type.
@@ -31,8 +31,8 @@ pub const MAX_BATCH: usize = 4096;
 
 /// One NPC, as C sees it. 64 bytes, 8-byte alignment on supported 64-bit targets. C# uses explicit
 /// offsets. Booleans are integers that must be 0 or 1. A zero in every field added after version 2
-/// means "no information": hostile, no order, not provoked, level 0, no betrayal opportunity and no
-/// Crown Heat.
+/// means "no information": hostile, no order, not provoked, level 0, no betrayal opportunity, no
+/// Crown Heat, melee, nothing to shoot, not in a ranged stance and an unknown distance to the threat.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NpcObservationAbi {
@@ -48,8 +48,10 @@ pub struct NpcObservationAbi {
     pub health_fraction: f32, // 20
     /// 1 when the NPC may move, otherwise 0.
     pub can_move: u32, // 24
-    /// Must be zero.
-    pub reserved: u32, // 28
+    /// Distance in meters from the NPC to the threat it is fighting. Must be finite. Zero or less means
+    /// unknown. Offset 28 held a reserved word up to version 5, so a caller that still sends zero there
+    /// means unknown.
+    pub threat_distance: f32, // 28
     /// `NpcDisposition`: 0 hostile, 1 retaliatory, 2 peaceful.
     pub disposition: u8, // 32
     /// `NpcOrder`: 0 none, 1 follow, 2 hold, 3 attack, 4 deliver, 5 raid. Used by companions only.
@@ -74,10 +76,16 @@ pub struct NpcObservationAbi {
     pub noise: u32, // 52
     /// 1 when the companion could betray the player now, otherwise 0. Without it no betrayal happens.
     pub betrayal_opportunity: u8, // 56
-    /// Must be zero.
-    pub reserved_a: u8, // 57
-    /// Must be zero.
-    pub reserved_b: u16, // 58
+    /// `AttackStyle`: 0 melee, 1 ranged, 2 hybrid. Offset 57 held a reserved byte up to version 5, so a
+    /// caller that still sends zero there is a melee fighter.
+    pub attack_style: u8, // 57
+    /// 1 when the NPC has something to shoot, arrows or mana, otherwise 0. Ranged and hybrid fighters read
+    /// it. Offset 58 held a reserved byte up to version 5.
+    pub ranged_ready: u8, // 58
+    /// 1 when the NPC's last combat action was shooting or backing away, otherwise 0. A hybrid fighter
+    /// keeps its stance while the threat is between its two distances. Offset 59 held a reserved byte up
+    /// to version 5.
+    pub ranged_stance: u8, // 59
     /// Must be zero. Room for a field that a later version defines.
     pub reserved_c: u32, // 60
 }
@@ -89,7 +97,7 @@ pub struct NpcDecisionAbi {
     /// The NPC the decision is for.
     pub npc_id: u64,
     /// 0 idle, 1 trade, 2 patrol, 3 attack, 4 retreat, 5 follow, 6 hold, 7 refuse order, 8 mission,
-    /// 9 betray.
+    /// 9 betray, 10 shoot, 11 kite.
     pub action: i32,
     /// Always zero.
     pub reserved: u32,
@@ -147,16 +155,22 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         5 => NpcOrder::Raid,
         _ => return None,
     };
-    if raw.reserved != 0
-        || raw.reserved_a != 0
-        || raw.reserved_b != 0
-        || raw.reserved_c != 0
+    let attack_style = match raw.attack_style {
+        0 => AttackStyle::Melee,
+        1 => AttackStyle::Ranged,
+        2 => AttackStyle::Hybrid,
+        _ => return None,
+    };
+    if raw.reserved_c != 0
         || raw.threat_visible > 1
         || raw.can_move > 1
         || raw.provoked > 1
         || raw.betrayal_opportunity > 1
+        || raw.ranged_ready > 1
+        || raw.ranged_stance > 1
         || raw.crown_heat > MAX_CROWN_HEAT
         || !raw.health_fraction.is_finite()
+        || !raw.threat_distance.is_finite()
         || !raw.trustworthiness.is_finite()
         || !raw.affinity.is_finite()
         || !raw.pay_satisfaction.is_finite()
@@ -181,6 +195,11 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         noise: raw.noise,
         betrayal_opportunity: raw.betrayal_opportunity == 1,
         crown_heat: raw.crown_heat,
+        attack_style,
+        ranged_ready: raw.ranged_ready == 1,
+        ranged_stance: raw.ranged_stance == 1,
+        // A negative distance means unknown, the same as zero.
+        threat_distance: raw.threat_distance.max(0.0),
     })
 }
 
@@ -196,6 +215,8 @@ fn action_code(action: NpcAction) -> i32 {
         NpcAction::RefuseOrder => 7,
         NpcAction::Mission => 8,
         NpcAction::Betray => 9,
+        NpcAction::Shoot => 10,
+        NpcAction::Kite => 11,
     }
 }
 
@@ -375,7 +396,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, threat_visible), 16);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, health_fraction), 20);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, can_move), 24);
-        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved), 28);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, threat_distance), 28);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, disposition), 32);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, order), 33);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, provoked), 34);
@@ -393,11 +414,12 @@ mod tests {
             std::mem::offset_of!(NpcObservationAbi, betrayal_opportunity),
             56
         );
-        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_a), 57);
-        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_b), 58);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, attack_style), 57);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, ranged_ready), 58);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, ranged_stance), 59);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_c), 60);
         assert_eq!(std::mem::offset_of!(NpcDecisionAbi, action), 8);
-        assert_eq!(gtg_npc_abi_version(), 5);
+        assert_eq!(gtg_npc_abi_version(), 6);
         assert_eq!(gtg_npc_observation_size(), 64);
         assert_eq!(gtg_npc_decision_size(), 16);
     }
@@ -446,16 +468,19 @@ mod tests {
         o.health_fraction = f32::INFINITY;
         assert_eq!(call(&[o], &mut out), STATUS_INVALID);
         o.health_fraction = 1.0;
-        o.reserved = 1;
-        assert_eq!(call(&[o], &mut out), STATUS_INVALID);
-        o.reserved = 0;
-        for (name, bad) in [
-            ("reserved_a", NpcObservationAbi { reserved_a: 1, ..o }),
-            ("reserved_b", NpcObservationAbi { reserved_b: 1, ..o }),
-            ("reserved_c", NpcObservationAbi { reserved_c: 1, ..o }),
-        ] {
-            assert_eq!(call(&[bad], &mut out), STATUS_INVALID, "{name}");
-        }
+        o.threat_distance = f32::NAN;
+        assert_eq!(call(&[o], &mut out), STATUS_INVALID, "distance nan");
+        o.threat_distance = f32::INFINITY;
+        assert_eq!(call(&[o], &mut out), STATUS_INVALID, "distance infinite");
+        o.threat_distance = f32::NEG_INFINITY;
+        assert_eq!(
+            call(&[o], &mut out),
+            STATUS_INVALID,
+            "distance negative infinite"
+        );
+        o.threat_distance = 0.0;
+        let bad = NpcObservationAbi { reserved_c: 1, ..o };
+        assert_eq!(call(&[bad], &mut out), STATUS_INVALID, "reserved_c");
         assert_eq!(call(&[o], &mut out), STATUS_OK);
     }
 
@@ -529,6 +554,27 @@ mod tests {
                 },
             ),
             (
+                "attack_style",
+                NpcObservationAbi {
+                    attack_style: 3,
+                    ..raw(3)
+                },
+            ),
+            (
+                "ranged_ready",
+                NpcObservationAbi {
+                    ranged_ready: 2,
+                    ..raw(3)
+                },
+            ),
+            (
+                "ranged_stance",
+                NpcObservationAbi {
+                    ranged_stance: 2,
+                    ..raw(3)
+                },
+            ),
+            (
                 "crown_heat above the highest tier",
                 NpcObservationAbi {
                     crown_heat: 4,
@@ -562,6 +608,17 @@ mod tests {
                 call(&[companion(order, 1, 0)], &mut out),
                 STATUS_OK,
                 "order {order}"
+            );
+        }
+        for attack_style in 0..=2 {
+            let o = NpcObservationAbi {
+                attack_style,
+                ..raw(3)
+            };
+            assert_eq!(
+                call(&[o], &mut out),
+                STATUS_OK,
+                "attack style {attack_style}"
             );
         }
     }
@@ -674,7 +731,7 @@ mod tests {
 
     #[test]
     fn every_action_code_can_be_produced() {
-        let mut seen = [false; 10];
+        let mut seen = [false; 12];
         let mut hurt_attacker = raw(3);
         hurt_attacker.threat_visible = 1;
         hurt_attacker.health_fraction = 0.1;
@@ -683,6 +740,16 @@ mod tests {
         let betrayer = NpcObservationAbi {
             betrayal_opportunity: 1,
             ..companion(0, 5, 0)
+        };
+        let archer = NpcObservationAbi {
+            attack_style: 1,
+            ranged_ready: 1,
+            threat_distance: 20.0,
+            ..attacker
+        };
+        let cornered_archer = NpcObservationAbi {
+            threat_distance: 2.0,
+            ..archer
         };
         for o in [
             raw(3),
@@ -698,10 +765,12 @@ mod tests {
             companion(3, 5, 99),
             companion(4, 5, 5),
             betrayer,
+            archer,
+            cornered_archer,
         ] {
             seen[one(o) as usize] = true;
         }
-        assert_eq!(seen, [true; 10]);
+        assert_eq!(seen, [true; 12]);
     }
 
     #[test]
@@ -731,16 +800,20 @@ mod tests {
 
     #[test]
     fn misaligned_pointers_are_rejected_before_use() {
-        let bytes = vec![0u8; 64 * 2 + 8];
-        let misaligned = bytes.as_ptr().wrapping_add(1).cast::<NpcObservationAbi>();
+        // The buffers start on an 8-byte boundary, so a pointer one byte into them is misaligned for both
+        // structs by construction, whatever the allocator does.
+        #[repr(align(8))]
+        struct Aligned<const N: usize>([u8; N]);
+        let bytes = Aligned([0u8; 64 * 2 + 8]);
+        let misaligned = bytes.0.as_ptr().wrapping_add(1).cast::<NpcObservationAbi>();
         let mut out = [NpcDecisionAbi::default()];
         // SAFETY: the call rejects a misaligned input pointer without reading through it, and the
         // output pointer is valid.
         let status = unsafe { gtg_npc_decide_batch(misaligned, 1, out.as_mut_ptr(), 1) };
         assert_eq!(status, STATUS_NULL);
         let input = [raw(0)];
-        let mut buf = vec![0u8; 16 * 2 + 8];
-        let bad_out = buf.as_mut_ptr().wrapping_add(1).cast::<NpcDecisionAbi>();
+        let mut buf = Aligned([0u8; 16 * 2 + 8]);
+        let bad_out = buf.0.as_mut_ptr().wrapping_add(1).cast::<NpcDecisionAbi>();
         // SAFETY: the call rejects a misaligned output pointer without writing through it, and the
         // input pointer is valid.
         let status = unsafe { gtg_npc_decide_batch(input.as_ptr(), 1, bad_out, 1) };
@@ -924,6 +997,129 @@ mod tests {
             0,
             "the largest levels are fine"
         );
+    }
+
+    fn shooter(style: u8, distance: f32) -> NpcObservationAbi {
+        NpcObservationAbi {
+            threat_visible: 1,
+            attack_style: style,
+            ranged_ready: 1,
+            threat_distance: distance,
+            ..raw(3)
+        }
+    }
+
+    #[test]
+    fn version_five_callers_keep_their_behavior() {
+        // Zero in every field added in version 6 is a melee fighter with an unknown distance.
+        let mut enemy = raw(3);
+        enemy.threat_visible = 1;
+        assert_eq!(one(enemy), 3, "attacks by hand");
+        let mut guard = NpcObservationAbi {
+            disposition: 1,
+            threat_visible: 1,
+            ..raw(2)
+        };
+        assert_eq!(
+            one(guard),
+            2,
+            "a retaliatory guard still ignores the threat"
+        );
+        guard.crown_heat = 2;
+        assert_eq!(one(guard), 3, "and still fights a wanted player");
+    }
+
+    #[test]
+    fn attack_style_and_distance_reach_the_decision() {
+        assert_eq!(
+            one(shooter(0, 20.0)),
+            3,
+            "melee closes in whatever the distance"
+        );
+        assert_eq!(one(shooter(1, 20.0)), 10, "ranged shoots from far");
+        assert_eq!(one(shooter(1, 3.0)), 11, "ranged backs away when close");
+        assert_eq!(one(shooter(2, 20.0)), 10, "hybrid shoots from far");
+        assert_eq!(one(shooter(2, 2.0)), 3, "hybrid fights by hand up close");
+    }
+
+    #[test]
+    fn ammo_and_stance_reach_the_decision() {
+        let mut empty = shooter(1, 20.0);
+        empty.ranged_ready = 0;
+        assert_eq!(one(empty), 4, "a ranged fighter with nothing to shoot runs");
+        let mut hybrid = shooter(2, 6.0);
+        assert_eq!(
+            one(hybrid),
+            3,
+            "a hybrid in the buffer keeps fighting by hand"
+        );
+        hybrid.ranged_stance = 1;
+        assert_eq!(one(hybrid), 10, "and keeps shooting when it was shooting");
+        hybrid.ranged_ready = 0;
+        assert_eq!(
+            one(hybrid),
+            3,
+            "but with nothing to shoot it fights by hand"
+        );
+    }
+
+    #[test]
+    fn a_negative_distance_means_unknown() {
+        for style in [1u8, 2] {
+            assert_eq!(
+                one(shooter(style, -5.0)),
+                one(shooter(style, 0.0)),
+                "style {style}"
+            );
+        }
+        assert_eq!(
+            one(shooter(1, -5.0)),
+            10,
+            "a ranged fighter does not back away"
+        );
+    }
+
+    #[test]
+    fn a_rejected_style_field_writes_nothing() {
+        let sentinel = NpcDecisionAbi {
+            npc_id: 999,
+            action: 9,
+            reserved: 9,
+        };
+        for (name, bad) in [
+            (
+                "style",
+                NpcObservationAbi {
+                    attack_style: 3,
+                    ..shooter(1, 5.0)
+                },
+            ),
+            (
+                "ready",
+                NpcObservationAbi {
+                    ranged_ready: 2,
+                    ..shooter(1, 5.0)
+                },
+            ),
+            (
+                "stance",
+                NpcObservationAbi {
+                    ranged_stance: 2,
+                    ..shooter(1, 5.0)
+                },
+            ),
+            (
+                "distance",
+                NpcObservationAbi {
+                    threat_distance: f32::NAN,
+                    ..shooter(1, 5.0)
+                },
+            ),
+        ] {
+            let mut out = [sentinel; 2];
+            assert_eq!(call(&[raw(0), bad], &mut out), STATUS_INVALID, "{name}");
+            assert_eq!(out, [sentinel; 2], "{name} writes nothing");
+        }
     }
 
     #[test]

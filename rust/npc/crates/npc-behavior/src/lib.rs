@@ -5,8 +5,8 @@
 
 //! Deterministic baseline: no allocation and no ML required per decision.
 use gtg_npc_core::{
-    Decision, DecisionBackend, MissionOutcome, NpcAction, NpcDisposition, NpcOrder, NpcRole,
-    Observation,
+    AttackStyle, Decision, DecisionBackend, MissionOutcome, NpcAction, NpcDisposition, NpcOrder,
+    NpcRole, Observation,
 };
 
 /// How many levels above its own a companion still accepts an order of this type. An order level above
@@ -36,6 +36,15 @@ pub const BETRAY_MAX_CHANCE: f32 = 0.5;
 /// whatever its disposition says about unprovoked threats. Tier 0 changes nothing. Placeholder value.
 pub const WANTED_CROWN_HEAT: u8 = 1;
 
+/// A ranged fighter that can move backs away from a threat that is closer than this many meters, and
+/// shoots when it is not. Placeholder value, see docs/gtg-npc-behavior.md.
+pub const KITE_DISTANCE: f32 = 6.0;
+/// A hybrid fighter at or inside this many meters fights by hand. Placeholder value.
+pub const HYBRID_MELEE_DISTANCE: f32 = 4.0;
+/// A hybrid fighter at or beyond this many meters shoots. Between this and [`HYBRID_MELEE_DISTANCE`]
+/// it keeps the stance it had, so it does not flip back and forth at one distance. Placeholder value.
+pub const HYBRID_RANGED_DISTANCE: f32 = 8.0;
+
 /// Chooses what one NPC does next. Pure: the same observation always gives the same decision.
 pub fn decide(o: Observation) -> Decision {
     let health = if o.health_fraction.is_finite() {
@@ -44,13 +53,7 @@ pub fn decide(o: Observation) -> Decision {
         1.0
     };
     let action = match o.role {
-        NpcRole::Merchant => {
-            if o.threat_visible {
-                NpcAction::Idle
-            } else {
-                NpcAction::Trade
-            }
-        }
+        NpcRole::Merchant => merchant(&o, health),
         NpcRole::Civilian => {
             if o.threat_visible && o.can_move {
                 NpcAction::Retreat
@@ -78,6 +81,20 @@ fn wander(can_move: bool) -> NpcAction {
 fn follow_or_idle(can_move: bool) -> NpcAction {
     if can_move {
         NpcAction::Follow
+    } else {
+        NpcAction::Idle
+    }
+}
+
+// A shopkeeper trades when nothing threatens it and stands still when something does. A shopkeeper with the
+// retaliatory disposition that has been attacked fights back instead, the way a retaliatory guard does, and
+// fights in its own attack style. Hostile and peaceful shopkeepers never fight, and neither does a retaliatory
+// one that has not been attacked. Once the threat is out of sight the shopkeeper trades again.
+fn merchant(o: &Observation, health: f32) -> NpcAction {
+    if !o.threat_visible {
+        NpcAction::Trade
+    } else if o.disposition == NpcDisposition::Retaliatory && o.provoked {
+        fight(o, health)
     } else {
         NpcAction::Idle
     }
@@ -191,14 +208,61 @@ fn companion(o: &Observation, health: f32) -> NpcAction {
     }
 }
 
-// Fighting a threat: run when badly hurt, otherwise attack.
+// Fighting a threat: run when badly hurt, otherwise attack the way the fighter's style says.
 fn fight(o: &Observation, health: f32) -> NpcAction {
     if health < 0.2 && o.can_move {
         NpcAction::Retreat
     } else if matches!(o.backend, DecisionBackend::StateMachine) {
-        NpcAction::Attack
+        engage(o)
     } else {
-        utility_combat(health, o.can_move)
+        match utility_combat(health, o.can_move) {
+            NpcAction::Attack => engage(o),
+            other => other,
+        }
+    }
+}
+
+// The distance to the threat in meters, or `None` when the game does not know it. Zero, a negative
+// number and a number that is not finite all mean unknown.
+fn known_distance(o: &Observation) -> Option<f32> {
+    if o.threat_distance.is_finite() && o.threat_distance > 0.0 {
+        Some(o.threat_distance)
+    } else {
+        None
+    }
+}
+
+// How a fighter that has decided to attack does it. A melee fighter closes in. A ranged fighter shoots
+// from where it stands and backs away when the threat is too close, and with nothing to shoot it runs, or
+// stands when it cannot. A hybrid fights by hand inside the near distance, shoots beyond the far one,
+// keeps its stance in between, and fights by hand when it has nothing to shoot.
+fn engage(o: &Observation) -> NpcAction {
+    match o.attack_style {
+        AttackStyle::Melee => NpcAction::Attack,
+        AttackStyle::Ranged => {
+            if !o.ranged_ready {
+                if o.can_move {
+                    NpcAction::Retreat
+                } else {
+                    NpcAction::Idle
+                }
+            } else if o.can_move && known_distance(o).is_some_and(|d| d < KITE_DISTANCE) {
+                NpcAction::Kite
+            } else {
+                NpcAction::Shoot
+            }
+        }
+        AttackStyle::Hybrid => {
+            if !o.ranged_ready {
+                return NpcAction::Attack;
+            }
+            match known_distance(o) {
+                Some(d) if d <= HYBRID_MELEE_DISTANCE => NpcAction::Attack,
+                Some(d) if d >= HYBRID_RANGED_DISTANCE => NpcAction::Shoot,
+                _ if o.ranged_stance => NpcAction::Shoot,
+                _ => NpcAction::Attack,
+            }
+        }
     }
 }
 
@@ -297,6 +361,10 @@ mod tests {
             noise: 0,
             betrayal_opportunity: false,
             crown_heat: 0,
+            attack_style: AttackStyle::Melee,
+            ranged_ready: false,
+            ranged_stance: false,
+            threat_distance: 0.0,
         }
     }
 
@@ -541,20 +609,114 @@ mod tests {
     }
 
     #[test]
-    fn disposition_does_not_touch_merchants_or_civilians() {
+    fn disposition_does_not_touch_civilians() {
         for d in [
             NpcDisposition::Hostile,
             NpcDisposition::Retaliatory,
             NpcDisposition::Peaceful,
         ] {
-            let mut m = obs(NpcRole::Merchant);
-            m.disposition = d;
-            assert_eq!(act(m), NpcAction::Trade);
-            let mut c = obs(NpcRole::Civilian);
-            c.disposition = d;
-            assert_eq!(act(c), NpcAction::Patrol);
-            c.threat_visible = true;
-            assert_eq!(act(c), NpcAction::Retreat);
+            for provoked in [false, true] {
+                let mut c = obs(NpcRole::Civilian);
+                c.disposition = d;
+                c.provoked = provoked;
+                assert_eq!(act(c), NpcAction::Patrol);
+                c.threat_visible = true;
+                assert_eq!(act(c), NpcAction::Retreat);
+            }
+        }
+    }
+
+    #[test]
+    fn disposition_only_changes_a_shopkeeper_that_was_attacked() {
+        for d in [
+            NpcDisposition::Hostile,
+            NpcDisposition::Retaliatory,
+            NpcDisposition::Peaceful,
+        ] {
+            for backend in [
+                DecisionBackend::StateMachine,
+                DecisionBackend::Utility,
+                DecisionBackend::HybridMl,
+            ] {
+                for can_move in [true, false] {
+                    let mut m = obs(NpcRole::Merchant);
+                    m.disposition = d;
+                    m.backend = backend;
+                    m.can_move = can_move;
+                    // Nothing in view: trades, attacked or not.
+                    assert_eq!(act(m), NpcAction::Trade);
+                    m.provoked = true;
+                    assert_eq!(act(m), NpcAction::Trade, "{d:?} attacked, nothing in view");
+                    // A threat in view that has not attacked: stands still, whatever the disposition.
+                    m.provoked = false;
+                    m.threat_visible = true;
+                    assert_eq!(act(m), NpcAction::Idle, "{d:?} {backend:?} unprovoked");
+                    // Attacked with the threat in view: only the retaliatory one fights.
+                    m.provoked = true;
+                    let expected = if d == NpcDisposition::Retaliatory {
+                        NpcAction::Attack
+                    } else {
+                        NpcAction::Idle
+                    };
+                    assert_eq!(act(m), expected, "{d:?} {backend:?} can_move {can_move}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_retaliatory_shopkeeper_runs_when_badly_hurt_like_any_fighter() {
+        let mut m = obs(NpcRole::Merchant);
+        m.disposition = NpcDisposition::Retaliatory;
+        m.backend = DecisionBackend::StateMachine;
+        m.threat_visible = true;
+        m.provoked = true;
+        m.health_fraction = 0.19;
+        assert_eq!(act(m), NpcAction::Retreat);
+        m.health_fraction = 0.2;
+        assert_eq!(act(m), NpcAction::Attack);
+        // A shopkeeper that cannot leave its stall keeps fighting.
+        m.health_fraction = 0.05;
+        m.can_move = false;
+        assert_eq!(act(m), NpcAction::Attack);
+    }
+
+    // A shopkeeper who fights back fights in its own style, so a crossbow behind the counter shoots and a club
+    // swings. The retaliatory and provoked gate is the same one the melee case uses.
+    #[test]
+    fn a_retaliatory_shopkeeper_fights_in_its_own_style() {
+        let mut m = obs(NpcRole::Merchant);
+        m.disposition = NpcDisposition::Retaliatory;
+        m.backend = DecisionBackend::StateMachine;
+        m.threat_visible = true;
+        m.provoked = true;
+        m.ranged_ready = true;
+        m.attack_style = AttackStyle::Ranged;
+        m.threat_distance = 20.0;
+        assert_eq!(act(m), NpcAction::Shoot);
+        m.threat_distance = 2.0;
+        assert_eq!(act(m), NpcAction::Kite);
+        m.can_move = false;
+        assert_eq!(act(m), NpcAction::Shoot);
+        m.ranged_ready = false;
+        assert_eq!(act(m), NpcAction::Idle);
+        m.can_move = true;
+        assert_eq!(act(m), NpcAction::Retreat);
+
+        let mut h = m;
+        h.attack_style = AttackStyle::Hybrid;
+        h.ranged_ready = true;
+        h.threat_distance = 20.0;
+        assert_eq!(act(h), NpcAction::Shoot);
+        h.threat_distance = 2.0;
+        assert_eq!(act(h), NpcAction::Attack);
+
+        // Without the attack, the style changes nothing.
+        for style in [AttackStyle::Ranged, AttackStyle::Hybrid] {
+            let mut calm = m;
+            calm.attack_style = style;
+            calm.provoked = false;
+            assert_eq!(act(calm), NpcAction::Idle);
         }
     }
 
@@ -774,6 +936,10 @@ mod companion_v4_tests {
             noise: 0,
             betrayal_opportunity: true,
             crown_heat: 0,
+            attack_style: AttackStyle::Melee,
+            ranged_ready: false,
+            ranged_stance: false,
+            threat_distance: 0.0,
         }
     }
 
@@ -1122,6 +1288,407 @@ mod companion_v4_tests {
                 resolve_mission(NpcOrder::Raid, 7, 9, noise),
                 resolve_mission(NpcOrder::Raid, 7, 9, noise)
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod attack_style_tests {
+    use super::*;
+
+    fn fighter(style: AttackStyle) -> Observation {
+        Observation {
+            npc_id: 31,
+            role: NpcRole::Enemy,
+            backend: DecisionBackend::StateMachine,
+            threat_visible: true,
+            health_fraction: 1.0,
+            can_move: true,
+            disposition: NpcDisposition::Hostile,
+            order: NpcOrder::None,
+            provoked: false,
+            level: 10,
+            order_level: 0,
+            trustworthiness: 0.5,
+            affinity: 0.5,
+            pay_satisfaction: 0.5,
+            noise: 0,
+            betrayal_opportunity: false,
+            crown_heat: 0,
+            attack_style: style,
+            ranged_ready: true,
+            ranged_stance: false,
+            threat_distance: 0.0,
+        }
+    }
+
+    fn at(style: AttackStyle, distance: f32) -> Observation {
+        Observation {
+            threat_distance: distance,
+            ..fighter(style)
+        }
+    }
+
+    fn act(o: Observation) -> NpcAction {
+        decide(o).action
+    }
+
+    #[test]
+    fn the_distances_are_in_order() {
+        const {
+            assert!(KITE_DISTANCE > 0.0);
+            assert!(HYBRID_MELEE_DISTANCE > 0.0);
+            assert!(HYBRID_MELEE_DISTANCE < HYBRID_RANGED_DISTANCE);
+        }
+    }
+
+    #[test]
+    fn a_melee_fighter_ignores_every_new_field() {
+        let roles = [
+            NpcRole::Merchant,
+            NpcRole::Civilian,
+            NpcRole::Guard,
+            NpcRole::Enemy,
+            NpcRole::Boss,
+            NpcRole::Companion,
+        ];
+        let dispositions = [
+            NpcDisposition::Hostile,
+            NpcDisposition::Retaliatory,
+            NpcDisposition::Peaceful,
+        ];
+        let orders = [
+            NpcOrder::None,
+            NpcOrder::Follow,
+            NpcOrder::Hold,
+            NpcOrder::Attack,
+            NpcOrder::Deliver,
+            NpcOrder::Raid,
+        ];
+        let backends = [
+            DecisionBackend::StateMachine,
+            DecisionBackend::Utility,
+            DecisionBackend::HybridMl,
+        ];
+        let distances = [0.0, 1.0, 5.99, 6.0, 20.0, -3.0, f32::NAN, f32::INFINITY];
+        let mut checked = 0u32;
+        for role in roles {
+            for disposition in dispositions {
+                for order in orders {
+                    for backend in backends {
+                        for bits in 0..16u32 {
+                            let mut base = fighter(AttackStyle::Melee);
+                            base.role = role;
+                            base.disposition = disposition;
+                            base.order = order;
+                            base.backend = backend;
+                            base.ranged_ready = false;
+                            base.threat_visible = bits & 1 != 0;
+                            base.provoked = bits & 2 != 0;
+                            base.can_move = bits & 4 != 0;
+                            base.health_fraction = if bits & 8 != 0 { 1.0 } else { 0.3 };
+                            let expected = act(base);
+                            assert!(
+                                !matches!(expected, NpcAction::Shoot | NpcAction::Kite),
+                                "melee never shoots"
+                            );
+                            for distance in distances {
+                                for (ready, stance) in
+                                    [(false, false), (true, false), (true, true), (false, true)]
+                                {
+                                    let mut o = base;
+                                    o.threat_distance = distance;
+                                    o.ranged_ready = ready;
+                                    o.ranged_stance = stance;
+                                    checked += 1;
+                                    assert_eq!(
+                                        act(o),
+                                        expected,
+                                        "{role:?} {disposition:?} distance {distance} ready {ready} stance {stance}"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 100_000, "checked {checked}");
+    }
+
+    #[test]
+    fn merchants_and_civilians_do_not_read_the_style() {
+        for role in [NpcRole::Merchant, NpcRole::Civilian] {
+            for style in [AttackStyle::Ranged, AttackStyle::Hybrid] {
+                for can_move in [true, false] {
+                    for threat in [true, false] {
+                        let mut melee = fighter(AttackStyle::Melee);
+                        melee.role = role;
+                        melee.can_move = can_move;
+                        melee.threat_visible = threat;
+                        let mut other = melee;
+                        other.attack_style = style;
+                        other.threat_distance = 2.0;
+                        assert_eq!(act(other), act(melee), "{role:?} {style:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_ranged_fighter_shoots_from_far_and_backs_away_when_close() {
+        assert_eq!(act(at(AttackStyle::Ranged, 20.0)), NpcAction::Shoot);
+        assert_eq!(act(at(AttackStyle::Ranged, 6.01)), NpcAction::Shoot);
+        assert_eq!(act(at(AttackStyle::Ranged, 5.99)), NpcAction::Kite);
+        assert_eq!(act(at(AttackStyle::Ranged, 0.5)), NpcAction::Kite);
+    }
+
+    #[test]
+    fn the_kite_line_is_exact() {
+        let just_inside = f32::from_bits(KITE_DISTANCE.to_bits() - 1);
+        assert_eq!(
+            act(at(AttackStyle::Ranged, KITE_DISTANCE)),
+            NpcAction::Shoot
+        );
+        assert_eq!(act(at(AttackStyle::Ranged, just_inside)), NpcAction::Kite);
+    }
+
+    #[test]
+    fn an_unknown_distance_never_makes_a_ranged_fighter_kite() {
+        for distance in [0.0, -1.0, f32::NAN, f32::NEG_INFINITY] {
+            assert_eq!(
+                act(at(AttackStyle::Ranged, distance)),
+                NpcAction::Shoot,
+                "{distance}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_ranged_fighter_that_cannot_move_shoots_whatever_the_distance() {
+        for distance in [0.5, 3.0, 20.0] {
+            let mut o = at(AttackStyle::Ranged, distance);
+            o.can_move = false;
+            assert_eq!(act(o), NpcAction::Shoot, "{distance}");
+        }
+    }
+
+    #[test]
+    fn a_ranged_fighter_with_nothing_to_shoot_runs_or_stands() {
+        for distance in [0.0, 2.0, 20.0] {
+            let mut o = at(AttackStyle::Ranged, distance);
+            o.ranged_ready = false;
+            assert_eq!(act(o), NpcAction::Retreat, "{distance}");
+            o.can_move = false;
+            assert_eq!(act(o), NpcAction::Idle, "{distance}");
+        }
+    }
+
+    #[test]
+    fn a_hurt_ranged_fighter_still_runs() {
+        let mut o = at(AttackStyle::Ranged, 20.0);
+        o.health_fraction = 0.19;
+        assert_eq!(act(o), NpcAction::Retreat);
+        o.health_fraction = 0.2;
+        assert_eq!(act(o), NpcAction::Shoot);
+        o.health_fraction = 0.19;
+        o.can_move = false;
+        assert_eq!(act(o), NpcAction::Shoot, "cornered, so it shoots");
+    }
+
+    #[test]
+    fn a_hybrid_fights_by_hand_close_up_and_shoots_far_away() {
+        assert_eq!(act(at(AttackStyle::Hybrid, 1.0)), NpcAction::Attack);
+        assert_eq!(act(at(AttackStyle::Hybrid, 4.0)), NpcAction::Attack);
+        assert_eq!(act(at(AttackStyle::Hybrid, 8.0)), NpcAction::Shoot);
+        assert_eq!(act(at(AttackStyle::Hybrid, 30.0)), NpcAction::Shoot);
+    }
+
+    #[test]
+    fn a_hybrid_in_the_buffer_keeps_its_stance() {
+        for distance in [4.01, 6.0, 7.99] {
+            let mut o = at(AttackStyle::Hybrid, distance);
+            assert_eq!(act(o), NpcAction::Attack, "by hand at {distance}");
+            o.ranged_stance = true;
+            assert_eq!(act(o), NpcAction::Shoot, "shooting at {distance}");
+        }
+    }
+
+    #[test]
+    fn a_hybrid_switches_when_the_threat_leaves_the_buffer() {
+        let mut far = at(AttackStyle::Hybrid, 30.0);
+        far.ranged_stance = false;
+        assert_eq!(act(far), NpcAction::Shoot, "by hand, threat far away");
+        let mut near = at(AttackStyle::Hybrid, 1.0);
+        near.ranged_stance = true;
+        assert_eq!(act(near), NpcAction::Attack, "shooting, threat in its face");
+    }
+
+    #[test]
+    fn the_hybrid_lines_are_exact() {
+        let mut o = at(AttackStyle::Hybrid, HYBRID_MELEE_DISTANCE);
+        o.ranged_stance = true;
+        assert_eq!(act(o), NpcAction::Attack, "at the near line");
+        o.threat_distance = f32::from_bits(HYBRID_MELEE_DISTANCE.to_bits() + 1);
+        assert_eq!(
+            act(o),
+            NpcAction::Shoot,
+            "just past the near line keeps the stance"
+        );
+        let mut o = at(AttackStyle::Hybrid, HYBRID_RANGED_DISTANCE);
+        o.ranged_stance = false;
+        assert_eq!(act(o), NpcAction::Shoot, "at the far line");
+        o.threat_distance = f32::from_bits(HYBRID_RANGED_DISTANCE.to_bits() - 1);
+        assert_eq!(
+            act(o),
+            NpcAction::Attack,
+            "just inside the far line keeps the stance"
+        );
+    }
+
+    #[test]
+    fn a_hybrid_with_an_unknown_distance_keeps_its_stance() {
+        for distance in [0.0, -2.0, f32::NAN] {
+            let mut o = at(AttackStyle::Hybrid, distance);
+            assert_eq!(act(o), NpcAction::Attack, "{distance}");
+            o.ranged_stance = true;
+            assert_eq!(act(o), NpcAction::Shoot, "{distance}");
+        }
+    }
+
+    #[test]
+    fn a_hybrid_with_nothing_to_shoot_fights_by_hand() {
+        for distance in [0.0, 2.0, 30.0] {
+            let mut o = at(AttackStyle::Hybrid, distance);
+            o.ranged_ready = false;
+            o.ranged_stance = true;
+            assert_eq!(act(o), NpcAction::Attack, "{distance}");
+        }
+    }
+
+    #[test]
+    fn a_hybrid_never_backs_away_but_runs_when_hurt() {
+        for distance in [0.0, 1.0, 5.0, 7.0, 12.0] {
+            for stance in [false, true] {
+                let mut o = at(AttackStyle::Hybrid, distance);
+                o.ranged_stance = stance;
+                assert_ne!(act(o), NpcAction::Kite, "{distance} {stance}");
+                o.health_fraction = 0.1;
+                assert_eq!(act(o), NpcAction::Retreat, "{distance} {stance} hurt");
+            }
+        }
+    }
+
+    #[test]
+    fn only_a_ranged_fighter_backs_away_and_only_ranged_styles_shoot() {
+        let styles = [AttackStyle::Melee, AttackStyle::Ranged, AttackStyle::Hybrid];
+        let backends = [
+            DecisionBackend::StateMachine,
+            DecisionBackend::Utility,
+            DecisionBackend::HybridMl,
+        ];
+        for style in styles {
+            for backend in backends {
+                for distance in [0.0, 1.0, 5.0, 7.0, 9.0, 40.0] {
+                    for (ready, stance) in [(false, false), (true, false), (true, true)] {
+                        for health in [1.0, 0.5, 0.1] {
+                            let mut o = at(style, distance);
+                            o.backend = backend;
+                            o.ranged_ready = ready;
+                            o.ranged_stance = stance;
+                            o.health_fraction = health;
+                            let action = act(o);
+                            if action == NpcAction::Kite {
+                                assert_eq!(style, AttackStyle::Ranged);
+                            }
+                            if action == NpcAction::Shoot {
+                                assert_ne!(style, AttackStyle::Melee);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_scored_backends_pick_the_style_after_choosing_to_attack() {
+        for backend in [DecisionBackend::Utility, DecisionBackend::HybridMl] {
+            let mut o = at(AttackStyle::Ranged, 20.0);
+            o.backend = backend;
+            assert_eq!(act(o), NpcAction::Shoot, "{backend:?} far");
+            o.threat_distance = 3.0;
+            assert_eq!(act(o), NpcAction::Kite, "{backend:?} close");
+            o.health_fraction = 0.1;
+            assert_eq!(act(o), NpcAction::Retreat, "{backend:?} hurt");
+        }
+    }
+
+    #[test]
+    fn a_ranged_companion_shoots_on_an_attack_order_and_follows_otherwise() {
+        let mut o = at(AttackStyle::Ranged, 20.0);
+        o.role = NpcRole::Companion;
+        o.order = NpcOrder::Attack;
+        assert_eq!(act(o), NpcAction::Shoot);
+        o.threat_distance = 2.0;
+        assert_eq!(act(o), NpcAction::Kite);
+        o.order = NpcOrder::Follow;
+        assert_eq!(
+            act(o),
+            NpcAction::Follow,
+            "follow defends only after an attack"
+        );
+        o.provoked = true;
+        assert_eq!(act(o), NpcAction::Kite);
+        o.order = NpcOrder::Hold;
+        assert_eq!(act(o), NpcAction::Hold);
+    }
+
+    #[test]
+    fn a_ranged_guard_follows_the_disposition_and_crown_heat_rules() {
+        let mut guard = at(AttackStyle::Ranged, 20.0);
+        guard.role = NpcRole::Guard;
+        guard.disposition = NpcDisposition::Retaliatory;
+        assert_eq!(
+            act(guard),
+            NpcAction::Patrol,
+            "ignores an unprovoked threat"
+        );
+        guard.crown_heat = 1;
+        assert_eq!(
+            act(guard),
+            NpcAction::Shoot,
+            "wanted, so it fights from range"
+        );
+        guard.crown_heat = 0;
+        guard.provoked = true;
+        assert_eq!(
+            act(guard),
+            NpcAction::Shoot,
+            "attacked, so it fights from range"
+        );
+        guard.disposition = NpcDisposition::Peaceful;
+        assert_eq!(act(guard), NpcAction::Retreat, "peaceful never fights");
+    }
+
+    #[test]
+    fn no_threat_means_no_attack_whatever_the_style() {
+        for style in [AttackStyle::Ranged, AttackStyle::Hybrid] {
+            let mut o = at(style, 20.0);
+            o.threat_visible = false;
+            assert_eq!(act(o), NpcAction::Patrol);
+            o.can_move = false;
+            assert_eq!(act(o), NpcAction::Idle);
+        }
+    }
+
+    #[test]
+    fn decisions_stay_deterministic() {
+        let mut o = at(AttackStyle::Hybrid, 6.0);
+        o.ranged_stance = true;
+        for _ in 0..100 {
+            assert_eq!(act(o), act(o));
         }
     }
 }

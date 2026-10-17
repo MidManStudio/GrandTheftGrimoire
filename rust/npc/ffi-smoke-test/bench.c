@@ -15,7 +15,8 @@
 #define SEED 0x47544700ull
 #define SEED2 0x47544701ull
 #define SEED3 0x47544702ull
-#define ACTIONS 10
+#define SEED4 0x47544703ull
+#define ACTIONS 12
 #define WINDOW_STEP 977u
 #define REPS 9
 #define NPC_DECISIONS_PER_REP 4000000u
@@ -31,7 +32,7 @@ static void fill_uniform(GtgNpcObservation *p) {
 }
 static void fill_mixed(GtgNpcObservation *p) {
  for (unsigned i=0;i<POOL;i++) {
-  uint64_t r = mix(SEED + i), r2 = mix(SEED2 + i), r3 = mix(SEED3 + i), pct = r % 100;
+  uint64_t r = mix(SEED + i), r2 = mix(SEED2 + i), r3 = mix(SEED3 + i), r4 = mix(SEED4 + i), pct = r % 100;
   uint32_t role = pct<12 ? 0 : pct<50 ? 1 : pct<62 ? 2 : pct<82 ? 3 : pct<90 ? 4 : 5;
   uint32_t sel = (uint32_t)((r >> 8) % 2);
   p[i]=(GtgNpcObservation){0};
@@ -52,6 +53,10 @@ static void fill_mixed(GtgNpcObservation *p) {
   p[i].noise = role==5 ? (uint32_t)(r3 >> 32) : 0;
   p[i].betrayal_opportunity = (role==5 && (r2 >> 40) % 100 < 30) ? 1 : 0;
   { uint64_t h = (r2 >> 48) % 100; p[i].crown_heat = h < 55 ? 0 : h < 75 ? 1 : h < 90 ? 2 : 3; }
+  p[i].threat_distance = (float)((r4 >> 24) % 3001) / 100.0f;
+  { uint64_t a = r4 % 100; p[i].attack_style = a < 60 ? 0 : a < 85 ? 1 : 2; }
+  p[i].ranged_ready = ((r4 >> 8) % 100) < 80;
+  p[i].ranged_stance = ((r4 >> 16) % 100) < 40;
  }
 }
 static int verify(const GtgNpcObservation *pool) {
@@ -61,7 +66,7 @@ static int verify(const GtgNpcObservation *pool) {
   for (unsigned i=0;i<1024;i++) { if (out[i].action<0||out[i].action>=ACTIONS) return 7; hist[out[i].action]++; hash=(hash ^ ((uint64_t)out[i].action+1)) * 0x100000001b3ull; }
  }
  for (int a=0;a<ACTIONS;a++) if (!hist[a]) return 8;
- printf("# mixed_actions idle=%" PRIu64 " trade=%" PRIu64 " patrol=%" PRIu64 " attack=%" PRIu64 " retreat=%" PRIu64 " follow=%" PRIu64 " hold=%" PRIu64 " refuse=%" PRIu64 " mission=%" PRIu64 " betray=%" PRIu64 " fnv1a=0x%016" PRIx64 "\n",hist[0],hist[1],hist[2],hist[3],hist[4],hist[5],hist[6],hist[7],hist[8],hist[9],hash);
+ printf("# mixed_actions idle=%" PRIu64 " trade=%" PRIu64 " patrol=%" PRIu64 " attack=%" PRIu64 " retreat=%" PRIu64 " follow=%" PRIu64 " hold=%" PRIu64 " refuse=%" PRIu64 " mission=%" PRIu64 " betray=%" PRIu64 " shoot=%" PRIu64 " kite=%" PRIu64 " fnv1a=0x%016" PRIx64 "\n",hist[0],hist[1],hist[2],hist[3],hist[4],hist[5],hist[6],hist[7],hist[8],hist[9],hist[10],hist[11],hash);
  return 0;
 }
 static volatile uint64_t sink;
