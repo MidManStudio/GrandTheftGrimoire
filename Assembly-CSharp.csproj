@@ -142,6 +142,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/ManagedCameraRig.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterMovementSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudStyle.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcShotDriver.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcActor.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/ManagedCrownHudHeat.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterLookSystem.cs" />
@@ -150,11 +151,14 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDevPanel.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedRenderer.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacter.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcBallistics.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudState.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGravitySystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/Presentation/ChemicalHazardPresentationSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/ManagedChemicalHazardField.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Data/EnemyDatabase.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcShots.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcShooter.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcThreatSource.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheatManager.cs" />
@@ -528,6 +532,10 @@
       <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Managed/UnityEngine/UnityEditor.UnityConnectModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Collections.LowLevel.ILSupport">
+      <HintPath>Library/PackageCache/com.unity.collections@2.2.1/Unity.Collections.LowLevel.ILSupport/Unity.Collections.LowLevel.ILSupport.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Analytics.Tracker">
       <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/Unity.Analytics.Tracker.dll</HintPath>
       <Private>False</Private>
@@ -544,16 +552,12 @@
       <HintPath>Library/PackageCache/com.unity.nuget.newtonsoft-json@3.2.1/Runtime/Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Analytics.StandardEvents">
-      <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/AnalyticsStandardEvents/Unity.Analytics.StandardEvents.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Collections.LowLevel.ILSupport">
-      <HintPath>Library/PackageCache/com.unity.collections@2.2.1/Unity.Collections.LowLevel.ILSupport/Unity.Collections.LowLevel.ILSupport.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Mono.Cecil">
       <HintPath>Library/PackageCache/com.unity.nuget.mono-cecil@1.11.4/Mono.Cecil.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Analytics.StandardEvents">
+      <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/AnalyticsStandardEvents/Unity.Analytics.StandardEvents.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Android.Types">
@@ -1128,24 +1132,24 @@
       <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.Codeless.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="PPv2URPConverters">
-      <HintPath>Library/ScriptAssemblies/PPv2URPConverters.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.Collections.Editor">
       <HintPath>Library/ScriptAssemblies/Unity.Collections.Editor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PPv2URPConverters">
+      <HintPath>Library/ScriptAssemblies/PPv2URPConverters.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
       <HintPath>Library/ScriptAssemblies/Unity.TextMeshPro.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEditor.Purchasing">
-      <HintPath>Library/ScriptAssemblies/UnityEditor.Purchasing.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.Services.Core.Analytics">
       <HintPath>Library/ScriptAssemblies/Unity.Services.Core.Analytics.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEditor.Purchasing">
+      <HintPath>Library/ScriptAssemblies/UnityEditor.Purchasing.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.AI.Navigation.Editor.ConversionSystem">
@@ -1208,8 +1212,8 @@
       <HintPath>Library/ScriptAssemblies/UnityEditor.SpatialTracking.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.VisualStudio.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualStudio.Editor.dll</HintPath>
+    <Reference Include="MidManStudio.Alembic">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Alembic.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.UI">
@@ -1220,8 +1224,8 @@
       <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.SpatialTracking">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.SpatialTracking.dll</HintPath>
+    <Reference Include="Unity.VisualStudio.Editor">
+      <HintPath>Library/ScriptAssemblies/Unity.VisualStudio.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.Core.Editor">
@@ -1232,20 +1236,20 @@
       <HintPath>Library/ScriptAssemblies/Analytics.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.UI">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
+    <Reference Include="UnityEngine.SpatialTracking">
+      <HintPath>Library/ScriptAssemblies/UnityEngine.SpatialTracking.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.Advertisements.Editor">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Advertisements.Editor.dll</HintPath>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.XR.LegacyInputHelpers">
       <HintPath>Library/ScriptAssemblies/UnityEditor.XR.LegacyInputHelpers.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="MidManStudio.Alembic">
-      <HintPath>Library/ScriptAssemblies/MidManStudio.Alembic.dll</HintPath>
+    <Reference Include="MidManStudio.Mdix.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Mdix.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Purchasing.Common">
@@ -1270,6 +1274,10 @@
     </Reference>
     <Reference Include="Unity.InputSystem.ForUI">
       <HintPath>Library/ScriptAssemblies/Unity.InputSystem.ForUI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.Advertisements.Editor">
+      <HintPath>Library/ScriptAssemblies/UnityEngine.Advertisements.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.SettingsProvider.Editor">

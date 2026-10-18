@@ -1,5 +1,23 @@
 {
   "dependencies": {
+    "com.midmanstudio.alembic": {
+      "version": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.alembic#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.burst": "1.8.9",
+        "com.unity.collections": "2.2.1",
+        "com.unity.mathematics": "1.3.1"
+      },
+      "hash": "dbc5d0107f9829e7e21c334dd9fe45b6db2da070"
+    },
+    "com.midmanstudio.mdix": {
+      "version": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#d3333a907553eca7506bf82beba2f7098b0185b7",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "d3333a907553eca7506bf82beba2f7098b0185b7"
+    },
     "com.unity.2d.sprite": {
       "version": "1.0.0",
       "depth": 0,

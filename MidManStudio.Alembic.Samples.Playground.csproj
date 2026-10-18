@@ -416,6 +416,10 @@
       <HintPath>Library/PackageCache/com.unity.visualscripting@1.9.1/Editor/VisualScripting.Core/Dependencies/YamlDotNet/Unity.VisualScripting.YamlDotNet.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Collections.LowLevel.ILSupport">
+      <HintPath>Library/PackageCache/com.unity.collections@2.2.1/Unity.Collections.LowLevel.ILSupport/Unity.Collections.LowLevel.ILSupport.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Analytics.Tracker">
       <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/Unity.Analytics.Tracker.dll</HintPath>
       <Private>False</Private>
@@ -456,16 +460,12 @@
       <HintPath>Library/PackageCache/com.unity.visualscripting@1.9.1/Editor/VisualScripting.Core/EditorAssetResources/Unity.VisualScripting.TextureAssets.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Analytics.StandardEvents">
-      <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/AnalyticsStandardEvents/Unity.Analytics.StandardEvents.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Collections.LowLevel.ILSupport">
-      <HintPath>Library/PackageCache/com.unity.collections@2.2.1/Unity.Collections.LowLevel.ILSupport/Unity.Collections.LowLevel.ILSupport.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Mono.Cecil">
       <HintPath>Library/PackageCache/com.unity.nuget.mono-cecil@1.11.4/Mono.Cecil.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Analytics.StandardEvents">
+      <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/AnalyticsStandardEvents/Unity.Analytics.StandardEvents.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Android.Types">
