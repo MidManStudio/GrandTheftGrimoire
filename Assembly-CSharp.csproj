@@ -1128,6 +1128,10 @@
       <HintPath>Library/ScriptAssemblies/Unity.Collections.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.Nuclear">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Nuclear.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.Purchasing.Codeless">
       <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.Codeless.dll</HintPath>
       <Private>False</Private>
@@ -1333,6 +1337,10 @@
     <ProjectReference Include="MidManStudio.Alembic.Samples.Playground.csproj">
       <Project>{954ED032-78FE-39DC-72FD-51F4889A6361}</Project>
       <Name>MidManStudio.Alembic.Samples.Playground</Name>
+    </ProjectReference>
+    <ProjectReference Include="MidManStudio.Nuclear.Samples.NuclearLab.csproj">
+      <Project>{FC528717-8290-B393-2900-6D229106B6A8}</Project>
+      <Name>MidManStudio.Nuclear.Samples.NuclearLab</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)/Microsoft.CSharp.targets" />
