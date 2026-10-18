@@ -14,7 +14,9 @@
 //!   20% enemies, 8% bosses, 10% companions; ~25% see a threat; random health; ~10% of
 //!   non-merchants immobile; combatants split 60/25/15 between hostile, retaliatory and peaceful;
 //!   20% provoked; levels 1 to 30; companions get a random order of any of the six types, an order
-//!   level, trust, liking, pay satisfaction, a random number and a 30% betrayal opportunity).
+//!   level, trust, liking, pay satisfaction, a random number and a 30% betrayal opportunity; every NPC
+//!   gets an attack style, 60% melee, 25% ranged and 15% hybrid, 80% have something to shoot, 40% are in
+//!   a ranged stance, and a distance to the threat from 0 to 30 m).
 //!   The batch window slides across a 16384-NPC pool every call, so successive calls see
 //!   different data and the branch predictor cannot memorize one batch.
 //!
@@ -33,7 +35,8 @@ const POOL: usize = 16384;
 const SEED: u64 = 0x4754_4700;
 const SEED2: u64 = 0x4754_4701;
 const SEED3: u64 = 0x4754_4702;
-const ACTIONS: usize = 10;
+const SEED4: u64 = 0x4754_4703;
+const ACTIONS: usize = 12;
 const COUNTS: [usize; 4] = [10, 100, 500, 1000];
 const WINDOW_STEP: usize = 977;
 const REPS: usize = 9;
@@ -66,6 +69,7 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
             let r = mix(SEED + i as u64);
             let r2 = mix(SEED2 + i as u64);
             let r3 = mix(SEED3 + i as u64);
+            let r4 = mix(SEED4 + i as u64);
             let pct = r % 100;
             let role: u32 = if pct < 12 {
                 0
@@ -140,6 +144,14 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
                     75..=89 => 2,
                     _ => 3,
                 },
+                threat_distance: ((r4 >> 24) % 3001) as f32 / 100.0,
+                attack_style: match r4 % 100 {
+                    0..=59 => 0,
+                    60..=84 => 1,
+                    _ => 2,
+                },
+                ranged_ready: u8::from((r4 >> 8) % 100 < 80),
+                ranged_stance: u8::from((r4 >> 16) % 100 < 40),
                 ..Default::default()
             }
         })
@@ -229,7 +241,7 @@ fn main() {
         bench("mixed", &mixed, count, WINDOW_STEP);
     }
     println!(
-        "# mixed_actions idle={} trade={} patrol={} attack={} retreat={} follow={} hold={} refuse={} mission={} betray={} fnv1a=0x{hash:016x}",
-        hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8], hist[9]
+        "# mixed_actions idle={} trade={} patrol={} attack={} retreat={} follow={} hold={} refuse={} mission={} betray={} shoot={} kite={} fnv1a=0x{hash:016x}",
+        hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8], hist[9], hist[10], hist[11]
     );
 }

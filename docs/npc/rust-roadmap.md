@@ -1,17 +1,17 @@
 # NPC Rust side: what is done and what is left
 
-Status (2026-10-14, after observation version 5). Facts below come from the repository unless marked as a design source or an owner decision. Items marked **decision** need an answer from the project owner before anyone builds them.
+Status (2026-10-17, after observation version 6). Facts below come from the repository unless marked as a design source or an owner decision. Items marked **decision** need an answer from the project owner before anyone builds them.
 
 ## What exists
 
 | Crate | Tests | What it holds |
 |---|---:|---|
-| `npc-core` | 0 | `NpcRole` (6), `DecisionBackend` (3), `NpcDisposition` (3), `NpcOrder` (6), `NpcAction` (10), `MissionOutcome` (4), `Observation`, `Decision`, `MAX_CROWN_HEAT` |
-| `npc-behavior` | 44 | `decide()`: merchant, civilian, combatant (guard, enemy, boss) and companion rules, disposition, orders, the per-type refusal gap, emergent betrayal, the Crown Heat rule for guards, and `resolve_mission` |
+| `npc-core` | 0 | `NpcRole` (6), `DecisionBackend` (3), `NpcDisposition` (3), `NpcOrder` (6), `AttackStyle` (3), `NpcAction` (12), `MissionOutcome` (4), `Observation`, `Decision`, `MAX_CROWN_HEAT` |
+| `npc-behavior` | 69 | `decide()`: merchant, civilian, combatant (guard, enemy, boss) and companion rules, disposition, orders, the per-type refusal gap, emergent betrayal, the Crown Heat rule for guards, the attack styles (melee, ranged with kiting, hybrid with a buffer), the retaliatory shopkeeper, and `resolve_mission` |
 | `npc-ml` | 0 | `LearningMode`, a `Policy` trait and `PolicyError`. No model, no framework, no weights |
-| `npc-ffi` | 24 | ABI version 5, `gtg_npc_decide_batch` (up to 4096 per call, atomic validation, overlap rejection), `gtg_npc_resolve_mission`, size and version getters, and the older one-NPC stub |
+| `npc-ffi` | 29 | ABI version 6, `gtg_npc_decide_batch` (up to 4096 per call, atomic validation, overlap rejection), `gtg_npc_resolve_mission`, size and version getters, and the older one-NPC stub |
 
-Every crate follows `RUST_RUST_CRATE_GUIDE.md` now: version 0.0.1, the workspace lint table, `SAFETY` comments on every `unsafe` block, a source notice and a doc per crate. The decision has 17 inputs (see `observation.md`) and returns one of ten actions. It ran at about 5 to 10 ns per NPC on hosted runners with the version 2 layout. The version 3, 4 and 5 cost is not measured.
+Every crate follows `RUST_RUST_CRATE_GUIDE.md` now: version 0.0.1, the workspace lint table, `SAFETY` comments on every `unsafe` block, a source notice and a doc per crate. The decision has 21 inputs (see `observation.md`) and returns one of twelve actions. It ran at about 5 to 10 ns per NPC on hosted runners with the version 2 layout. The version 3 to 6 cost is not measured on hosted runners. In the authoring sandbox the version 6 layout added about 2 to 3 ns per NPC, inside the noise of that machine.
 
 ## Decided by the owner
 
@@ -26,25 +26,24 @@ Every crate follows `RUST_RUST_CRATE_GUIDE.md` now: version 0.0.1, the workspace
 
 ## What the decision still cannot know
 
-- **Distance to the threat**, so an NPC can choose to close in, hold or kite. It needs rules and actions that act on range.
 - **Allies and enemies nearby**, for morale and group tactics.
 - **Time of day**, for routines.
 - **Local Favor**, which the design reference makes the other basis of guard reactions (the guard who is secretly loyal to the late King, the bribable one, the one on the Uncle's payroll, and the "Do you know who I am?" outcome). Crown Heat is built as a tier in observation version 5, with one rule: a retaliatory guard fights a visible threat at tier 1 or more. Tiers 2 and 3 have no rule yet.
 - **Loyalty and pay**, for emergent betrayal.
 - **A random number**, for a chance in a rule that stays reproducible. Unity would supply it.
 
-These are the planned uses of the reserved space in the observation. Adding any of them changes the ABI version.
+The distance to the threat was on this list until version 6, which built it for the attack styles (melee, ranged, hybrid). These are the planned uses of the reserved space in the observation. Adding any of them changes the ABI version.
 
 ## Backlog
 
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 1 | Crate guide conformance | done | Clippy has not run on it yet |
-| 2 | Observation and action versions 3, 4 and 5 | done for disposition, provoked, level, orders, betrayal inputs, missions, Crown Heat tier | Distance, allies, time and favor are not built |
-| 3 | Disposition | done | Hostile, retaliatory, peaceful. "Good humanoids never fight back" is an interpretation to confirm |
+| 2 | Observation and action versions 3 to 6 | done for disposition, provoked, level, orders, betrayal inputs, missions, Crown Heat tier, attack style, ammo, stance and threat distance | Allies, time and favor are not built |
+| 3 | Disposition | done | Hostile, retaliatory, peaceful. "Good humanoids never fight back" is an interpretation to confirm. Since version 6 a retaliatory shopkeeper that was attacked fights back in its own style, a hostile one does not (owner note: some shopkeepers attack if attacked first) |
 | 4 | NPC memory | decided | In Unity. The Managed brain holds level, order, provoked and the last attacker. Persistence (save and load) is not built |
 | 5 | Utility AI with considerations and curves | open | Replaces the hard-coded `utility_combat`. Scoring tables belong in `.mdix` data |
-| 6 | Combat tactics and morale | partly done in Unity | Done in Unity: places on a ring around the target, a limit on simultaneous strikers with rotation, circling waiters, nearest, sticky and revenge targeting, a live reach check on every hit. Open: flank, kite, hold a chokepoint, break and run, ranged attackers, calling for help. These need the distance to the target and allies in the observation |
+| 6 | Combat tactics and morale | partly done | Done in Unity: places on a ring around the target, a limit on simultaneous strikers with rotation, circling waiters, nearest, sticky and revenge targeting, a live reach check on every hit, a separate pool and outer ring for shooters, and arrows, bolts and spells that fly. Done in Rust (version 6): the three attack styles, kiting for ranged fighters and the distance and ammo switch for hybrids. Open: flank, hold a chokepoint, break and run, calling for help. These need allies in the observation. The kite, hybrid and stand-off distances are placeholders |
 | 7 | Schedules and routines | open | Time of day to activity. Unity still picks where |
 | 8 | Decision scheduling and level of detail | open | The director rotates through 256 NPCs per 0.1 s tick. Which NPCs deserve a decision, and how often, depends on distance to the player. Unity owns it |
 | 9 | Headless simulation (`npc-simulation`) | open | A small world with no Unity, for tests and balance |

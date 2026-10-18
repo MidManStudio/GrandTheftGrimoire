@@ -14,7 +14,7 @@ _Static_assert(offsetof(GtgNpcObservation,backend)==12, "backend offset");
 _Static_assert(offsetof(GtgNpcObservation,threat_visible)==16, "threat offset");
 _Static_assert(offsetof(GtgNpcObservation,health_fraction)==20, "health offset");
 _Static_assert(offsetof(GtgNpcObservation,can_move)==24, "can_move offset");
-_Static_assert(offsetof(GtgNpcObservation,reserved)==28, "reserved offset");
+_Static_assert(offsetof(GtgNpcObservation,threat_distance)==28, "threat_distance offset");
 _Static_assert(offsetof(GtgNpcObservation,disposition)==32, "disposition offset");
 _Static_assert(offsetof(GtgNpcObservation,order)==33, "order offset");
 _Static_assert(offsetof(GtgNpcObservation,provoked)==34, "provoked offset");
@@ -26,8 +26,9 @@ _Static_assert(offsetof(GtgNpcObservation,affinity)==44, "affinity offset");
 _Static_assert(offsetof(GtgNpcObservation,pay_satisfaction)==48, "pay_satisfaction offset");
 _Static_assert(offsetof(GtgNpcObservation,noise)==52, "noise offset");
 _Static_assert(offsetof(GtgNpcObservation,betrayal_opportunity)==56, "betrayal_opportunity offset");
-_Static_assert(offsetof(GtgNpcObservation,reserved_a)==57, "reserved_a offset");
-_Static_assert(offsetof(GtgNpcObservation,reserved_b)==58, "reserved_b offset");
+_Static_assert(offsetof(GtgNpcObservation,attack_style)==57, "attack_style offset");
+_Static_assert(offsetof(GtgNpcObservation,ranged_ready)==58, "ranged_ready offset");
+_Static_assert(offsetof(GtgNpcObservation,ranged_stance)==59, "ranged_stance offset");
 _Static_assert(offsetof(GtgNpcObservation,reserved_c)==60, "reserved_c offset");
 _Static_assert(offsetof(GtgNpcDecision,action)==8, "action offset");
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#x); return 1; } } while (0)
@@ -59,9 +60,11 @@ int main(void) {
  CHECK(out[0].action==99 && out[1].action==99);
  in[1].role=GTG_NPC_ROLE_ENEMY; in[1].health_fraction=NAN;
  CHECK(gtg_npc_decide_batch(in,2,out,2)==GTG_NPC_INVALID);
- in[1].health_fraction=1; in[1].reserved=1;
+ in[1].health_fraction=1; in[1].threat_distance=NAN;
  CHECK(gtg_npc_decide_batch(in,2,out,2)==GTG_NPC_INVALID);
- in[1].reserved=0;
+ in[1].threat_distance=INFINITY;
+ CHECK(gtg_npc_decide_batch(in,2,out,2)==GTG_NPC_INVALID);
+ in[1].threat_distance=0;
 
  /* Fields added in version 3. A caller that sets only the older fields keeps the old behavior. */
  int32_t action=-1;
@@ -121,6 +124,46 @@ int main(void) {
  GtgNpcObservation hot_peaceful=guard; hot_peaceful.disposition=GTG_NPC_DISPOSITION_PEACEFUL;
  CHECK(decide_one(hot_peaceful,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_RETREAT);
 
+ /* Attack styles. Melee is the old behavior whatever the other new fields say. A ranged fighter shoots from far and
+    backs away inside 6 m. A hybrid fights by hand inside 4 m, shoots beyond 8 m and keeps its stance in between. */
+ GtgNpcObservation archer=enemy; archer.attack_style=GTG_NPC_ATTACK_STYLE_RANGED; archer.ranged_ready=1;
+ archer.threat_distance=20;
+ CHECK(decide_one(archer,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_SHOOT);
+ archer.threat_distance=3;
+ CHECK(decide_one(archer,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_KITE);
+ archer.threat_distance=-4;
+ CHECK(decide_one(archer,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_SHOOT);
+ archer.threat_distance=3; archer.ranged_ready=0;
+ CHECK(decide_one(archer,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_RETREAT);
+ GtgNpcObservation melee_far=enemy; melee_far.threat_distance=20; melee_far.ranged_ready=1; melee_far.ranged_stance=1;
+ CHECK(decide_one(melee_far,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_ATTACK);
+ GtgNpcObservation knight=enemy; knight.attack_style=GTG_NPC_ATTACK_STYLE_HYBRID; knight.ranged_ready=1;
+ knight.threat_distance=2;
+ CHECK(decide_one(knight,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_ATTACK);
+ knight.threat_distance=12;
+ CHECK(decide_one(knight,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_SHOOT);
+ knight.threat_distance=6;
+ CHECK(decide_one(knight,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_ATTACK);
+ knight.ranged_stance=1;
+ CHECK(decide_one(knight,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_SHOOT);
+ knight.ranged_ready=0;
+ CHECK(decide_one(knight,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_ATTACK);
+
+ /* A shopkeeper stands still when a threat is in view. One with the retaliatory disposition that has been attacked
+    fights back in its own style. Hostile and peaceful shopkeepers never do. */
+ GtgNpcObservation shop={.npc_id=8,.role=GTG_NPC_ROLE_MERCHANT,.backend=GTG_NPC_BACKEND_STATE_MACHINE,.threat_visible=1,.health_fraction=1,.can_move=0,.disposition=GTG_NPC_DISPOSITION_RETALIATORY};
+ CHECK(decide_one(shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_IDLE);
+ shop.provoked=1;
+ CHECK(decide_one(shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_ATTACK);
+ shop.threat_visible=0;
+ CHECK(decide_one(shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_TRADE);
+ shop.threat_visible=1; shop.attack_style=GTG_NPC_ATTACK_STYLE_RANGED; shop.ranged_ready=1; shop.threat_distance=3;
+ CHECK(decide_one(shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_SHOOT);
+ shop.disposition=GTG_NPC_DISPOSITION_HOSTILE;
+ CHECK(decide_one(shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_IDLE);
+ shop.disposition=GTG_NPC_DISPOSITION_PEACEFUL;
+ CHECK(decide_one(shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_IDLE);
+
  /* Anything outside the defined values is rejected, and nothing is written. */
  GtgNpcObservation bad;
  bad=enemy; bad.disposition=3; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
@@ -128,8 +171,10 @@ int main(void) {
  bad=enemy; bad.provoked=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.crown_heat=GTG_NPC_CROWN_HEAT_MAX+1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.crown_heat=255; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
- bad=enemy; bad.reserved_a=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
- bad=enemy; bad.reserved_b=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.attack_style=3; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.ranged_ready=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.ranged_stance=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.threat_distance=NAN; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.reserved_c=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.betrayal_opportunity=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.trustworthiness=NAN; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);

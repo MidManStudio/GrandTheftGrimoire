@@ -123,6 +123,20 @@ namespace MidManStudio.Gtg.Managed.Magic
 
         public int ShotCount { get { return _flight.Count; } }
 
+        /// <summary>
+        /// Raises <see cref="Impact"/> for a shot that this class did not fly itself, such as the spell of an NPC
+        /// mage. The spell damage and the chemistry field listen to the event, so a spell cast by anything else reaches
+        /// them the same way.
+        /// </summary>
+        public static void Raise(ManagedSpellImpact impact)
+        {
+            Action<ManagedSpellImpact> handler = Impact;
+            if (handler != null)
+            {
+                handler(impact);
+            }
+        }
+
         // Static state survives a play session when domain reload is off.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()

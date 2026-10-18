@@ -56,7 +56,7 @@ namespace MidManStudio.Gtg.NPC.Systems
                     ThreatVisible = observation.ThreatVisible != 0 ? 1u : 0u,
                     HealthFraction = float.IsNaN(observation.HealthFraction) ? 1f : Math.Min(1f, Math.Max(0f, observation.HealthFraction)),
                     CanMove = identity.CanMove != 0 ? 1u : 0u,
-                    Reserved = 0
+                    ThreatDistance = 0f
                 };
             }
             cursor = (cursor + count) % all.Length;

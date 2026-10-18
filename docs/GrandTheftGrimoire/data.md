@@ -56,7 +56,7 @@ Files are in `Assets/MidManStudio/Gtg/Data/`.
 
 ### `NpcArchetypeDatabase.cs`
 
-`NpcArchetypeDefinition` and `NpcArchetypeDatabase`, for `archetypes.mdix`: `schema`, `abi_version` and an `archetypes` table of three rows.
+`NpcArchetypeDefinition` and `NpcArchetypeDatabase`, for `archetypes.mdix`: `schema`, `abi_version` and an `archetypes` table of three rows. Each row carries an `AttackStyle` (melee, ranged or hybrid, ABI v6) next to its role and backend.
 
 - The enums are the ones in `ECS/NPC/Components/NPCEnums.cs`, which `scripts/check_npc_enum_sync.py` keeps in step with the file and the Rust ABI. No second copy exists.
 - `UsesMl` and `MayUpdateWeights` are derived inside the file from the backend and the learning mode. They are read as data and not decided here.
@@ -74,5 +74,6 @@ Files are in `Assets/MidManStudio/Gtg/Data/`.
 
 ## Fixes and Problems
 
+- 2026-10-17: `NpcArchetypeDefinition` gained `AttackStyle` and `archetypes.mdix` gained the matching enum and a `createArchetype` parameter, for the attack styles of ABI v6. The file edit was not run through the real engine (see `docs/npc/mdix-authoring.md`). The baked class has a new member, so an existing baked asset reads melee until it is baked again.
 - 2026-10-07: `archetypes.mdix` declared `version -> "1.1.1"`. The engine accepts only `"1.0.0"` there, because the value is the DixScript language version, and failed with `CONFIG: Unsupported version: 1.1.1`. Unity could not have imported the file. It now declares `1.0.0`.
 - 2026-10-07: baking could not fill list members, because the serializer behind `Generate ScriptableObject` maps properties only and skips lists, so an `enemies` list would have come out empty. The package binder now does the filling. The fix is in `com.midmanstudio.mdix`, see its changelog.

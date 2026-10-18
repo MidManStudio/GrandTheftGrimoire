@@ -14,9 +14,12 @@ namespace MidManStudio.Gtg.Managed.NPC
     /// <summary>
     /// Carries out the action the Rust decision chose. Patrol walks waypoints or wanders, Attack
     /// closes in on the threat, takes the place the target's engagement gives it, circles while it
-    /// waits for a turn and hits in melee when it has one, Retreat runs away from it, Follow walks to
+    /// waits for a turn and hits in melee when it has one, Shoot does the same on the shooters' ring at
+    /// the weapon's stand-off distance and fires from there, Kite backs away from a threat that is too close
+    /// and fires on the way, Retreat runs away from it, Follow walks to
     /// the brain's Leader and stays near, and Idle, Trade, Hold, RefuseOrder, Mission and Betray stand
-    /// still. A mission and a betrayal are carried out by game code that listens to the brain.
+    /// still. An NPC that cannot move (a sentry, a shopkeeper behind a stall) stays at its post and strikes
+    /// or fires from there when the target is within its reach. A mission and a betrayal are carried out by game code that listens to the brain.
     /// It moves the NPC with a NavMeshAgent, so the scene needs a baked NavMesh. It listens to the
     /// brain and never decides anything itself.
     /// </summary>
@@ -72,6 +75,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         private ManagedNpcBrain _brain;
         private NavMeshAgent _agent;
         private ManagedHealth _health;
+        private ManagedNpcShooter _shooter;
         private NpcAction _mode = NpcAction.Idle;
         private Vector3 _home;
         private int _nextWaypoint;
@@ -82,6 +86,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         private bool _stopped = true;
         private bool _configured;
         private bool _warnedNoNavMesh;
+        private bool _warnedNoShooter;
         private bool _dead;
 
         // Where an attacker stands, see ManagedCombatEngagement.
@@ -92,6 +97,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         private int _priority = 50;
         private bool _inRange;
         private float _inRangeSince;
+        private float _settleSeconds = SettleSeconds;
         private Vector3 _lastGoal;
         private float _progressCheckTime;
         private Vector3 _progressAnchor;
@@ -105,7 +111,8 @@ namespace MidManStudio.Gtg.Managed.NPC
         private const float SlotSampleMeters = 1.5f;
         // An attacker this close to the waiting ring turns to face the target, see UpdateAttack.
         private const float EngagedMargin = 3f;
-        // A holder strikes once it is this close to its place, or after SettleSeconds in range whatever the place.
+        // A holder strikes once it is this close to its place, or after SettleSeconds in range whatever the place. A shooter
+        // comes into reach far from its place, so it is given the time to walk there on top of that.
         private const float SlotToleranceMeters = 0.6f;
         private const float SettleSeconds = 1.5f;
         // A waiter within this of its ring moves at the circling speed.
@@ -133,8 +140,14 @@ namespace MidManStudio.Gtg.Managed.NPC
         /// <summary>True while this attacker is part of its target's engagement. For debug tools.</summary>
         public bool IsEngaged { get { return _member != null; } }
 
-        /// <summary>True while this attacker holds a place to strike from. For debug tools.</summary>
+        /// <summary>True while this attacker holds a place to strike or shoot from. For debug tools.</summary>
         public bool HasAttackToken { get { return _member != null && _member.HasToken; } }
+
+        /// <summary>True while this attacker is in its target's engagement as a shooter. For debug tools.</summary>
+        public bool IsShooter { get { return _member != null && _member.Ranged; } }
+
+        /// <summary>The ranged weapon, or null for an NPC that has none. For debug tools.</summary>
+        public ManagedNpcShooter Shooter { get { return _shooter; } }
 
         /// <summary>The place the engagement gave this attacker, or its own position when it has none. For debug tools.</summary>
         public Vector3 EngagementSlot { get { return _member != null ? _engagement.SlotPosition(_member) : transform.position; } }
@@ -165,6 +178,7 @@ namespace MidManStudio.Gtg.Managed.NPC
             _brain = GetComponent<ManagedNpcBrain>();
             _agent = GetComponent<NavMeshAgent>();
             _health = GetComponent<ManagedHealth>();
+            _shooter = GetComponent<ManagedNpcShooter>();
             _home = transform.position;
             _basePriority = _agent.avoidancePriority;
             _priority = _basePriority;
@@ -257,6 +271,15 @@ namespace MidManStudio.Gtg.Managed.NPC
                     _agent.speed = _chaseSpeed;
                     _agent.stoppingDistance = SlotStoppingDistance;
                     break;
+                case NpcAction.Shoot:
+                    // Like Attack, the agent walks to a place on a ring, here the shooters' ring.
+                    _agent.speed = _chaseSpeed;
+                    _agent.stoppingDistance = SlotStoppingDistance;
+                    break;
+                case NpcAction.Kite:
+                    _agent.speed = _retreatSpeed;
+                    _agent.stoppingDistance = 0.3f;
+                    break;
                 case NpcAction.Retreat:
                     _agent.speed = _retreatSpeed;
                     _agent.stoppingDistance = 0.3f;
@@ -301,6 +324,12 @@ namespace MidManStudio.Gtg.Managed.NPC
                     break;
                 case NpcAction.Attack:
                     UpdateAttack(now);
+                    break;
+                case NpcAction.Shoot:
+                    UpdateShoot(now);
+                    break;
+                case NpcAction.Kite:
+                    UpdateKite(now);
                     break;
                 case NpcAction.Retreat:
                     UpdateRetreat(now);
@@ -402,6 +431,32 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         private void UpdateAttack(float now)
         {
+            UpdateEngaged(now, false);
+        }
+
+        private void UpdateShoot(float now)
+        {
+            if (!HasShooter())
+            {
+                WarnNoShooter();
+                if (!_stopped)
+                {
+                    Stop();
+                }
+
+                return;
+            }
+
+            UpdateEngaged(now, true);
+        }
+
+        // Attack and Shoot are the same fight on two rings. A melee attacker joins the target's engagement with the
+        // melee ring and strikes when it holds a token and the target is in reach. A shooter joins with the ring at its
+        // stand-off distance, among the other shooters, and fires from its place while the target is within the
+        // weapon's range and in the line of fire. Everything else, the facing, the circling of a waiter and the
+        // handling of a blocked place, is shared.
+        private void UpdateEngaged(float now, bool ranged)
+        {
             ManagedNpcThreatSource threat = _brain.Threat;
             if (threat == null || !threat.IsActive)
             {
@@ -426,12 +481,18 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 LeaveEngagement();
                 _engagement = engagement;
-                _member = engagement.Join(this, _brain, now, _attackRange * MeleeRingFraction, _waitDistance, _ringSpacing, _circleSpeed);
+                float ring = ranged ? _shooter.StandOffDistance : _attackRange * MeleeRingFraction;
+                _member = engagement.Join(this, _brain, now, ring, _waitDistance, _ringSpacing, _circleSpeed, ranged);
                 _hasDestination = false;
                 _nextRepathTime = 0f;
             }
 
             engagement.Refresh(now);
+
+            // An attacker that can move walks wherever its place is. One that cannot, a sentry with a bow or a shopkeeper
+            // behind a stall, stays where it stands, and strikes or fires when the target is within its reach.
+            bool mobile = _brain.CanMove;
+            float reach = ranged ? _shooter.Range : _attackRange;
 
             // Where the threat was last seen, not where it is now, so hiding works.
             Vector3 targetPosition = _brain.LastKnownThreatPosition;
@@ -455,35 +516,54 @@ namespace MidManStudio.Gtg.Managed.NPC
             toSlot.y = 0f;
             float slotDistance = toSlot.magnitude;
 
-            if (_member.HasToken && distance <= _attackRange)
+            if (_member.HasToken && distance <= reach)
             {
                 if (!_inRange)
                 {
                     _inRange = true;
                     _inRangeSince = now;
+                    _settleSeconds = ranged ? SettleSeconds + slotDistance / Mathf.Max(0.1f, _chaseSpeed) : SettleSeconds;
                 }
 
                 // Strike from the place the engagement gave. An NPC that cannot settle there within a moment strikes
                 // from where it is, so a blocked place never leaves it standing idle in reach of the target.
-                if (slotDistance <= SlotToleranceMeters || now - _inRangeSince >= SettleSeconds)
+                if (slotDistance <= SlotToleranceMeters || now - _inRangeSince >= _settleSeconds || !mobile)
                 {
                     if (!_stopped)
                     {
                         Stop();
                     }
 
-                    if (now >= _nextAttackTime)
+                    if (!ranged)
                     {
-                        _nextAttackTime = now + _attackCooldownSeconds;
-                        Hit(threat);
+                        if (now >= _nextAttackTime)
+                        {
+                            _nextAttackTime = now + _attackCooldownSeconds;
+                            Hit(threat);
+                        }
+
+                        return;
                     }
 
-                    return;
+                    if (Shoot(threat, now))
+                    {
+                        return;
+                    }
+
+                    // Something stands in the line of fire. Ask for another place on the ring and go there, so the
+                    // settling time starts again from the new place.
+                    _inRange = false;
+                    _member.Blocked = true;
                 }
             }
             else
             {
                 _inRange = false;
+            }
+
+            if (!mobile)
+            {
+                return;
             }
 
             // A waiter on its ring circles slowly. Everyone else closes in at the chase speed.
@@ -494,7 +574,7 @@ namespace MidManStudio.Gtg.Managed.NPC
                 _agent.speed = speed;
             }
 
-            bool needsToMove = slotDistance > StuckSlotDistanceMeters || (_member.HasToken && distance > _attackRange);
+            bool needsToMove = slotDistance > StuckSlotDistanceMeters || (_member.HasToken && distance > reach);
             TrackProgress(now, needsToMove);
 
             if (!_hasDestination || now >= _nextRepathTime)
@@ -517,6 +597,99 @@ namespace MidManStudio.Gtg.Managed.NPC
                     _member.Blocked = true;
                 }
             }
+        }
+
+        // Looses a shot at where the threat was last seen, aimed at the body and not at the feet. False when something
+        // stands in the line of fire. Being out of ammo or waiting on the cooldown is not a block.
+        private bool Shoot(ManagedNpcThreatSource threat, float now)
+        {
+            Vector3 aim = _brain.LastKnownThreatPosition + (threat.AimPoint - threat.transform.position);
+            return _shooter.TryFire(now, aim, threat.transform) != ManagedNpcFireResult.Blocked;
+        }
+
+        // A shooter that the threat has come too close to backs away to its stand-off distance and fires on the way. It
+        // keeps facing the threat while it walks, so it stays in view. It takes no place in the engagement, since it is
+        // not holding a position. Cornered, with no place to back into, it stands and fires.
+        private void UpdateKite(float now)
+        {
+            if (!HasShooter())
+            {
+                WarnNoShooter();
+                if (!_stopped)
+                {
+                    Stop();
+                }
+
+                return;
+            }
+
+            ManagedNpcThreatSource threat = _brain.Threat;
+            if (threat == null || !threat.IsActive)
+            {
+                if (!_stopped)
+                {
+                    Stop();
+                }
+
+                return;
+            }
+
+            Vector3 targetPosition = _brain.LastKnownThreatPosition;
+            Vector3 toTarget = targetPosition - transform.position;
+            toTarget.y = 0f;
+            float distance = toTarget.magnitude;
+
+            SetAutoRotation(false);
+            FaceTowards(toTarget);
+
+            if (!_hasDestination || now >= _nextRepathTime)
+            {
+                _nextRepathTime = now + _repathIntervalSeconds;
+                Vector3 away = -toTarget;
+                if (away.sqrMagnitude < 0.0001f)
+                {
+                    away = -transform.forward;
+                }
+
+                Vector3 wanted = targetPosition + away.normalized * _shooter.StandOffDistance;
+                wanted.y = transform.position.y;
+                Vector3 destination;
+                if (TrySample(wanted, 4f, out destination))
+                {
+                    Go(destination);
+                }
+                else if (!_stopped)
+                {
+                    Stop();
+                }
+            }
+
+            if (distance <= _shooter.Range)
+            {
+                Shoot(threat, now);
+            }
+        }
+
+        // Looked up again while it is missing, so a weapon added in code after Awake is still found.
+        private bool HasShooter()
+        {
+            if (_shooter == null)
+            {
+                _shooter = GetComponent<ManagedNpcShooter>();
+            }
+
+            return _shooter != null;
+        }
+
+        private void WarnNoShooter()
+        {
+            if (_warnedNoShooter)
+            {
+                return;
+            }
+
+            _warnedNoShooter = true;
+            Debug.LogWarning("[GTG NPC] " + name + " was told to shoot but has no ManagedNpcShooter, so it does nothing. Add the component, or set the attack style to Melee.");
         }
 
         // An attacker that is walking to its place and has not moved for _blockedSeconds is stuck, behind a neighbour or a

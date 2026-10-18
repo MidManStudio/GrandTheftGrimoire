@@ -14,7 +14,8 @@ namespace MidManStudio.Gtg.NPC.AbiTest
         private const ulong Seed = 0x47544700UL;
         private const ulong Seed2 = 0x47544701UL;
         private const ulong Seed3 = 0x47544702UL;
-        private const int Actions = 10;
+        private const ulong Seed4 = 0x47544703UL;
+        private const int Actions = 12;
         private static int failures;
 
         private static void Check(bool ok, string what)
@@ -44,6 +45,7 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                 ulong r = Mix(Seed + (ulong)i);
                 ulong r2 = Mix(Seed2 + (ulong)i);
                 ulong r3 = Mix(Seed3 + (ulong)i);
+                ulong r4 = Mix(Seed4 + (ulong)i);
                 ulong pct = r % 100;
                 uint role = pct < 12 ? 0u : pct < 50 ? 1u : pct < 62 ? 2u : pct < 82 ? 3u : pct < 90 ? 4u : 5u;
                 uint sel = (uint)((r >> 8) % 2);
@@ -56,7 +58,7 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     ThreatVisible = ((r >> 16) % 100) < 25 ? 1u : 0u,
                     HealthFraction = (float)((r >> 24) % 1001) / 1000f,
                     CanMove = (role == 0 || ((r >> 40) % 100) < 10) ? 0u : 1u,
-                    Reserved = 0,
+                    ThreatDistance = (float)((r4 >> 24) % 3001) / 100f,
                     Disposition = (byte)((role >= 2 && role <= 4) ? (d < 60 ? 0 : d < 85 ? 1 : 2) : 0),
                     Provoked = (byte)(((r2 >> 8) % 100) < 20 ? 1 : 0),
                     Level = (ushort)(1 + (r2 >> 16) % 30),
@@ -67,7 +69,10 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     PaySatisfaction = role == 5 ? (float)((r3 >> 24) % 1001) / 1000f : 0f,
                     Noise = role == 5 ? (uint)(r3 >> 32) : 0u,
                     BetrayalOpportunity = (byte)(role == 5 && (r2 >> 40) % 100 < 30 ? 1 : 0),
-                    CrownHeat = (byte)(((r2 >> 48) % 100) < 55 ? 0 : ((r2 >> 48) % 100) < 75 ? 1 : ((r2 >> 48) % 100) < 90 ? 2 : 3)
+                    CrownHeat = (byte)(((r2 >> 48) % 100) < 55 ? 0 : ((r2 >> 48) % 100) < 75 ? 1 : ((r2 >> 48) % 100) < 90 ? 2 : 3),
+                    AttackStyle = (byte)((r4 % 100) < 60 ? 0 : (r4 % 100) < 85 ? 1 : 2),
+                    RangedReady = (byte)(((r4 >> 8) % 100) < 80 ? 1 : 0),
+                    RangedStance = (byte)(((r4 >> 16) % 100) < 40 ? 1 : 0)
                 };
             }
             return pool;
@@ -78,10 +83,10 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             // 1. Layout of the C# mirror structs (explicit layout, so this checks the declarations).
             Check(Marshal.SizeOf<NPCNativeObservation>() == 64, "observation size is 64");
             Check(Marshal.SizeOf<NPCNativeDecision>() == 16, "decision size is 16");
-            string[] obsFields = { "NpcId", "Role", "Backend", "ThreatVisible", "HealthFraction", "CanMove", "Reserved",
+            string[] obsFields = { "NpcId", "Role", "Backend", "ThreatVisible", "HealthFraction", "CanMove", "ThreatDistance",
                 "Disposition", "Order", "Provoked", "CrownHeat", "Level", "OrderLevel", "Trustworthiness", "Affinity", "PaySatisfaction",
-                "Noise", "BetrayalOpportunity", "ReservedA", "ReservedB", "ReservedC" };
-            int[] obsOffsets = { 0, 8, 12, 16, 20, 24, 28, 32, 33, 34, 35, 36, 38, 40, 44, 48, 52, 56, 57, 58, 60 };
+                "Noise", "BetrayalOpportunity", "AttackStyle", "RangedReady", "RangedStance", "ReservedC" };
+            int[] obsOffsets = { 0, 8, 12, 16, 20, 24, 28, 32, 33, 34, 35, 36, 38, 40, 44, 48, 52, 56, 57, 58, 59, 60 };
             for (int i = 0; i < obsFields.Length; i++)
                 Check((int)Marshal.OffsetOf<NPCNativeObservation>(obsFields[i]) == obsOffsets[i], "observation offset of " + obsFields[i]);
             string[] decFields = { "NpcId", "Action", "Reserved" };
@@ -119,8 +124,11 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             var tiers = new ulong[4];
             foreach (var o in pool) tiers[o.CrownHeat]++;
             for (int t = 0; t < 4; t++) Check(tiers[t] > 0, "crown heat tier " + t + " occurs in the mixed pool");
-            Console.WriteLine("# mixed_actions idle={0} trade={1} patrol={2} attack={3} retreat={4} follow={5} hold={6} refuse={7} mission={8} betray={9} fnv1a=0x{10:x16}",
-                hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8], hist[9], hash);
+            var styles = new ulong[3];
+            foreach (var o in pool) styles[o.AttackStyle]++;
+            for (int t = 0; t < 3; t++) Check(styles[t] > 0, "attack style " + t + " occurs in the mixed pool");
+            Console.WriteLine("# mixed_actions idle={0} trade={1} patrol={2} attack={3} retreat={4} follow={5} hold={6} refuse={7} mission={8} betray={9} shoot={10} kite={11} fnv1a=0x{12:x16}",
+                hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8], hist[9], hist[10], hist[11], hash);
 
             // 3. Error paths through the real library.
             Check(NPCNativeLib.TryDecide(input, native, 0), "empty batch succeeds");
@@ -130,13 +138,14 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             Check(threw, "count above MaxBatch throws");
             Array.Copy(pool, 0, input, 0, 2);
             input[1].Role = 99;
-            var sentinel = new NPCNativeDecision { NpcId = 999, Action = 9, Reserved = 9 };
+            var sentinel = new NPCNativeDecision { NpcId = 999, Action = 77, Reserved = 9 };
             native[0] = sentinel; native[1] = sentinel;
             Check(!NPCNativeLib.TryDecide(input, native, 2), "invalid role is rejected");
-            Check(native[0].Action == 9 && native[1].Action == 9, "rejected batch leaves outputs untouched");
+            Check(native[0].Action == 77 && native[1].Action == 77, "rejected batch leaves outputs untouched");
 
-            // Each field added in version 3 is validated by the native side. A bad value is rejected as a whole.
-            string[] badNames = { "disposition 3", "order 6", "provoked 2", "crown heat 4", "reserved a", "reserved c", "opportunity 2", "trust nan", "affinity infinity" };
+            // Each field added since version 3 is validated by the native side. A bad value is rejected as a whole.
+            string[] badNames = { "disposition 3", "order 6", "provoked 2", "crown heat 4", "attack style 3", "reserved c", "opportunity 2", "trust nan", "affinity infinity",
+                "ranged ready 2", "ranged stance 2", "threat distance nan", "threat distance infinity" };
             for (int k = 0; k < badNames.Length; k++)
             {
                 Array.Copy(pool, 0, input, 0, 2);
@@ -146,15 +155,19 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     case 1: input[1].Order = 6; break;
                     case 2: input[1].Provoked = 2; break;
                     case 3: input[1].CrownHeat = 4; break;
-                    case 4: input[1].ReservedA = 1; break;
+                    case 4: input[1].AttackStyle = 3; break;
                     case 5: input[1].ReservedC = 1; break;
                     case 6: input[1].BetrayalOpportunity = 2; break;
                     case 7: input[1].Trustworthiness = float.NaN; break;
-                    default: input[1].Affinity = float.PositiveInfinity; break;
+                    case 8: input[1].Affinity = float.PositiveInfinity; break;
+                    case 9: input[1].RangedReady = 2; break;
+                    case 10: input[1].RangedStance = 2; break;
+                    case 11: input[1].ThreatDistance = float.NaN; break;
+                    default: input[1].ThreatDistance = float.PositiveInfinity; break;
                 }
 
                 native[0] = sentinel; native[1] = sentinel;
-                Check(!NPCNativeLib.TryDecide(input, native, 2) && native[0].Action == 9 && native[1].Action == 9, "native rejects " + badNames[k] + " and writes nothing");
+                Check(!NPCNativeLib.TryDecide(input, native, 2) && native[0].Action == 77 && native[1].Action == 77, "native rejects " + badNames[k] + " and writes nothing");
             }
 
             // The refusal gap depends on the order type, and C# and Rust agree on it.
@@ -179,6 +192,73 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     Check(NPCManagedFallback.Decide(input[0]).Action == expected, "fallback: role " + role + " retaliatory at crown heat " + tier + " gives " + expected);
                 }
             }
+
+            // Attack styles. A hostile fighter that sees a threat at full health: melee always attacks, a ranged one
+            // shoots, backs away inside the kite line and falls back when it has nothing to shoot, and a hybrid
+            // switches on the distance band, holds its stance in the buffer, and fights by hand when it is empty.
+            // Each row is style, ready, stance, can move, distance, expected action. C# and Rust agree on every row.
+            // Distance 0 is "unknown", and a distance below 0 reaches the library as unknown too.
+            object[][] styleRows =
+            {
+                new object[] { 0, 1, 0, 1, 2f, 3 }, new object[] { 0, 0, 1, 0, 50f, 3 },
+                new object[] { 1, 1, 0, 1, 5.99f, 11 }, new object[] { 1, 1, 0, 1, 6f, 10 }, new object[] { 1, 1, 0, 1, 0f, 10 },
+                new object[] { 1, 1, 0, 0, 2f, 10 }, new object[] { 1, 0, 0, 1, 20f, 4 }, new object[] { 1, 0, 0, 0, 20f, 0 },
+                new object[] { 2, 1, 0, 1, 3.99f, 3 }, new object[] { 2, 1, 0, 1, 4f, 3 }, new object[] { 2, 1, 1, 1, 4f, 3 },
+                new object[] { 2, 1, 0, 1, 8f, 10 }, new object[] { 2, 1, 0, 1, 7.99f, 3 }, new object[] { 2, 1, 1, 1, 7.99f, 10 },
+                new object[] { 2, 1, 1, 1, 4.01f, 10 }, new object[] { 2, 1, 0, 1, 4.01f, 3 },
+                new object[] { 2, 1, 0, 1, 0f, 3 }, new object[] { 2, 1, 1, 1, 0f, 10 }, new object[] { 2, 0, 1, 1, 20f, 3 }, new object[] { 2, 0, 0, 1, 20f, 3 }
+            };
+            foreach (object[] row in styleRows)
+            {
+                input[0] = new NPCNativeObservation
+                {
+                    NpcId = 31, Role = 3, Backend = 0, ThreatVisible = 1, HealthFraction = 1f, CanMove = (uint)(int)row[3], Level = 10,
+                    AttackStyle = (byte)(int)row[0], RangedReady = (byte)(int)row[1], RangedStance = (byte)(int)row[2], ThreatDistance = (float)row[4]
+                };
+                int want = (int)row[5];
+                string label = "style " + row[0] + " ready " + row[1] + " stance " + row[2] + " can move " + row[3] + " distance " + row[4];
+                Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == want, "native: " + label + " gives " + want + ", got " + native[0].Action);
+                Check(NPCManagedFallback.Decide(input[0]).Action == want, "fallback: " + label + " gives " + want);
+            }
+
+            // Shopkeepers. A merchant trades with nothing in view and stands still with a threat in view. Only one with the
+            // retaliatory disposition that has been attacked fights back, in its own attack style, and at full health a
+            // stationary one fights too. Each row is disposition, provoked, threat visible, can move, style, ready,
+            // distance, expected action. The mixed pool above never gives a merchant a disposition, so these rows are the
+            // check that C# and Rust agree on the rule.
+            object[][] shopRows =
+            {
+                new object[] { 1, 0, 1, 0, 0, 0, 0f, 0 }, new object[] { 1, 1, 1, 0, 0, 0, 0f, 3 }, new object[] { 1, 1, 1, 1, 0, 0, 0f, 3 },
+                new object[] { 1, 1, 0, 1, 0, 0, 0f, 1 }, new object[] { 1, 0, 0, 1, 0, 0, 0f, 1 },
+                new object[] { 0, 1, 1, 1, 0, 0, 0f, 0 }, new object[] { 2, 1, 1, 1, 0, 0, 0f, 0 }, new object[] { 0, 0, 1, 1, 0, 0, 0f, 0 },
+                new object[] { 1, 1, 1, 1, 1, 1, 20f, 10 }, new object[] { 1, 1, 1, 1, 1, 1, 3f, 11 }, new object[] { 1, 1, 1, 0, 1, 1, 3f, 10 },
+                new object[] { 1, 1, 1, 1, 1, 0, 3f, 4 }, new object[] { 1, 1, 1, 0, 1, 0, 3f, 0 },
+                new object[] { 1, 1, 1, 1, 2, 1, 2f, 3 }, new object[] { 1, 1, 1, 1, 2, 1, 12f, 10 }, new object[] { 1, 1, 1, 1, 2, 0, 12f, 3 },
+                new object[] { 0, 1, 1, 1, 1, 1, 20f, 0 }, new object[] { 1, 0, 1, 1, 1, 1, 20f, 0 }, new object[] { 2, 1, 1, 1, 2, 1, 12f, 0 }
+            };
+            foreach (uint backend in new uint[] { 0, 1, 2 })
+            {
+                foreach (object[] row in shopRows)
+                {
+                    input[0] = new NPCNativeObservation
+                    {
+                        NpcId = 33, Role = 0, Backend = backend, ThreatVisible = (uint)(int)row[2], HealthFraction = 1f, CanMove = (uint)(int)row[3], Level = 10,
+                        Disposition = (byte)(int)row[0], Provoked = (byte)(int)row[1],
+                        AttackStyle = (byte)(int)row[4], RangedReady = (byte)(int)row[5], ThreatDistance = (float)row[6]
+                    };
+                    int want = (int)row[7];
+                    string label = "shopkeeper backend " + backend + " disposition " + row[0] + " provoked " + row[1] + " threat " + row[2] + " can move " + row[3] +
+                        " style " + row[4] + " ready " + row[5] + " distance " + row[6];
+                    Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == want, "native: " + label + " gives " + want + ", got " + native[0].Action);
+                    Check(NPCManagedFallback.Decide(input[0]).Action == want, "fallback: " + label + " gives " + want);
+                }
+            }
+
+            input[0] = new NPCNativeObservation { NpcId = 32, Role = 3, Backend = 0, ThreatVisible = 1, HealthFraction = 1f, CanMove = 1, Level = 10, AttackStyle = 1, RangedReady = 1, ThreatDistance = 2f };
+            Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == 11, "native: a kiting ranged fighter at 2 m backs away");
+            input[0].ThreatDistance = -2f;
+            Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == 10, "native: a negative distance counts as unknown, so a ranged fighter shoots");
+            Check(NPCManagedFallback.Decide(input[0]).Action == 10, "fallback: a negative distance counts as unknown, so a ranged fighter shoots");
 
             // The betrayal line, exactly. A companion with no loyalty has a chance of 0.5, so the roll
             // (noise >> 8 over 2^24) must be below 0.5. A roll exactly on the line does not betray.

@@ -19,6 +19,13 @@ namespace MidManStudio.Gtg.NPC.Native
         private static readonly float LoyaltyCeiling = 0.5f;
         private static readonly float MaxBetrayChance = 0.5f;
 
+        // Same values as KITE_DISTANCE, HYBRID_MELEE_DISTANCE and HYBRID_RANGED_DISTANCE in npc-behavior. The decision
+        // only compares them, never adds or multiplies, so the results match the Rust side exactly. They are internal so
+        // the Managed shooter can keep its stand-off distance clear of the kite line, see ManagedNpcShooter.
+        internal static readonly float KiteDistance = 6f;
+        internal static readonly float HybridMeleeDistance = 4f;
+        internal static readonly float HybridRangedDistance = 8f;
+
         // How many levels above its own a companion still accepts an order of this type. Same as refuse_gap().
         internal static int RefuseGap(NpcOrder order)
         {
@@ -70,7 +77,7 @@ namespace MidManStudio.Gtg.NPC.Native
             switch (role)
             {
                 case NpcRole.Merchant:
-                    action = threat ? NpcAction.Idle : NpcAction.Trade;
+                    action = Merchant(o, threat, mobile, health);
                     break;
                 case NpcRole.Civilian:
                     action = threat && mobile ? NpcAction.Retreat : Wander(mobile);
@@ -105,6 +112,16 @@ namespace MidManStudio.Gtg.NPC.Native
         // WANTED_CROWN_HEAT in npc-behavior.
         internal const int WantedCrownHeat = 1;
 
+        // A shopkeeper trades when nothing threatens it and stands still when something does. One with the retaliatory
+        // disposition that has been attacked fights back in its own attack style, as a retaliatory guard does. Same as
+        // merchant() in npc-behavior.
+        private static NpcAction Merchant(NPCNativeObservation o, bool threat, bool mobile, float health)
+        {
+            if (!threat) return NpcAction.Trade;
+            if ((NpcDisposition)o.Disposition == NpcDisposition.Retaliatory && o.Provoked != 0) return Fight(o, mobile, health);
+            return NpcAction.Idle;
+        }
+
         private static NpcAction Combatant(NPCNativeObservation o, bool threat, bool mobile, float health)
         {
             if (!threat) return Wander(mobile);
@@ -138,8 +155,38 @@ namespace MidManStudio.Gtg.NPC.Native
         private static NpcAction Fight(NPCNativeObservation o, bool mobile, float health)
         {
             if (health < 0.2f && mobile) return NpcAction.Retreat;
-            if ((DecisionBackend)o.Backend == DecisionBackend.StateMachine) return NpcAction.Attack;
-            return mobile && 1f - health > 0.6f + 0.4f * health ? NpcAction.Retreat : NpcAction.Attack;
+            if ((DecisionBackend)o.Backend == DecisionBackend.StateMachine) return Engage(o, mobile);
+            return mobile && 1f - health > 0.6f + 0.4f * health ? NpcAction.Retreat : Engage(o, mobile);
+        }
+
+        // The distance to the threat is known when it is a positive finite number. Zero, a negative number and a
+        // number that is not finite all mean unknown. Same as known_distance() in npc-behavior.
+        private static bool DistanceKnown(float distance)
+        {
+            return !float.IsNaN(distance) && !float.IsInfinity(distance) && distance > 0f;
+        }
+
+        // How a fighter that has decided to attack does it, by its style. Same as engage() in npc-behavior.
+        private static NpcAction Engage(NPCNativeObservation o, bool mobile)
+        {
+            var style = (AttackStyle)o.AttackStyle;
+            if (style == AttackStyle.Melee) return NpcAction.Attack;
+            bool ready = o.RangedReady != 0;
+            if (style == AttackStyle.Ranged)
+            {
+                if (!ready) return mobile ? NpcAction.Retreat : NpcAction.Idle;
+                if (mobile && DistanceKnown(o.ThreatDistance) && o.ThreatDistance < KiteDistance) return NpcAction.Kite;
+                return NpcAction.Shoot;
+            }
+
+            if (!ready) return NpcAction.Attack;
+            if (DistanceKnown(o.ThreatDistance))
+            {
+                if (o.ThreatDistance <= HybridMeleeDistance) return NpcAction.Attack;
+                if (o.ThreatDistance >= HybridRangedDistance) return NpcAction.Shoot;
+            }
+
+            return o.RangedStance != 0 ? NpcAction.Shoot : NpcAction.Attack;
         }
     }
 

@@ -74,6 +74,8 @@ missing script. Delete it, or switch the define back.
 8. For a companion, choose the role Companion, set its Level, its Trustworthiness, Affinity and PaySatisfaction, and set its Leader to the player object. Give it orders from code with `brain.SetOrder(NpcOrder.Raid, 12)` and listen to `brain.OrderRefused` and `brain.Betrayed`. For a mission, resolve it with `brain.TryResolveMission` when it happens off screen. No UI for orders exists yet. A companion with no order follows its leader.
 9. For a non-hostile NPC, set its Disposition. Retaliatory ignores the player until it has been hit, and Peaceful runs and never fights.
 10. To change how a group fights, use the two Engagement fields on the `ManagedNpcThreatSource` of the target (the player). Max Melee Attackers (3) is how many NPCs may strike at once, and zero lets everyone strike. Attacker Rotation Seconds (5) is how long a striker keeps its turn before a waiting NPC gets it, and zero lets a striker keep it. The Engagement fields on each `ManagedNpcActor` set the waiting ring, the spacing and the circling speed. Select an attacker with the NPC debugger's Ranges switch on to see its place: a red ring means it holds a turn, an amber ring means it is waiting.
+11. For an archer, a crossbow guard or a mage, set the brain's Attack Style to Ranged, and add a `ManagedNpcShooter` to the same object (the brain warns once if it is missing). Pick the kind (Projectile for arrows and bolts, Spell for a mage and then the spell), the range, the stand-off distance, the cooldown and the ammo. A quiver does not refill (regeneration 0), a mage sets seconds per cast so its mana returns. The NPC needs `ManagedNpcActor` to move and fire. For a hybrid set the style to Hybrid, which shoots from afar, fights by hand close up and when it has nothing left to shoot. The target's `ManagedNpcThreatSource` has two more Engagement fields: Max Ranged Attackers (4) and Ranged Rotation Seconds (5), a pool of their own so archers never keep swordsmen from the target. Arrows and spells hurt anything with a `ManagedHealth` (or any `IManagedDamageable`) they hit, other NPCs included. Nothing needs adding to the scene for the shots themselves: the first shot creates a hidden `GTG NPC Shots` object.
+12. For a shopkeeper that fights back when attacked, give the merchant `ManagedNpcActor` and the Retaliatory disposition. A hostile or peaceful shopkeeper does not fight. A shopkeeper with Can Move off stays behind its stall and strikes (or fires, with a shooter) at what is in reach. A crossbow shopkeeper takes the Ranged style and a `ManagedNpcShooter`. The shop UI does not refuse service while its keeper is provoked, because that rule is not built.
 
 ### Scene setup (Managed)
 
@@ -217,7 +219,7 @@ the arrows pointing one way, and put a new link in this table when it is added.
 |---|---|
 | `Economy`, `Flags`, `Health`, `Rendering`, `CharacterController`, `Missions` | nothing |
 | `Items` | `Data`, in two files: the catalog adapter and `ManagedPlayerItemBag` |
-| `NPC` | `Health` |
+| `NPC` | `Health`; `Crown` in the brain, which reads the tier of the region it stands in; `Magic` and `Rendering` in `ManagedNpcShooter.cs`, `ManagedNpcShots.cs` and `ManagedNpcShotDriver.cs` only (the spell table, the flight and the sphere batch) |
 | `Crown` | `Health`, `NPC`; `Hud` in `ManagedCrownHudHeat.cs` only, which implements the interface of `ManagedHudHeatSource.cs` |
 | `Magic` | `CharacterController`, `Economy`, `Health`, `Rendering` |
 | `Chemistry` | `Magic`, `Rendering` |
@@ -598,6 +600,9 @@ GameObject per shot.
 - A shot point inside a collider cannot sweep correctly, so that cast detonates at
   once.
 - A shot that runs out of SP collapses where it is and the payload releases there.
+- `Raise(impact)` (public, static) raises `Impact` for a spell this class did not fly itself, the
+  spell of an NPC mage. The spell damage and the chemistry field listen to the event, so they treat
+  it like any other impact. It does nothing when nobody listens. See `ManagedNpcShots.cs`.
   This makes a miss visible and also shows the chemistry working on open ground. It
   replaces the fixed lifetime and the `_detonateAtRangeEnd` switch.
 - A shot dims to 35 percent brightness and shrinks to 60 percent size as its SP
@@ -1569,6 +1574,8 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - The static list is cleared at `SubsystemRegistration`, as in `ManagedSpellCaster`.
 - `Damageable` is the `IManagedDamageable` on the object or a parent. An NPC melee hit uses it, so a source without health can be seen but not hurt.
 - Each source owns the engagement of the NPCs that attack it, created on first use (see `ManagedCombatEngagement.cs`). `MaxMeleeAttackers` (default 3, zero is unlimited) and `AttackerRotationSeconds` (default 5, zero is no rotation) live here because the limit belongs to the target, not to the attackers. `AttackerCount` and `StrikingCount` are read-only for tests and debug tools. Negative values clamp to zero.
+- Shooters have a pool of their own on the same target: `MaxRangedAttackers` (default 4, zero is unlimited) and `RangedRotationSeconds` (default 5, zero is no rotation). `AttackerCount` counts melee attackers and shooters together, `StrikingCount` counts only the melee attackers that hold a place, and `ShooterCount` and `ShootingCount` are the same two numbers for shooters. A shooter never takes a melee token and a swordsman never takes a shooter's, so a crowd of archers does not keep the swordsmen from the target (owner answer: shooters get their own pool and an outer ring, separate from the melee limit). The 4 and the 5 s are placeholders.
+- `AimPoint` is the middle of the visible points (the body, not the feet), or the transform position when there are none. A shooter aims at the last seen position plus the offset of the aim point from the transform, so it shoots at the chest of where the target was.
 
 ### `ManagedNpcSight.cs`
 
@@ -1582,7 +1589,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 
 ### `ManagedNpcBrain.cs`
 
-**What it does:** One NPC. It holds role, backend, can-move, learning mode, disposition, level, the standing order and the sight settings. It builds the 64 byte observation for the Rust decision and stores the action that comes back. It raises `ActionChanged` when the action changes and `OrderRefused` when a companion declines an order. It does not move, fight or trade.
+**What it does:** One NPC. It holds role, backend, can-move, learning mode, disposition, level, the standing order and the sight settings. It builds the 64 byte observation for the Rust decision and stores the action that comes back. It also holds the attack style (melee, ranged or hybrid) and tells Rust how far the threat is and whether the NPC has anything to shoot. It raises `ActionChanged` when the action changes and `OrderRefused` when a companion declines an order. It does not move, fight or trade.
 
 **Decisions:**
 - Movement, combat, animation and trading stay out of this file on purpose. Rust chooses, other components act, as in the ECS design.
@@ -1604,6 +1611,9 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - A refusal always clears the order and raises `OrderRefused`, even twice in a row. The order is already cleared when the event fires, so a listener can give a new one. A refusal result for a companion that has no order any more raises no event.
 - A companion never sees its `Leader`, or anything above or below it, as a threat. A companion with no leader warns once and sees the player as a threat. There is no faction system, so a companion sees no enemy at all today: only the player has a threat source. Companion combat waits for factions.
 - The Inspector tooltip says the refusal gap depends on the order type. The gaps live in Rust (`refuse_gap`) and in the C# fallback, and CI compares them on 16,384 NPCs.
+- Attack style (ABI version 6). `AttackStyle` is an Inspector setting, melee by default, and is sent as `attack_style`. A ranged or hybrid brain looks for a `ManagedNpcShooter` on its object (again each tick while it is missing, so one added in code after `Awake` is found), and sends `ranged_ready` as the shooter's `IsReady`. With no shooter it warns once and sends not ready, which makes a ranged fighter retreat and a hybrid fight by hand, the two outcomes the rules give for an empty quiver. `ranged_stance` is true while the last action was Shoot or Kite, which is how a hybrid keeps its stance between its two distances (the game keeps this memory, the decision keeps none). A melee brain sends zeros for the three shooting fields.
+- `threat_distance` is the distance on the ground plane to where the threat was last seen, so height is not part of it and a target on a roof is as far as one below it. It is at least 0.01, so a known distance is never taken for an unknown one, and zero when no threat is in view. It is sent for every NPC, and only ranged and hybrid fighters read it.
+- Shopkeepers (ABI version 6). A merchant with the Retaliatory disposition that was hurt (provoked, see above) now fights back in its own attack style, which Rust decides. Nothing changes in the brain for this, it only sends the same fields. Provoked is global, not per target: a shopkeeper hurt by anyone but its own side fights whatever it sees next, which the actor then aims at the nearest or the sticky threat as usual. Hostile and peaceful merchants are unchanged.
 - Crown Heat (ABI version 5). A guard sends the tier of the `ManagedCrownRegion` that holds its position as `CrownHeat`, and every other role sends 0, so only guards can react. Outside every region the tier is 0. The tier is read when the observation is built, so a guard reacts at the next tick after the tier changes. When something hurts the brain, `OnDamaged` hands the hit to `ManagedCrownRegion.ReportHurt`, which decides whether it is a crime. `CrimeRepeatTime` is internal state of that check: the earliest time another hit on this NPC counts as a new assault.
 ### `ManagedCombatEngagement.cs`
 
@@ -1617,11 +1627,13 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - The ring is centred on where the freshest sighting among the attackers put the target. Each attacker saw the target within the lingering time, so nobody learns more than it would have known alone, and hiding still works because the rings stay on the last seen position.
 - A member that cannot make progress reports itself blocked (the actor does this, see below). The next pass shifts its place along the ring by 0.6 rad for 3 s. The first direction is chosen by the NPC id parity so two neighbours that block each other do not both step the same way. A repeated block inside the window turns the step around and grows it by half, to a limit of 1.8 rad. When the time is up the bias ends and the member goes back to its place.
 - A new member starts as a waiter and walks to the waiting ring along the line it stands on, or stays where it is when it is already closer. The first pass comes 0.2 s after the first join, when the others that decided in the same tick have joined too, so the attackers are weighed together and the first to join gets no head start. That delay is the attackers' reaction time.
+- Shooters (ABI version 6) are a second class of member with a pool of their own. A shooter joins with its stand-off distance as the ring radius (12 m by default), so its holders sit on a ring of that size, and its waiters on a ring 2.5 m wider (the same waiting distance). The pool has its own limit (`MaxRangedAttackers`, 4) and rotation (`RangedRotationSeconds`, 5 s), with the same rules as the melee pool: longest waiting first, give a token up after the rotation time and queue behind the others, take tokens back from the farthest when the limit is lowered. A pass assigns tokens for each pool separately and spaces the holders and the waiters of each class evenly on its own ring, so four rings are filled each pass (melee holders, melee waiters, shooter holders, shooter waiters). `Join` without the extra flag is a swordsman, so the old call still works.
+- `TokenHolderCount` counts melee holders only, and `ShooterTokenHolderCount` and `ShooterCount` count shooters. A shooter switching between Attack and Shoot (a hybrid) leaves the engagement and joins again as the other class, which means it loses its place and queues. That is deliberate, because the two classes have different rings, and it is a cost to watch if hybrids switch often.
 - Cost: one pass over two hundred attackers took about 0.1 ms in the harness. The work is a sort by bearing of each group (an insertion sort, the groups are small) and a loop. No allocations after the arrays have grown.
 
 ### `ManagedNpcActor.cs`
 
-**What it does:** Carries out the action Rust chose, driving a `NavMeshAgent`. Patrol walks the waypoints in order, or wanders near where the NPC began. Attack joins the target's engagement, walks to its place and hits the target in melee when it holds a turn. Retreat runs directly away. Follow walks to the brain's `Leader` and stops 3 m from it. Idle, Trade, Hold and RefuseOrder stand still. It raises `Attacked` for every hit.
+**What it does:** Carries out the action Rust chose, driving a `NavMeshAgent`. Patrol walks the waypoints in order, or wanders near where the NPC began. Attack joins the target's engagement, walks to its place and hits the target in melee when it holds a turn. Shoot does the same on the shooters' ring at the weapon's stand-off distance and fires from there. Kite backs away from a threat that came too close and fires on the way. Retreat runs directly away. Follow walks to the brain's `Leader` and stops 3 m from it. Idle, Trade, Hold and RefuseOrder stand still. It raises `Attacked` for every hit.
 
 **Decisions:**
 - The actor never decides. It listens to `ManagedNpcBrain.ActionChanged`, so the Rust decision stays the single source of what an NPC does.
@@ -1636,12 +1648,64 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - The engagement is left when the mode changes, when the NPC dies and when the component is disabled, so no dead or retreating NPC keeps holding a token.
 - Follow stops inside `_followDistance` (3 m) and starts again only when the leader is more than a meter farther, so a follower does not shuffle at the edge. A follower with no leader stands still.
 - A patrol stop lasts `_pauseSeconds`. A wander point must be on the NavMesh, otherwise the NPC stays where it is until the next try.
+- Attack and Shoot are one routine on two rings (`UpdateEngaged`). A shooter joins the engagement as a shooter, walks to its place on the ring at the weapon's stand-off distance, and fires when it holds a shooter token, the target is within the weapon's range, and the settling rule below lets it. Everything else (facing, circling of waiters, blocked places, stuck detection, leaving the engagement) is shared with melee.
+- Shooters take a long walk into reach. The melee settling shortcut (strike after 1.5 s in range whatever the place) would have an archer fire 14 m out, so a shooter's settling time is that plus the time to walk to its place at the chase speed (`_settleSeconds`). This was a real bug in the first version, found by the checks (see Fixes and Problems).
+- A shot is aimed at the last seen position plus the chest offset of the target. `TryFire` refuses when something stands in the straight line of fire, and then the actor marks itself blocked and asks the engagement for another place, so an archer behind a pillar sidesteps. Being out of ammo or waiting on the cooldown is not a block. A hit on the target itself, or on any part of it, does not block.
+- An NPC that cannot move (`Can Move` off: a sentry, a shopkeeper behind a stall) stays where it stands. Before version 6 it still walked toward its place, which made a stationary guard chase. It now strikes when the target is in melee reach, and fires when the target is within the weapon's range, and does not move otherwise. This changes the behavior of stationary guards and merchants that fight, for melee as well.
+- Kite (`UpdateKite`) takes no place in the engagement, because a retreating shooter is not holding a position. It turns to face the threat and switches the agent's own rotation off (the same reason as in melee), so it keeps the target in its view cone while it walks backwards. Every repath interval it picks a point on the line from the threat through itself, one stand-off distance from the last seen position, snapped to the NavMesh within 4 m, and fires whenever the target is within the weapon's range. With no NavMesh point to back into it stops and fires, so a cornered archer still shoots. It moves at the retreat speed.
+- Stand-off distance and the kite line: the decision tells a ranged fighter to kite when the threat is closer than 6 m, so the shooter's stand-off distance is kept at least 7 m (`OnValidate` in `ManagedNpcShooter`) and at most its range. Otherwise an archer standing at its ring would back away, be told to shoot, walk back and back away again.
+- A Shoot or Kite action with no `ManagedNpcShooter` warns once and stands still.
 - A dead NPC stops. It is destroyed after `_removeAfterDeathSeconds`, and zero leaves the body.
 - Every NPC with an actor runs a small `Update`. The work per frame is a few comparisons, and the agent does the movement.
 
+### `ManagedNpcBallistics.cs`
+
+**What it does:** The aiming maths for a shot that gravity bends. `TryLaunchDirection(from, to, speed, gravity, out direction)` returns the direction that makes a shot of that speed pass through the point. `Spread(direction, degrees, unitX, unitY)` bends a direction by up to the spread angle. Pure arithmetic, no scene access.
+
+**Decisions:**
+- It takes the flatter of the two paths that reach the point, so a shot does not lob when it can fly level. Zero or negative gravity flies straight along the line.
+- It returns false, and the direction is then the straight line, when the point is out of reach at that speed, when it is straight above or below (less than 1 cm of ground distance), or when the speed is zero. The shooter treats false as a blocked shot and fires nothing. At 35 m/s and half of world gravity the reach on level ground is v squared over g, about 249.7 m, and the checks pin 249 m as reachable and 250 m as not.
+- The spread takes a point in the unit disc for each shot (the shooter draws it with `Random.insideUnitCircle`), so the offset is uniform over the cone and never more than the spread angle. A zero spread returns the direction unchanged and draws nothing, so a test with no spread is exact. The random numbers are Unity's, not seeded, so a run with spread is not reproducible, unlike the decision's noise.
+
+### `ManagedNpcShooter.cs`
+
+**What it does:** The ranged weapon of one NPC: a bow, a crossbow or a staff. It holds the ammo, the cooldown and the aim, and looses the shot when the actor asks (`TryFire`). It decides nothing: Rust chooses Shoot or Kite and the actor picks the place. Put it on any NPC whose attack style is Ranged or Hybrid. The brain reads `IsReady` as `ranged_ready`.
+
+**Decisions:**
+- One pool of shots serves arrows, bolts and the casts of a mage: a capacity (12, starts full) and optional regeneration in seconds per shot (zero means it never refills, as a quiver does, and a mage sets a time so its mana comes back). Parts of a shot accumulate, and `IsReady` is at least one whole shot. Treating arrows and mana as one pool is my reading of "ammo or mana", and the numbers are placeholders.
+- `TryFire` checks in this order: no ammo (`NoAmmo`), the cooldown (`Waiting`), the line of fire, a free place to spawn the shot, the aim solution, then the air is not full. Only a shot that leaves spends a unit and starts the cooldown. A blocked shot costs nothing, and neither does one refused because 256 shots are already in the air.
+- The line of fire is a straight ray from the shot point to the aim point, ignoring the shooter's own colliders. It is blocked unless the first thing it meets belongs to the threat. The straight line is used for arcing arrows too, so a shooter never lobs over a wall (an interpretation: it is the cautious choice and the real arc would need a second solve and sweep). A body in the way blocks, so a guard behind another guard does not fire through him.
+- An arrow or bolt is aimed with gravity (`_projectileGravityScale`, half of world gravity by default) so it arcs onto the target, and gets the spread. A spell flies straight along the line to the target. For a spell the shot is a full vessel's worth of SP of that spell, the same numbers the player's belt gives a new vessel, and the turn rate and target are zeroed, so a spell that steers (Seeker) flies straight for an NPC. NPC steering is not built.
+- The shot point is an offset in the NPC's local space (0.3 right, 1.4 up, 0.5 forward), not a child object. A shot that would spawn inside a collider is refused as blocked.
+- `Range` (20 m) is how far the NPC fires. `StandOffDistance` (12 m) is where it takes its ring. `OnValidate` keeps the range at least 7 m (the kite line of 6 m from the decision, plus a 1 m margin) and the stand-off between 7 m and the range. The kite distance is read from `NPCManagedFallback.KiteDistance`, which is a copy of the Rust constant and must be changed by hand with it.
+- `Fired` is raised for every shot, for an animation or a sound. Nothing listens yet. `AddAmmo` takes shots away with a negative number and `Refill` fills the pool. Both work before `Awake` has run, for a shooter made in code.
+- All numbers (range, stand-off, cooldown 1.5 s, spread 2 degrees, speed 35 m/s, damage 12, radius 0.1 m) are placeholders for balance work.
+
+### `ManagedNpcShots.cs`
+
+**What it does:** Every shot an NPC has in the air: the arrows and bolts of archers and crossbow guards, and the spells of mages. They fly through one `ManagedSpellFlight`, the same flight code the player's spells use, so a shot is a few array entries and not a GameObject. An arrow or bolt that hits hurts what it hit. A spell that hits or runs out of SP raises the same `Impact` event as the player's spells, through `ManagedSpellCaster.Raise`, so the spell damage and the chemistry field treat it like any other impact.
+
+**Decisions:**
+- At most 256 shots at once (`MaxShots`). A shooter whose shot does not fit keeps its ammo and tries again.
+- Each step sweeps a sphere from the old position to the new one (a sphere of the arrow's radius, 0.1 m by default, or the spell's sweep radius), so a fast shot cannot pass through a thin collider. The sweep ignores triggers, skips the colliders of the shooter itself (restarting just past them, up to four times) and uses `HitMask`, every layer by default.
+- An arrow or bolt is unpowered: it carries one point of SP that never burns, so it ends on a hit or at its time cap (4 s), and a spent arrow just drops. A spell that runs out of SP collapses where it is and releases its payload there, as the player's does.
+- Damage goes through `IManagedDamageable` on the collider or a parent, and a body that says it is down is not hurt at all, whatever it would do with the hit. Arrows and spell explosions hurt anything with a damageable, other NPCs and the shooter's allies included, because there are no factions yet. Spell damage goes through the existing `ManagedSpellDamage`, so the mage is not hurt by its own explosion unless `ManagedSpellDamage.HurtCaster` is set.
+- The side arrays (source, damage, radius, diameter, color) move in step with the flight store when a shot is removed (a swap with the last one), so index i always describes the same shot. A check covers each array.
+- `FillBatch` writes one sphere per shot into a `ManagedSphereBatch`: an arrow as a sphere of its diameter and color (there is no arrow model), a spell at its own size and color, dimmer and smaller as its SP drains (down to 35 percent brightness and 60 percent size, as the player's are).
+- The store is static, created by the first shot, and cleared at `SubsystemRegistration` and when its driver is destroyed.
+
+### `ManagedNpcShotDriver.cs`
+
+**What it does:** The hidden object behind `ManagedNpcShots`, named `GTG NPC Shots`. `Update` steps the shots by the frame time, and `LateUpdate` fills one `ManagedSphereBatch` and draws it. The first shot creates it, nobody adds it to a scene. When it is destroyed, for instance on a scene change, the batch is disposed and the shots in the air go with it.
+
+**Decisions:**
+- It is `internal sealed`, and `ManagedNpcShots` is the only thing that knows it exists.
+- The step is the frame time, so a long frame makes a long step. The sweep covers the whole segment, so a long step cannot tunnel through a thin collider, but an arrow can reach its time cap sooner in game time than in frames.
+- Without a physics world or a batch material in the harness the batch is a stub that records what was added, so the drawing itself is not checked, only what is handed to it.
+
 ### `ManagedNpcDebugView.cs`
 
-**What it does:** Editor-only drawing and text for the NPC debugger, in `Managed/NPC/Editor/` so it compiles into `Assembly-CSharp-Editor` and never reaches a build. It draws one NPC in the Scene view: a label, the path to the destination, a marker on the destination, the patrol route with numbered stops, the wander, attack or retreat range, the sight cone, and a cross where the threat was last seen. Colors follow the action: grey Idle, cyan Trade, green Patrol, red Attack, amber Retreat, blue Follow, purple Hold, pink RefuseOrder, teal Mission, dark red Betray. A companion's line shows its level, order, loyalty and whether it could betray, a non-hostile disposition is named, and provoked is shown. A guard that stands in a region with Crown Heat adds `crown` and the tier name (wanted, hunted, outlaw) to its line. A follower draws a dotted line to its leader and a ring of the follow distance around the leader. An attacker that is part of an engagement shows `striking` or `waiting` in its line, and with the Ranges switch on it draws a ring at its place with a dotted line to it, red for a holder and amber for a waiter.
+**What it does:** Editor-only drawing and text for the NPC debugger, in `Managed/NPC/Editor/` so it compiles into `Assembly-CSharp-Editor` and never reaches a build. It draws one NPC in the Scene view: a label, the path to the destination, a marker on the destination, the patrol route with numbered stops, the wander, attack or retreat range, the sight cone, and a cross where the threat was last seen. Colors follow the action: grey Idle, cyan Trade, green Patrol, red Attack, amber Retreat, blue Follow, purple Hold, pink RefuseOrder, teal Mission, dark red Betray, orange Shoot, rose Kite. A ranged or hybrid NPC's line shows its style and its ammo (`ammo 7/12`), or `no weapon`. A companion's line shows its level, order, loyalty and whether it could betray, a non-hostile disposition is named, and provoked is shown. A guard that stands in a region with Crown Heat adds `crown` and the tier name (wanted, hunted, outlaw) to its line. A follower draws a dotted line to its leader and a ring of the follow distance around the leader. An attacker that is part of an engagement shows `striking` or `waiting` in its line (`firing` for a shooter that holds a turn), and with the Ranges switch on it draws a ring at its place with a dotted line to it, red for a holder and amber for a waiter, orange for a shooter that may fire. A shooting or kiting NPC also draws a disc of the weapon's range.
 
 **Decisions:**
 - It reads public state only and changes nothing in the game. The brain, the actor and the director gained read-only accessors for it (`Current`, `GetBrain`, `ViewRange`, `FieldOfViewDegrees`, `Home`, `AttackRange`, `WanderRadius`, `RetreatDistance`, waypoints, `HasPath`, `Destination`, `GetPathCorners`). No game code reads them.
@@ -1678,7 +1742,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - One native call per tick, never one per NPC. The tick is 0.1 s and the batch is capped at 256, the same numbers as the ECS decision system. A larger population is served in turns through a rotating cursor.
 - Sight rays have their own cap per tick, 128 by default, so a crowd cannot spend an unbounded number of raycasts in one frame. When the cap is hit, the NPC that ran out leads the next tick, so every NPC is served in turn and none starves.
 - The tick works in three phases. Phase 1 copies the batch out of the list. Phase 2 runs sight and builds observations. Phase 3 applies actions. `ActionChanged` listeners run only in phase 3, so a listener that disables or destroys an NPC cannot change the list under the loop.
-- A decision is applied only if its NPC id matches the row it was made for and the action is in range (0 to 9 since ABI version 4). The ECS system still stops at 4, which is correct for it because it has no companions.
+- A decision is applied only if its NPC id matches the row it was made for and the action is in range (0 to 9 since ABI version 4, 0 to 11 since ABI version 6, up to Kite). The ECS system still stops at 4, which is correct for it because it has no companions and no ranged fighters.
 - A scene director is reused even when it is disabled, because a disabled director is the scene's choice. A second enabled director disables itself with one warning.
 - With no `ManagedNpcThreatSource` in the scene the director warns once, because that is the usual reason for NPCs that never see anything.
 - `Brains` and the id counter are static and cleared at `SubsystemRegistration`. `Current` and `GetBrain(index)` are public for the NPC debugger.
@@ -1766,9 +1830,9 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   plain .NET and runs them against the real Rust library. The `managed-npc` job compiles
   `Managed/Health`, `Managed/NPC` (including its `Editor/` folder), `Managed/Crown` and the spell damage files (C# 9, as in Unity 2022.3)
   against hand written `UnityEngine`, `UnityEditor` and `NavMeshAgent` stand-ins in
-  `rust/npc/managed-npc-test/` and runs 836 checks, once on the managed fallback and
+  `rust/npc/managed-npc-test/` and runs 1130 checks, once on the managed fallback and
   once on the real library. The spell caster itself is replaced by a stub that has only
-  the `Impact` event. The spell definition is compiled too, so the flight, payload,
+  the `Impact` event and `Raise` (and the sphere batch by one that only records what it is given). The spell definition is compiled too, so the flight, payload,
   modifier and vessel type files that it depends on are part of the project.
 - `.github/workflows/managed-csharp-ci.yml` - the compile gate for the rest of `Managed/`.
   The project has no assembly definitions, so one compile error in any Managed file stops
@@ -1787,7 +1851,7 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   system it covered and now covers the whole core stack.
   - The `managed-npc-fallback` job runs `rust/npc/managed-npc-test` on the managed fallback,
     which needs no native library. It compiles `Health/`, `NPC/` and `Crown/`, which includes
-    `ManagedCrownHudHeat.cs`, and runs their checks (836 at the time of writing). The path filter
+    `ManagedCrownHudHeat.cs`, and runs their checks (1130 at the time of writing). The path filter
     of `npc-rust-ci.yml` does not list `Managed/Crown/` or `Managed/Hud/`, so without this job a
     change to the heat interface in `Hud/` would break `Crown/` unseen. That workflow stays the one
     that runs the real native library.
@@ -2257,8 +2321,8 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   once that exists), bribes and pardons as game systems, saving the meter, a UI for the meter, and a way for a guard
   to tell the player from another threat. Local Favor is separate and not built. Every number is a placeholder.
 - Not verified in the Editor, not compiled by Unity. The files compile with .NET 8 (C# 9) against hand
-  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 836 checks pass there on
-  both the managed fallback and the real Rust library. CI job `managed-npc` repeats this on every push. The
+  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 1130 checks pass there on
+  both the managed fallback and the real Rust library (836 before the ranged and shopkeeper work). CI job `managed-npc` repeats this on every push. The
   stub raycast is a callback, the NavMesh is a callback and the agent moves in a straight line, so the checks
   prove the logic around them (cone, budget, lingering, memory, patrol, chase, cooldown, retreat, damage
   falloff, debugger filters and drawing) and not real colliders, layers, NavMesh pathing or `Physics.Raycast`
@@ -2276,9 +2340,9 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   first, and one showed that a search over turns of the ring did nothing, so it was removed. Existing checks
   changed on purpose: the chase destination is now the place on the ring (z about 8.74 for a target at 10), the
   stopping distance is 0.25, and a redundant destination is no longer re-sent.
-- Combat not built: ranged attackers, companions as targets or fighters (needs factions), group spacing while
-  following, Rust-side tactics (flanking, kiting, morale, calling for help), which need the distance to the
-  target and the number of allies in the observation, and an event for a swing that misses. More than about
+- Combat not built: companions as targets or fighters (needs factions), group spacing while
+  following, Rust-side tactics (flanking, morale, calling for help), which need the number of allies in
+  the observation (ranged attackers and kiting were added with ABI version 6, see below), and an event for a swing that misses. More than about
   eight holders on the melee ring crowd it, so the default of three is the number to design around. The
   numbers (3 strikers, 5 s rotation, 2.5 m waiting distance, 1.5 m/s circling, 0.75 m leeway, 30 and 50 percent
   preferences) are placeholders. The agent stub does not collide, so the harness proves where attackers are sent and
@@ -2295,10 +2359,10 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
 - The sight ray starts at the eye offset, 1.6 m above the NPC pivot by default. An NPC whose own collider
   contains that point, or whose layer is in the sight mask, can block itself on some setups. The scene setup
   names the two ways around it.
-- Damage sources: only the fireball and NPC melee call `TakeDamage`. Ice and the chemical hazards do not.
+- Damage sources: the fireball, NPC melee and NPC arrows, bolts and spells call `TakeDamage`. Ice and the chemical hazards do not.
   The fireball explosion ignores walls and its overlap buffer holds 32 colliders.
 - The actor needs a baked NavMesh. Nothing in the repo bakes one, so a scene needs a `NavMeshSurface`.
-  Trade is not carried out: a merchant only stands still, and there is no shop or dialogue system yet.
+  Trade is not carried out: a merchant stands still (or fights back, if retaliatory and attacked), and there is no shop or dialogue system yet.
 - The NPC does not animate, die visibly or drop anything. A dead NPC stops and optionally is destroyed.
 - Edit to existing Managed files for damage: `ManagedSpellTypes.cs` gained `Source`, `ManagedSpellDefinition.cs`
   gained the damage fields and `For`, and `ManagedSpellCaster.cs` sets `Source` in `Detonate`. No other
@@ -2307,3 +2371,22 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   managed fallback after one warning. Rust itself is not affected by the Burst `Illegal instruction` abort,
   because that comes from Burst code generation. Whether the Rust library runs on the 2010 MacBook is
   untested: the CI macOS leg is arm64, and no Intel macOS build exists yet.
+
+### Ranged, hybrid and shopkeeper fighters (`ManagedNpcShooter.cs`, `ManagedNpcShots.cs`, `ManagedNpcShotDriver.cs`, `ManagedNpcBallistics.cs`, `ManagedCombatEngagement.cs`, `ManagedNpcActor.cs`, `ManagedNpcBrain.cs`, `ManagedNpcThreatSource.cs`, `ManagedSpellCaster.cs`)
+
+- What changed. Combatants now come in three attack styles (melee, ranged, hybrid), as the owner described: archers and crossbow guards shoot, mages cast, hybrids switch by distance and by what they have left. Rust decides (ABI version 6, see `npc/observation.md`), Unity owns the weapon, the ammo and the flight. Owner answers: Unity plus ABI v6 with distance and style in the observation, arrows and bolts as projectiles with mages reusing the player's spell flight, hybrids switching on a distance band and dropping to melee when out of ammo or mana, shooters with their own limit and ring. Shopkeepers: some fight back when attacked first (owner note). Boss fights are a separate system and use the same style rules until then.
+- Shopkeeper retaliation was not already there. Merchants never fought, and docs and tests said so on purpose. It is opt-in through the existing Retaliatory disposition: a retaliatory merchant that was attacked fights in its own style, a hostile one does not, and unprovoked ones are unchanged. The Rust rule and its managed copy are checked on every combination, and by a director check in the harness (every disposition, a hit with no source does not provoke, a stationary shopkeeper strikes in reach and never leaves its stall, provocation fades after 20 s, a crossbow shopkeeper shoots). Hurting a shopkeeper still earns Crown Heat, see `crown-heat.md`.
+- Real bug found by the new checks: `StrikingCount` and the token holder count included shooters, so a crowd of archers would have shown as strikers and the melee numbers would have been wrong. Both now count melee members only, and shooters have their own counts.
+- Real bug found by the new checks: an archer stopped about 14 m from the target instead of on its 12 m ring, because it reached weapon range with the melee settling shortcut (strike after 1.5 s in range whatever the place). A shooter's settling time now includes the walk to its place.
+- Behavior change that reaches beyond ranged fighters: an NPC with Can Move off no longer walks toward its place, for melee too. A stationary guard or shopkeeper used to chase a target it could not reach and now stays at its post and strikes when the target is in reach.
+- Test hardening. The first run of 20 deliberate breaks of the new code missed two, and both gaps were closed: the batch stub now records every sphere (it only kept the last, so a size or color left behind by a swap-remove went unseen), and a test body that counts every hit shows that the dead-body guard is applied by the shot and not only by `ManagedHealth`. Two more checks were added for the sweep radius and the damage source of a shot after a swap-remove. The 23 breaks now run so: shooter settling, each side array after a swap-remove (damage, color, size, radius, source), stationary melee, a blocked shot spending ammo, the stance never sent, shooters counted as strikers, the high arc, the distance never sent or including height, regeneration past the capacity, the cooldown ignored, the shooter's own body blocking its line, the sweep radius, shots that never expire, a dead body hurt again, the spell's source lost, a shared melee limit, kiting without firing, and the director's action bound. Each is caught by a failing check. In Rust, 12 breaks of the style and shopkeeper rules are caught by the unit tests (see `gtg-npc-behavior.md`).
+- The harness grew to 1130 checks (from 836) and passes on both decision paths. The two alignment tests in `npc-ffi` were rewritten (see `gtg-npc-ffi.md`). Not compiled by Unity and not run in a scene: the physics is a stub (a box sweep and a callback raycast, a straight-line agent), so the checks prove the logic around it and not real colliders, layers, projectile tunnelling at real frame times, NavMesh paths or animation.
+- Interpretations and placeholders to confirm:
+  - Ranged fighters with nothing to shoot retreat (or idle when they cannot move) and never melee. Hybrids with nothing to shoot fight by hand.
+  - The distances are placeholders: kite below 6 m, hybrids melee at 4 m or less and shoot at 8 m or more, with the in-between keeping the current stance, and an unknown distance counts as that buffer. The stand-off distance must stay clear of the kite line (7 m minimum is enforced).
+  - Distance is on the ground plane. Arrows and bolts and mana share one ammo pool with optional regeneration.
+  - Friendly fire is on for arrows and spell explosions, because nothing separates factions yet. A guard can be hit by another guard's arrow.
+  - The line of fire is a straight ray, so no shot lobs over a wall. A steered spell (Seeker) flies straight for an NPC. Arrows are drawn as spheres.
+  - A hybrid loses its place in the engagement when it switches between Attack and Shoot and queues again.
+  - Provoked is global, not per target. A ranged NPC that backs away in a real scene may lose sight when its agent rotates away, and then it falls back to Patrol. The stub agent never rotates, so this was not seen. The actor turns its own rotation off while kiting to reduce it.
+- Not built: NPC shooters aimed at moving targets with lead (the aim is at the last seen position), steering for NPC spells, arrow models, sounds and animation (the `Fired` event is the hook), a shop UI that refuses service while the keeper is provoked, pickup of spent arrows, and cover.

@@ -33,6 +33,8 @@ namespace MidManStudio.Gtg.Managed.NPC
         RefuseOrder = 8,
         Mission = 9,
         Betray = 10,
+        Shoot = 11,
+        Kite = 12,
     }
 
     /// <summary>The switches of the debugger.</summary>
@@ -72,6 +74,8 @@ namespace MidManStudio.Gtg.Managed.NPC
                 case NpcAction.RefuseOrder: return new Color(1f, 0.35f, 0.8f, 1f);
                 case NpcAction.Mission: return new Color(0.2f, 0.75f, 0.65f, 1f);
                 case NpcAction.Betray: return new Color(0.6f, 0.05f, 0.1f, 1f);
+                case NpcAction.Shoot: return new Color(1f, 0.5f, 0.1f, 1f);
+                case NpcAction.Kite: return new Color(0.9f, 0.4f, 0.6f, 1f);
                 default: return new Color(0.7f, 0.7f, 0.7f, 1f);
             }
         }
@@ -125,10 +129,17 @@ namespace MidManStudio.Gtg.Managed.NPC
                 }
             }
 
-            ManagedNpcActor actor = brain.GetComponent<ManagedNpcActor>();
-            if (actor != null && actor.Mode == NpcAction.Attack && actor.IsEngaged)
+            if (brain.AttackStyle != AttackStyle.Melee)
             {
-                text += actor.HasAttackToken ? "  striking" : "  waiting";
+                text += "  " + brain.AttackStyle;
+                ManagedNpcShooter shooter = brain.Shooter;
+                text += shooter != null ? "  ammo " + shooter.Ammo.ToString("0.#") + "/" + shooter.Capacity.ToString("0.#") : "  no weapon";
+            }
+
+            ManagedNpcActor actor = brain.GetComponent<ManagedNpcActor>();
+            if (actor != null && (actor.Mode == NpcAction.Attack || actor.Mode == NpcAction.Shoot) && actor.IsEngaged)
+            {
+                text += actor.HasAttackToken ? (actor.Mode == NpcAction.Shoot ? "  firing" : "  striking") : "  waiting";
             }
 
             return text;
@@ -226,6 +237,10 @@ namespace MidManStudio.Gtg.Managed.NPC
             {
                 Handles.DrawWireDisc(position, Vector3.up, actor.AttackRange);
             }
+            else if ((actor.Mode == NpcAction.Shoot || actor.Mode == NpcAction.Kite) && actor.Shooter != null)
+            {
+                Handles.DrawWireDisc(position, Vector3.up, actor.Shooter.Range);
+            }
             else if (actor.Mode == NpcAction.Patrol && actor.WaypointCount == 0)
             {
                 Handles.DrawWireDisc(actor.Home, Vector3.up, actor.WanderRadius);
@@ -240,16 +255,18 @@ namespace MidManStudio.Gtg.Managed.NPC
             }
         }
 
-        // An attacker's place on its target's ring. Red when it holds a turn to strike, amber while it waits.
+        // An attacker's place on its target's ring. Red when it holds a turn to strike, amber while it waits. A shooter's
+        // place is orange when it holds a turn to fire, on the ring at its stand-off distance.
         private static void DrawSlot(ManagedNpcBrain brain, ManagedNpcActor actor)
         {
-            if (actor.Mode != NpcAction.Attack || !actor.IsEngaged)
+            if ((actor.Mode != NpcAction.Attack && actor.Mode != NpcAction.Shoot) || !actor.IsEngaged)
             {
                 return;
             }
 
             Vector3 slot = actor.EngagementSlot;
-            Handles.color = ColorFor(actor.HasAttackToken ? NpcAction.Attack : NpcAction.Retreat);
+            NpcAction held = actor.Mode == NpcAction.Shoot ? NpcAction.Shoot : NpcAction.Attack;
+            Handles.color = ColorFor(actor.HasAttackToken ? held : NpcAction.Retreat);
             Handles.DrawWireDisc(slot, Vector3.up, 0.35f);
             Handles.DrawDottedLine(brain.transform.position, slot, 3f);
         }

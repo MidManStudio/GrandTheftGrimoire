@@ -19,7 +19,7 @@ namespace MidManStudio.Gtg.Managed.NPC
         private const int MaxRows = 300;
 
         private static readonly string[] ModeNames = { "Off", "Selected only", "All NPCs" };
-        private static readonly string[] FilterNames = { "Any action", "Idle", "Trade", "Patrol", "Attack", "Retreat", "Follow", "Hold", "Refused an order", "Mission", "Betrayal" };
+        private static readonly string[] FilterNames = { "Any action", "Idle", "Trade", "Patrol", "Attack", "Retreat", "Follow", "Hold", "Refused an order", "Mission", "Betrayal", "Shoot", "Kite" };
 
         private readonly ManagedNpcDrawOptions _options = new ManagedNpcDrawOptions();
         private readonly List<Vector3> _routeScratch = new List<Vector3>();
@@ -71,7 +71,7 @@ namespace MidManStudio.Gtg.Managed.NPC
             _options.OnlyWithThreat = EditorGUILayout.ToggleLeft("Only NPCs that see a threat", _options.OnlyWithThreat);
             _options.Labels = EditorGUILayout.ToggleLeft("Labels", _options.Labels);
             _options.Paths = EditorGUILayout.ToggleLeft("Paths, destinations, patrol routes, last known target", _options.Paths);
-            _options.Ranges = EditorGUILayout.ToggleLeft("Attack, wander and retreat ranges", _options.Ranges);
+            _options.Ranges = EditorGUILayout.ToggleLeft("Attack, shooting, wander and retreat ranges", _options.Ranges);
             _options.SightCones = EditorGUILayout.ToggleLeft("Sight cones", _options.SightCones);
 
             GUILayout.Space(6f);

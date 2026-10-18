@@ -25,6 +25,9 @@ namespace MidManStudio.Gtg.Data
         public bool CanMove;
         public LearningMode LearningMode;
 
+        /// <summary>How the archetype fights: Melee closes in, Ranged shoots from a distance and backs away, Hybrid switches by distance and by what it has left to shoot.</summary>
+        public AttackStyle AttackStyle;
+
         /// <summary>Id of a dialogue file. An empty string means the archetype has no fixed dialogue.</summary>
         public string DialogueRef;
 
