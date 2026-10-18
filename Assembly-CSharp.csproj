@@ -56,7 +56,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Analyzer Include="/Applications/Visual Studio.app/Contents/MonoBundle/Addins/MonoDevelop.Unity/Analyzers/Microsoft.Unity.Analyzers.dll" />
-    <Analyzer Include="/Users/midman/Desktop/GrandTheftGrimoire/Library/PackageCache/com.unity.ext.nunit@1.0.6/net40/unity-custom/nunit.framework.dll" />
     <Analyzer Include="/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Tools/Unity.SourceGenerators/Unity.SourceGenerators.dll" />
     <Analyzer Include="/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Tools/Unity.SourceGenerators/Unity.Properties.SourceGenerator.dll" />
   </ItemGroup>
@@ -64,44 +63,137 @@
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterComponents.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterJumpSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/ManagedChemistryReactor.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/ManagedCrownTypes.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/Systems/ChemicalHazardSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Systems/FireballCastSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemBag.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Health/ManagedHealth.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShop.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheatRegistry.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Authoring/NPCAuthoring.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Native/NPCManagedFallback.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Systems/NPCDecisionSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacementController.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/Components/ChemistryComponents.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheatSceneHost.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Camera/Presentation/CharacterCameraBridge.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselBelt.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildRules.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudDevKeys.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Rendering/ManagedSphereBatch.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildAim.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudBuilder.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Components/SpellComponents.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacterInput.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Systems/FireballProjectileSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterAuthoring.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCComponents.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDamage.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcSight.cs" />
     <Compile Include="Assets/TutorialInfo/Scripts/Readme.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Missions/ManagedMissionTracker.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudMath.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/ManagedChemistryTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Native/NPCNativeLib.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellPayload.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Presentation/FireballPresentationSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Native/NPCNativeTypes.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedStore.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGroundSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/ManagedWallet.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/IManagedCoinPurse.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHud.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacementValidator.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/IManagedItemCatalog.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcBrain.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopSamples.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDefinition.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/Systems/ChemistryReactionSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/ManagedPlayerWallet.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/ManagedCrystal.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/IManagedItemHolder.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildUiHost.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildGrid.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheat.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemDrag.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemInfo.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildStock.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Flags/IManagedFlagSource.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDefinition.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudFeed.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellFlight.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselCharging.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudWheel.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellModifiers.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellSeeker.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacterFeature.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedQuickSlots.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/ManagedCrownHeatMap.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Authoring/SpellCasterAuthoring.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudText.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedBuiltInCheats.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedMissionResolver.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildInput.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Data/NpcDialogue.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedPlayerItemBag.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Data/ItemDatabase.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/ManagedCameraRig.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterMovementSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudStyle.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcActor.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/ManagedCrownHudHeat.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterLookSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudHeatSource.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudSprites.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDevPanel.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedRenderer.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacter.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudState.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGravitySystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/Presentation/ChemicalHazardPresentationSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/ManagedChemicalHazardField.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Data/EnemyDatabase.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellTypes.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcThreatSource.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheatManager.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Rendering/ManagedIcosphere.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedUnityBuildProbe.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildMode.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBoxMesh.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudLayout.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/ManagedCursorBlock.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudClickView.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/PhysicsRayUtility.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/ManagedCrownRegion.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDevSession.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildPanel.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Health/IManagedDamageable.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemSamples.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterInputSystem.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemDatabaseCatalog.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/ManagedChemistryRecipe.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcDirector.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Missions/ManagedMissionSource.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildableDefinition.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudSlotView.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/IManagedCheatHost.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Flags/ManagedWorldFlags.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedCombatEngagement.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellVfxMaterials.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/ChemistryRecipe.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Missions/ManagedMissionBoard.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellCaster.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Presentation/SpellVfxMaterials.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemCatalog.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedColliders.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Data/NpcArchetypeDatabase.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterWalkSystem.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Assets/MidManStudio/Gtg/Managed/Rendering/ManagedSphereUnlit.shader" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
@@ -436,10 +528,6 @@
       <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Managed/UnityEngine/UnityEditor.UnityConnectModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Collections.LowLevel.ILSupport">
-      <HintPath>Library/PackageCache/com.unity.collections@2.2.1/Unity.Collections.LowLevel.ILSupport/Unity.Collections.LowLevel.ILSupport.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.Analytics.Tracker">
       <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/Unity.Analytics.Tracker.dll</HintPath>
       <Private>False</Private>
@@ -456,12 +544,16 @@
       <HintPath>Library/PackageCache/com.unity.nuget.newtonsoft-json@3.2.1/Runtime/Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Mono.Cecil">
-      <HintPath>Library/PackageCache/com.unity.nuget.mono-cecil@1.11.4/Mono.Cecil.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.Analytics.StandardEvents">
       <HintPath>Library/PackageCache/com.unity.analytics@3.8.1/AnalyticsStandardEvents/Unity.Analytics.StandardEvents.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Collections.LowLevel.ILSupport">
+      <HintPath>Library/PackageCache/com.unity.collections@2.2.1/Unity.Collections.LowLevel.ILSupport/Unity.Collections.LowLevel.ILSupport.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>Library/PackageCache/com.unity.nuget.mono-cecil@1.11.4/Mono.Cecil.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Android.Types">
@@ -1036,24 +1128,24 @@
       <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.Codeless.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Collections.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Collections.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="PPv2URPConverters">
       <HintPath>Library/ScriptAssemblies/PPv2URPConverters.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Collections.Editor">
+      <HintPath>Library/ScriptAssemblies/Unity.Collections.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
       <HintPath>Library/ScriptAssemblies/Unity.TextMeshPro.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Services.Core.Analytics">
-      <HintPath>Library/ScriptAssemblies/Unity.Services.Core.Analytics.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="UnityEditor.Purchasing">
       <HintPath>Library/ScriptAssemblies/UnityEditor.Purchasing.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Analytics">
+      <HintPath>Library/ScriptAssemblies/Unity.Services.Core.Analytics.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.AI.Navigation.Editor.ConversionSystem">
@@ -1116,6 +1208,10 @@
       <HintPath>Library/ScriptAssemblies/UnityEditor.SpatialTracking.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.VisualStudio.Editor">
+      <HintPath>Library/ScriptAssemblies/Unity.VisualStudio.Editor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEditor.UI">
       <HintPath>Library/ScriptAssemblies/UnityEditor.UI.dll</HintPath>
       <Private>False</Private>
@@ -1124,8 +1220,8 @@
       <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.VisualStudio.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.VisualStudio.Editor.dll</HintPath>
+    <Reference Include="UnityEngine.SpatialTracking">
+      <HintPath>Library/ScriptAssemblies/UnityEngine.SpatialTracking.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.Core.Editor">
@@ -1136,20 +1232,20 @@
       <HintPath>Library/ScriptAssemblies/Analytics.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.SpatialTracking">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.SpatialTracking.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.Advertisements.Editor">
+      <HintPath>Library/ScriptAssemblies/UnityEngine.Advertisements.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.XR.LegacyInputHelpers">
       <HintPath>Library/ScriptAssemblies/UnityEditor.XR.LegacyInputHelpers.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.Advertisements.Editor">
-      <HintPath>Library/ScriptAssemblies/UnityEngine.Advertisements.Editor.dll</HintPath>
+    <Reference Include="MidManStudio.Alembic">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Alembic.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Purchasing.Common">
@@ -1229,10 +1325,6 @@
     <ProjectReference Include="MidManStudio.Alembic.Samples.Playground.csproj">
       <Project>{954ED032-78FE-39DC-72FD-51F4889A6361}</Project>
       <Name>MidManStudio.Alembic.Samples.Playground</Name>
-    </ProjectReference>
-    <ProjectReference Include="MidManStudio.Alembic.csproj">
-      <Project>{4112D83A-2BB3-5C37-7D8A-9BCA91942FD6}</Project>
-      <Name>MidManStudio.Alembic</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)/Microsoft.CSharp.targets" />

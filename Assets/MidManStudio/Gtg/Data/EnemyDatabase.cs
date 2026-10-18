@@ -7,7 +7,6 @@ using System;
 using System.Collections.Generic;
 using MidManStudio.Mdix.Unity;
 using UnityEngine;
-
 namespace MidManStudio.Gtg.Data
 {
     /// <summary>
