@@ -225,6 +225,7 @@ the arrows pointing one way, and put a new link in this table when it is added.
 | `Chemistry` | `Magic`, `Rendering` |
 | `Camera` | `CharacterController`, `Economy`, `Magic` |
 | `Shop` | `Economy`, `Items`, `Flags`, and `Camera` in the test panel only |
+| `Quests` | `Missions`, `Flags`; the Questly runtime and, in `ManagedQuestHost.cs` only, the mdix package, both from `Packages/manifest.json`. Nothing reads from `Quests` |
 | `Cheats` | `Camera`, `CharacterController`, `Chemistry`, `Economy`, `Health`, `Magic`, `NPC` |
 | `Building` | `Camera` (cursor block), `CharacterController` |
 | `Hud` | `Camera` (cursor block), `Items` (quick slots and bag), `Missions` (the empty panel text in `ManagedHud.cs`); `Building`, `CharacterController`, `Economy`, `Health`, `Magic` and `Missions` in `ManagedHudFeed.cs` only. Never `Crown` |
@@ -1031,10 +1032,9 @@ in quick slot 0 and the sword in quick slot 1.
 
 **Decisions:**
 - A shop asks this to learn whether it is open and never learns who set the flag.
-- `ManagedWorldFlags` is the plain answer today. The Questly package of `unity-chem-sim` has
-  `QuestRuntime.GetQuestState(questId)` and a `QuestState.COMPLETED` value, so an adapter
-  can later answer `IsSet(id)` with "that quest is complete". Questly is in this
-  project's `Packages/manifest.json` since 2026-10-16, and nothing here depends on it yet.
+- `ManagedWorldFlags` is the plain answer. `ManagedQuestFlagSource` in `Quests/` is the other: it
+  answers `IsSet(id)` with "that Questly quest is COMPLETED". The shop dev session still builds a
+  `ManagedWorldFlags`.
 
 ### `ManagedWorldFlags.cs`
 
@@ -1452,6 +1452,7 @@ interface, and so can an adapter for a quest package.
 - The interface says nothing about what a mission is. A quest package that has its own model
   implements three members over it and registers itself, and nothing in `Hud/` changes.
 - It has no dependency, so `Missions/` reads from no other folder.
+- `ManagedQuestMissionSource` in `Quests/` is the adapter for a quest package, see below.
 
 ### `ManagedMissionTracker.cs`
 
@@ -1492,6 +1493,108 @@ HUD's mission source while it is enabled, and loads the missions listed in the I
   board is found like any scene component, `FindFirstObjectByType<ManagedMissionBoard>()`.
 - Placeholders: there are no missions in the project yet, so the list starts empty and the panel
   shows "No active mission". The names and wording of real missions are not decided.
+
+### `ManagedQuestText.cs`
+
+**What it does:** The words of the missions panel. Questly holds only text keys, such as
+`quest.collect_wood.title` and `quest.collect_wood.obj_counter` (the key shape of `builders.locKey` in
+the Questly sample), and this table turns a key into text. It reads a text file with one `key=text`
+line each. It has no Unity types and no Questly types.
+
+**Decisions:**
+- A line is skipped when it is blank, starts with `#` or `//`, has no `=`, or has an empty key or
+  empty text. It splits on the first `=`, so the text may hold more. Spaces around the key and the
+  text are dropped, and so is a byte order mark at the start of the file. The last line for a key
+  wins. `Load` returns how many lines it took.
+- A key with empty text counts as a key with no line, so the panel shows the key and the gap is
+  visible.
+- `Resolve` gives the key itself when it has no text, so a missing line shows what to add. A null key
+  gives an empty string.
+- `Version` goes up on every load that took a line and every clear that dropped one. The mission
+  source reads it, so words loaded after a quest started show on the next refresh.
+- A line cannot hold a line break and there are no escapes. Panel lines are short.
+- Questly's comments name a localization package of mdix that could replace this table. It is not in
+  the manifest and nothing was checked against it.
+
+### `ManagedQuestMissionSource.cs`
+
+**What it does:** Shows one ACTIVE Questly quest on the missions panel: the title, then one line for
+each objective. It implements `IManagedMissionSource` over a `QuestRuntime`, an `IQuestTable` and a
+`ManagedQuestText`, and never changes the runtime.
+
+**Decisions:**
+- It polls. The runtime raises `ObjectiveProgress` only when an objective flips between INCOMPLETE and
+  COMPLETE, so a counter that moves from 2 to 3 raises nothing, and `RestoreState` raises no event at
+  all. A caller runs `Refresh()` once a frame. It writes a list of numbers (the version of the words,
+  then the state and the whole part of the value of each line), compares it with the last one and
+  rebuilds only when they differ. A refresh that finds nothing new allocates nothing: the harness
+  runs 2000 of them and counts zero bytes.
+- Which quest. The panel keeps its quest while that quest is ACTIVE. When it stops being ACTIVE (it
+  completed, failed, was abandoned, was forced to another state, or left the table) the first ACTIVE
+  quest of the table, in table order, takes over, or the panel shows the empty state with the constants
+  of `ManagedMissionTracker`. A quest that starts later does not take the panel. `Track(id)` puts a
+  given quest on it and returns false for an id that is unknown, not ACTIVE or HIDDEN. There is no pin:
+  a quest that left is not brought back when it starts again.
+- A quest of type HIDDEN is never shown, `Track` included. This follows the name of the type. Questly
+  has no UI and does not say what HIDDEN means for one.
+- Lines are the root objectives, the ones no composite lists as a child, in definition order. A
+  composite is one line and its children have none. A TIMER objective has no line: nothing in the
+  Managed stack reports time into Questly yet, and how a seconds counter should read is not decided.
+- The text of a line is the label, or the objective id when the label key is empty, or the key itself
+  when the table has no text. A COUNTER that is not done adds " 3/5". A done objective adds " (done)",
+  the suffix of the tracker. Counts are whole numbers rounded down. A negative value or NaN shows as 0.
+  A target with a fraction shows rounded down, so 2.5 shows as 2.
+- The title is the text of the title key, or the quest id when the key is empty, or the key when the
+  table has no text.
+- `Version` goes up only when the title or a line really changed, so a table that reloads with the same
+  text changes nothing. `DefinitionsChanged` sets a flag that forces one rebuild on the next refresh.
+  The runtime subscribed to the table first, so it has reconciled itself by then.
+- `Find` of `MdixQuestTable` throws on a null key, so the source tests a null or empty id before it asks.
+- `Dispose` stops listening to the table. After it `Refresh` and `Track` do nothing and the panel
+  keeps what it last showed.
+
+### `ManagedQuestFlagSource.cs`
+
+**What it does:** `IManagedFlagSource` over a `QuestRuntime`. A flag name is a quest id and the flag is
+set while that quest is COMPLETED. It keeps nothing.
+
+**Decisions:**
+- It answers for the state now. A RECURRING quest that re-arms stops being set, and `ForceState` moves
+  it in both directions. A null, empty or unknown id is never set, because Questly reads an unknown id
+  as LOCKED.
+- Only quest level. A flag cannot name one objective.
+- A shop takes its flag source as a constructor argument, so putting this behind a shop is a change in
+  the code that builds the shop. `ManagedShopDevSession` was not changed.
+
+### `ManagedQuestHost.cs`
+
+**What it does:** The scene component that connects Questly to the rest of the game. It builds a
+`QuestRuntime` from the quest data it is given, registers a `ManagedQuestMissionSource` as the HUD's
+mission source while it is enabled, and offers a `ManagedQuestFlagSource`. Code starts quests and
+reports progress through `Runtime`.
+
+**Decisions:**
+- The data is a baked `QuestDataAsset` or an `MdixAsset`, and the baked one wins when both are set. The
+  baked path needs no native library. The `.mdix` path goes through the native mdix library, and the
+  database stays open, because `MdixQuestTable` keeps it, until the host is destroyed. A load that fails,
+  or throws (a missing native library throws), logs `[GTG Quests]` with the asset name and the message and
+  leaves the host empty. Nothing assigned logs a warning and does the same.
+- It loads in `Awake`, so disabling and enabling it again does not drop progress. The source registers
+  in `OnEnable` and unregisters in `OnDisable`, only itself, the same rule as the board.
+- It refreshes in `Update` at execution order 100. That runs after scripts at the default order that
+  report progress in `Update`, and before the `LateUpdate` of `ManagedHud` that copies the panel, so
+  progress shows in the same frame. Progress reported in `LateUpdate` shows a frame later.
+- The registry holds one mission source, and the last to register wins. A `ManagedMissionBoard` in the
+  same scene competes with the host and whichever enables last gets the panel. Use one of the two.
+- The inspector field "Quest ids started when the scene loads" is for testing. A quest that is not
+  AVAILABLE is left alone.
+- `Restore(snapshot)` calls `RestoreState` and refreshes. Saving is `Runtime.CaptureState()` and the
+  host stores nothing.
+- `Attach(runtime, table)` is for code that builds its own table, and replaces the runtime and the source.
+- It never calls `AdvanceTime`, so a quest with a schedule needs a caller. It registers no evaluator, and
+  an EXTERNAL objective with no evaluator never completes.
+- Placeholders: no quest data and no text file exist in the project yet. The quests and their wording
+  are not decided.
 
 ### `ManagedChemistryTypes.cs`
 
@@ -1838,9 +1941,9 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   The project has no assembly definitions, so one compile error in any Managed file stops
   every system in Unity, and nothing else in CI catches it. The `managed-compile` job builds
   `building-test/BuildingTest.csproj` and runs it. The project compiles every file under
-  `Managed/` except `NPC/`, `Crown/` and `Chemistry/` (the first two need the NPC native
-  bindings and are compiled by the `managed-npc-fallback` job below, the third needs the
-  Alembic package), plus `Data/ItemDatabase.cs` and the two plain arithmetic files of `Crown/`,
+  `Managed/` except `NPC/`, `Crown/`, `Chemistry/` and `Quests/` (the first two need the NPC
+  native bindings and are compiled by the `managed-npc-fallback` job below, `Chemistry/` needs
+  the Alembic package, and `Quests/` needs Questly and is compiled by `managed-packages-ci.yml`), plus `Data/ItemDatabase.cs` and the two plain arithmetic files of `Crown/`,
   `ManagedCrownTypes.cs` and `ManagedCrownHeatMap.cs`, at C# 9 with .NET 8, against hand written
   stand-ins for `UnityEngine`, uGUI, TextMeshPro and the Input System in `building-test/`. Then
   it runs the checks in that folder: 803 at the time of writing, covering building, the camera
@@ -1872,7 +1975,30 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   - The check files are `Tests*.cs`. The stand-ins are `UnityStubs.cs`, `UnityMoreStubs.cs`,
     `UguiStubs.cs`, `UiStubs.cs` and `PackageStubs.cs`. `RigStubs.cs` is a comment only and the
     project skips it. It stays because the replacements Action replaces files and cannot delete one.
-  - Neither job covers `Managed/Chemistry/`, which needs Alembic.
+  - No job covers `Managed/Chemistry/`, which needs Alembic.
+- `.github/workflows/managed-packages-ci.yml` - the compile gate for `Managed/Quests/`. The
+  `quests-bridge` job runs `packages-test/fetch_packages.py`, which reads the pins of Questly and
+  mdix from `Packages/manifest.json` and downloads, sparse and at depth 1, the `Runtime` folder of
+  Questly and the managed `MidManStudio.Mdix.Core.dll` (not the native libraries) into
+  `packages-test/fetched/`. Then it builds `packages-test/PackagesTest.csproj` at C# 9 with .NET 8:
+  the Questly sources as shipped, the `Missions/`, `Flags/` and `Quests/` folders, and hand written
+  stand-ins for `UnityEngine` and for the asset class of mdix. Then it runs the checks, 181 at
+  the time of writing, covering the text table, the flag source, the mission source (which quest is
+  shown, every kind of line, change detection, the cost of a refresh that finds nothing) and the
+  host (loading, registering, the update, attach and restore, the failed loads). It runs on a push or
+  pull request that touches `Quests/`, `Missions/`, `Flags/`, `packages-test/`, the manifest or the
+  workflow, and by hand. It needs the network for the fetch (github.com, public repositories, no token).
+  - A red fetch step means a pin is missing from the manifest, is not
+    `https://github.com/ORG/REPO.git?path=DIR#<40 hex>`, or names a commit or path that does not exist.
+  - A red compile step means a `Quests/` file would break the Unity compile, or Questly changed under
+    the commit of the pin. The first error says which.
+  - It proves that the bridge compiles at C# 9 against the real Questly sources and passes its
+    checks on the real `QuestRuntime` and `BakedQuestTable`. It does not load the native mdix library,
+    parse a `.mdix` file, or run Unity. The mdix asset is a stand-in that returns an error or throws,
+    and the lifecycle methods of the host are called by reflection in the order Unity uses.
+  - `packages-test/fetched/` and the build output exist only in the runner. Nothing there is
+    committed.
+  - The check files are `Tests*.cs`. The stand-ins are in `UnityStandIns.cs`.
 
 ## Fixes and Problems
 
@@ -2265,29 +2391,84 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
 - Now: the manifest lists `com.midmanstudio.mdix` (from `Mid-D-Man/DixScript-Rust`) and
   `alembic`, `dragndrop`, `gensettings`, `hudman`, `inventorizz`, `nuclear` and `questly` (from
   `MidManStudio/unity-chem-sim`). Every URL is pinned with `#<commit>`: `unity-chem-sim`
-  `0c5ce9e`, `DixScript-Rust` `1b692ec`. The old entry for Alembic was a `file:../../unity-chem-sim/...`
+  `dbc5d01`, `DixScript-Rust` `d3333a9`. The old entry for Alembic was a `file:../../unity-chem-sim/...`
   path that only resolved on the old laptop layout, so on any other machine Alembic did not
   resolve. The lock file loses that stale entry and Unity writes the rest when it next opens the
   project.
 - Found on the way: the asmdef of Alembic references `MidManStudio.Mdix.Runtime`, but its
   `package.json` does not list mdix and the manifest has had no mdix entry since commit `6f6ef97`.
   The entry is back, so that reference resolves.
+- Moved on 2026-10-18. The first pins were `unity-chem-sim` `0c5ce9e` and `DixScript-Rust`
+  `1b692ec`. `0c5ce9e` came before the change of the four `dependencies` values to plain versions.
+  On the first open of the project in Unity, Su reported compile errors and named the mdix package
+  as their cause, and fixed them in `DixScript-Rust`. The commits that touch `com.midmanstudio.mdix`
+  after `1b692ec` are `35ae2d2` (CI rebuild, build 1161), `3d9faf9` (`MdixEditorWindow.Search.cs`,
+  `new StyleLength(0)` written as `new StyleLength(0f)`) and `d3333a9` (the markdown files under
+  `Editor/docs` and `Editor/others` removed). The manifest now points at `d3333a9`, the head that
+  carries all three. `unity-chem-sim` `dbc5d01` carries the dependency change, the Nuclear Lab
+  sample and the Alembic `.meta` files. Su opened the project in Unity after the move: the
+  `Packages/packages-lock.json` of commits `fec9663` and `5c2daad` lists all eight packages, seven with
+  the hash of `dbc5d01` and mdix with the hash of `d3333a9`, so Package Manager resolved them. Whether
+  the project compiles clean after that is not recorded here.
 - Risk, not verified in Unity: Questly, Inventorizz, HudMan and GenSettings declare mdix and
   dragndrop in their `package.json` as git URLs, and the Unity manual says Package Manager does
   not support git dependencies between packages. The manifest lists every package itself, which
   is the documented way round it, but how Unity treats the URL strings in those four files is
-  not tested. If the first open of the project in Unity reports an unresolved dependency, the
-  fix is to change those four `dependencies` values to plain versions (`"1.0.0"`) in
-  `unity-chem-sim`, or to take the new manifest lines out again. A package that fails to
-  resolve blocks every system.
-- Nothing in `Managed/` uses these packages yet. The Managed CI does not touch the manifest, so
-  its result does not say anything about package resolution.
+  not tested. The four `dependencies` values are plain versions (`"1.0.0"`) from `dbc5d01` on,
+  and Su named only the mdix package as the cause of the errors on the first open. If an
+  unresolved dependency still shows up, the fix is to take the new manifest lines out again. A
+  package that fails to resolve blocks every system.
+- `Chemistry/` uses Alembic and `Quests/` uses Questly and mdix. `managed-csharp-ci.yml` does not touch
+  the manifest and compiles neither folder. `managed-packages-ci.yml` fetches the two pins and compiles
+  `Quests/`, so a pin that does not exist fails there, but it says nothing about package resolution
+  in Unity.
 - To move a package on, change the commit after `#` in the manifest. The Package Manager needs
   git installed on the machine that opens the project.
 - Earlier entries above (Vessels, Currency and cheats, Shop) say the packages are not in the
   manifest. That was true when they were written and is no longer.
 - Edits to existing files: `Packages/manifest.json`, `Packages/packages-lock.json`, `managed.md`
   and `GTG_REPO_CONVENTIONS.md` (new section 6).
+
+### Questly bridge (`Quests/`, `packages-test/`, `building-test/`)
+
+- Asked for: the next drop after the repin, chosen by Su from a batched question: the Questly bridge,
+  so that the missions panel and a shop's flags can follow Questly. The NPC and Crown Heat work stays in
+  another chat and is not touched.
+- Now: `Managed/Quests/` with `ManagedQuestText.cs`, `ManagedQuestMissionSource.cs`,
+  `ManagedQuestFlagSource.cs` and `ManagedQuestHost.cs`. A `packages-test/` project (`PackagesTest.csproj`,
+  `nuget.config`, `Program.cs`, `UnityStandIns.cs`, `Tests*.cs`, `fetch_packages.py`) and the workflow
+  `managed-packages-ci.yml`. `building-test/BuildingTest.csproj` leaves `Quests/` out.
+- Why a folder of its own: the Questly types do not exist for `building-test/`, which compiles `Managed/**`.
+  With the folder present and no exclude, that build fails with `QuestRuntime could not be found` (seen
+  before the edit). The adapter serves `Missions/` and `Flags/` and is written in the Managed namespaces
+  as `GTG_REPO_CONVENTIONS.md` section 6 asks, but a package reader has to be a folder the compile gate
+  can leave out.
+- Found on the way, in Questly: `ObjectiveProgress` fires only when an objective flips between INCOMPLETE
+  and COMPLETE, `RestoreState` raises no event, and `GetQuestState` of an unknown id is LOCKED. That is why
+  the source polls. `MdixQuestTable.Find` throws on a null key.
+- Checked: the harness fetches Questly and the managed mdix DLL at the manifest pins (`dbc5d01`,
+  `d3333a9`) and compiles `QuestRuntime`, `MdixQuestTable`, `BakedQuestTable` and the rest as shipped, so a
+  change of Questly that breaks the bridge shows as a compile error. 181 checks pass. 32
+  deliberate breaks were applied one at a time to the four bridge files and each fails a check. Two
+  survived at first: the state of a line was not needed by any check (a composite that completes while the
+  quest stays open changes its line by state alone), and the flag that a table's change event sets was not
+  needed either (a title changed in place). A check was added for each. `building-test/` still passes its
+  803 checks with the exclude. `fetch_packages.py` ran against the public repositories.
+- Not verified: Unity itself. `.mdix` loading: `MdixQuestTable.Load` on a real database and the native
+  library were never run, and whether `Dix.LoadStr` resolves the `@IMPORTS` of the Questly sample, which
+  point at files next to it, is not checked. The baked path is the one that avoids both. A baked asset made
+  by Questly Studio was not used: the harness builds the asset in code. The Inspector fields, the order of
+  `Update` and `LateUpdate` in a real scene, `isActiveAndEnabled` timing, the HUD drawing the panel, and
+  the workflow itself, which has not run on GitHub.
+- Known limits. One quest on the panel, the first four lines. No timer line. The host never calls
+  `AdvanceTime`, registers no evaluator, and does not save. Rewards and claims are not wired. Flags answer
+  at quest level only. The shop dev session still uses `ManagedWorldFlags`. The text is a plain
+  `key=text` file. A `ManagedMissionBoard` in the same scene competes with the host for the panel.
+- Defaults chosen without asking: a `key=` line with no text is skipped, a TIMER objective has no line, a
+  HIDDEN quest is never shown, the host runs at order 100, and the host loads in `Awake` so that
+  disabling it does not drop progress.
+- Edits to existing files: `building-test/BuildingTest.csproj`, `managed.md` and
+  `GTG_REPO_CONVENTIONS.md` (section 6).
 
 ### `ManagedChemicalHazardField.cs`
 

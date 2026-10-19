@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Verification harness, never shipped. Compiles the Questly runtime sources and the GTG Quests bridge without
+       Unity, against hand written UnityEngine stand-ins, and runs the checks in this folder. The Questly sources and
+       the managed MidManStudio.Mdix.Core.dll are not part of this repo: fetch_packages.py downloads them at the
+       commits pinned in Packages/manifest.json into fetched/ first. The native mdix library is never loaded.
+       LangVersion 9 matches Unity 2022.3. Questly uses C# nullable annotations, which Unity compiles with the
+       nullable context off, so Nullable is disabled here and CS8632 is silenced. -->
+  <PropertyGroup>
+    <GtgRoot>$(MSBuildThisFileDirectory)../Assets/MidManStudio/Gtg/</GtgRoot>
+    <Fetched>$(MSBuildThisFileDirectory)fetched/</Fetched>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <UseAppHost>false</UseAppHost>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>CS8632;CS0649;CS0169;CS0414;CS0067</NoWarn>
+    <RootNamespace>MidManStudio.Gtg.Managed.Quests.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="$(Fetched)questly/**/*.cs" />
+    <Compile Include="$(GtgRoot)Managed/Missions/**/*.cs;$(GtgRoot)Managed/Flags/**/*.cs;$(GtgRoot)Managed/Quests/**/*.cs" />
+    <Reference Include="MidManStudio.Mdix.Core">
+      <HintPath>$(Fetched)mdix/MidManStudio.Mdix.Core.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

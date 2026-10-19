@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Verification harness, never shipped. Compiles the core Managed sources without Unity against
        hand written UnityEngine stand-ins and runs the checks in this folder. LangVersion 9 matches
-       Unity 2022.3. NPC and Crown stay out because they need the NPC native bindings, and Chemistry because it needs Alembic. The NPC job has its own harness. -->
+       Unity 2022.3. NPC and Crown stay out because they need the NPC native bindings, Chemistry because it needs Alembic, and Quests because it needs Questly. The NPC job has its own harness, and the Quests job is packages-test/. -->
   <PropertyGroup>
     <GtgRoot>$(MSBuildThisFileDirectory)../Assets/MidManStudio/Gtg/</GtgRoot>
     <OutputType>Exe</OutputType>
@@ -17,7 +17,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="*.cs" Exclude="RigStubs.cs" />
-    <Compile Include="$(GtgRoot)Managed/**/*.cs" Exclude="$(GtgRoot)Managed/NPC/**;$(GtgRoot)Managed/Crown/**;$(GtgRoot)Managed/Chemistry/**" />
+    <Compile Include="$(GtgRoot)Managed/**/*.cs" Exclude="$(GtgRoot)Managed/NPC/**;$(GtgRoot)Managed/Crown/**;$(GtgRoot)Managed/Chemistry/**;$(GtgRoot)Managed/Quests/**" />
     <!-- Crown needs the NPC types, but these two files are plain arithmetic and the HUD heat feeder is checked through them. -->
     <Compile Include="$(GtgRoot)Managed/Crown/ManagedCrownTypes.cs;$(GtgRoot)Managed/Crown/ManagedCrownHeatMap.cs" />
     <Compile Include="$(GtgRoot)Data/ItemDatabase.cs" />

@@ -270,4 +270,8 @@ Rules:
   so a package talks to the game through an interface the game implements.
 - Game side adapters live in the folder of the system they serve, in the `MidManStudio.Gtg`
   namespaces, never inside a package.
+- A Managed folder that reads a package is a folder of its own, because `building-test/` compiles
+  `Managed/**` without any package and leaves such a folder out. `packages-test/` compiles it instead:
+  its script downloads the package sources at the commits pinned in the manifest. `Quests/` is the
+  first, and `Chemistry/` is still compiled by no job.
 - The machine that opens the project needs git installed.
