@@ -358,7 +358,7 @@ GameObject:
   - component: {fileID: 664780202}
   - component: {fileID: 664780208}
   - component: {fileID: 664780207}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -501,7 +501,7 @@ CharacterController:
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: -0.1, z: 0}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!136 &664780204
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -542,7 +542,7 @@ Transform:
   m_GameObject: {fileID: 664780199}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.6199999, z: 0}
+  m_LocalPosition: {x: 0, y: 1.15, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -562,8 +562,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _visiblePoints:
-  - {x: 0, y: 1.6, z: 0}
-  - {x: 0, y: 0.9, z: 0}
+  - {x: 0, y: 0.6, z: 0}
+  - {x: 0, y: -0.1, z: 0}
   _health: {fileID: 664780208}
   _maxMeleeAttackers: 3
   _attackerRotationSeconds: 5
@@ -599,6 +599,7 @@ GameObject:
   - component: {fileID: 768523244}
   - component: {fileID: 768523243}
   - component: {fileID: 768523250}
+  - component: {fileID: 768523251}
   m_Layer: 9
   m_Name: Npc_Default
   m_TagString: Untagged
@@ -677,7 +678,7 @@ MonoBehaviour:
   _canMove: 1
   _learningMode: 1
   _disposition: 0
-  _attackStyle: 2
+  _attackStyle: 0
   _level: 1
   _provokedMemorySeconds: 20
   _leader: {fileID: 0}
@@ -686,7 +687,7 @@ MonoBehaviour:
   _paySatisfaction: 0.5
   _viewRange: 10
   _fieldOfViewDegrees: 110
-  _eyeOffset: {x: -0.55, y: 0.81, z: 0}
+  _eyeOffset: {x: 0, y: 0.6, z: 0}
   _sightMask:
     serializedVersion: 2
     m_Bits: 448
@@ -773,13 +774,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 768523242}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 1.6199999, z: 7.42}
+  m_LocalRotation: {x: 0, y: 0.7071068, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: -4, y: 1.1, z: 12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 90, z: 0}
 --- !u!114 &768523250
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -794,6 +795,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _maxHealth: 100
   _invulnerable: 0
+--- !u!114 &768523251
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 768523242}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 34e8ddd5ae68d42bfb8c23e4e900b001, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _visiblePoints:
+  - {x: 0, y: 0.6, z: 0}
+  - {x: 0, y: -0.1, z: 0}
+  _health: {fileID: 768523250}
+  _maxMeleeAttackers: 3
+  _attackerRotationSeconds: 5
+  _maxRangedAttackers: 4
+  _rangedRotationSeconds: 5
 --- !u!1 &880530685
 GameObject:
   m_ObjectHideFlags: 0
@@ -1278,7 +1299,7 @@ MonoBehaviour:
   m_Center: {x: 0, y: 2, z: 0}
   m_LayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 320
   m_UseGeometry: 0
   m_DefaultArea: 0
   m_GenerateLinks: 0
@@ -1602,7 +1623,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1553898964}
   - component: {fileID: 1553898963}
-  - component: {fileID: 1553898962}
   m_Layer: 0
   m_Name: Npc_Manager
   m_TagString: Untagged
@@ -1610,18 +1630,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1553898962
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1553898961}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5f9ac94fa1864f3c8edb2dddbb7a5c2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &1553898963
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1637,7 +1645,7 @@ MonoBehaviour:
   _decisionIntervalSeconds: 0.1
   _maxBatch: 256
   _maxSightRaysPerTick: 128
-  _showOverlay: 0
+  _showOverlay: 1
 --- !u!4 &1553898964
 Transform:
   m_ObjectHideFlags: 0
@@ -1670,8 +1678,8 @@ GameObject:
   - component: {fileID: 1821929645}
   - component: {fileID: 1821929644}
   - component: {fileID: 1821929654}
-  - component: {fileID: 1821929653}
   - component: {fileID: 1821929652}
+  - component: {fileID: 1821929655}
   m_Layer: 9
   m_Name: Npc_Ranged
   m_TagString: Untagged
@@ -1693,7 +1701,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _kind: 0
   _spell: 0
-  _shotPointOffset: {x: 0.3, y: 1.4, z: 0.5}
+  _shotPointOffset: {x: 0.3, y: 0.4, z: 0.5}
   _range: 20
   _standOffDistance: 12
   _cooldownSeconds: 1.5
@@ -1787,7 +1795,7 @@ MonoBehaviour:
   _paySatisfaction: 0.5
   _viewRange: 20
   _fieldOfViewDegrees: 110
-  _eyeOffset: {x: 0, y: 1.6, z: 0}
+  _eyeOffset: {x: 0, y: 0.6, z: 0}
   _sightMask:
     serializedVersion: 2
     m_Bits: 448
@@ -1874,13 +1882,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1821929643}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 15.6, y: 1.6199999, z: 14.3}
+  m_LocalRotation: {x: 0, y: -0.7071068, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 4, y: 1.1, z: 12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 270, z: 0}
 --- !u!114 &1821929652
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1896,18 +1904,6 @@ MonoBehaviour:
   _forceCombinedMesh: 0
   _maxHazards: 32
   _logReactions: 1
---- !u!114 &1821929653
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1821929643}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5f9ac94fa1864f3c8edb2dddbb7a5c2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &1821929654
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1922,6 +1918,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _maxHealth: 100
   _invulnerable: 0
+--- !u!114 &1821929655
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1821929643}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 34e8ddd5ae68d42bfb8c23e4e900b001, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _visiblePoints:
+  - {x: 0, y: 0.6, z: 0}
+  - {x: 0, y: -0.1, z: 0}
+  _health: {fileID: 1821929654}
+  _maxMeleeAttackers: 3
+  _attackerRotationSeconds: 5
+  _maxRangedAttackers: 4
+  _rangedRotationSeconds: 5
 --- !u!1 &2049118990
 GameObject:
   m_ObjectHideFlags: 0

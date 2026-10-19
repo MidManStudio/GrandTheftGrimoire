@@ -146,6 +146,19 @@ namespace MidManStudio.Gtg.Managed.NPC
             _driver = host.AddComponent<ManagedNpcShotDriver>();
         }
 
+        // A driver that woke up asks whether it is the one. The first to ask is, and so is a driver placed in a scene by
+        // hand before any shot was fired, which then does the work instead of a hidden one. Any other is told to go.
+        internal static bool Adopt(ManagedNpcShotDriver driver)
+        {
+            if (_driver == null || _driver == driver)
+            {
+                _driver = driver;
+                return true;
+            }
+
+            return false;
+        }
+
         internal static void DriverGone(ManagedNpcShotDriver driver)
         {
             if (_driver == driver)

@@ -30,6 +30,7 @@ internal static partial class Tests
     // ---------- helpers ----------
 
     static bool RgNear(float a, float b, float tolerance) { return Math.Abs(a - b) <= tolerance; }
+    static bool SameSpot(Vector3 a, Vector3 b) { return RgNear(a.x, b.x, 1e-6f) && RgNear(a.y, b.y, 1e-6f) && RgNear(a.z, b.z, 1e-6f); }
 
     // A target with a body, a box from the feet to 2 m, so a shot aimed at the chest hits it. It has health and a threat
     // source like the player.
@@ -563,6 +564,33 @@ internal static partial class Tests
         Check(ManagedSphereBatch.Disposed == gone + 1 && ManagedNpcShots.Count == 0, "destroying the driver releases its batch and takes the shots in the air with it");
         Time.time += 2f; RgFire(d1, t8);
         Check(ManagedSphereBatch.Created == made + 2 && ManagedNpcShots.Count == 1, "the next shot makes a new driver");
+
+        // A driver added by hand in a scene, as a setup mistake. The first one is adopted and does the work, so no hidden
+        // one is made, and any other one removes itself with a warning, so a shot is never stepped twice a frame.
+        ResetWorld();
+        int before = ManagedSphereBatch.Created;
+        ManagedNpcShooter d2 = RgBare(Vector3.zero);
+        GameObject t9 = RgTarget(0f, 15f);
+        GameObject placed = new GameObject("Npc_Manager");
+        ManagedNpcShotDriver mine = placed.AddComponent<ManagedNpcShotDriver>();
+        Check(ManagedSphereBatch.Created == before + 1 && UnityEngine.Object.Destroyed.Count == 0 && Debug.Warnings.Count == 0, "a driver placed in a scene before any shot is adopted without a word");
+        RgFire(d2, t9);
+        Check(UnityEngine.Object.All.FindAll(c => c is ManagedNpcShotDriver).Count == 1 && ManagedSphereBatch.Created == before + 1, "so the first shot makes no hidden driver");
+        Advance(1f);
+        Check(RgNear(RgHealth(t9), 88f, 1e-3f) && ManagedNpcShots.Count == 0, "and the placed driver flies the shots");
+        GameObject extra = new GameObject("Npc_Ranged");
+        ManagedNpcShotDriver second = extra.AddComponent<ManagedNpcShotDriver>();
+        Check(ManagedSphereBatch.Created == before + 1, "a second driver makes no batch");
+        Check(UnityEngine.Object.Destroyed.Count == 1 && UnityEngine.Object.Destroyed[0].Key == second, "and is removed");
+        Check(Debug.Warnings.Count == 1 && Debug.Warnings[0].Contains("Npc_Ranged") && Debug.Warnings[0].Contains("ManagedNpcShotDriver"), "with a warning that names the object");
+        Time.time += 2f; RgFire(d2, t9);
+        Vector3 held = ManagedNpcShots.PositionAt(0);
+        UnityEngine.Component.Invoke(second, "Update");
+        Check(ManagedNpcShots.Count == 1 && SameSpot(ManagedNpcShots.PositionAt(0), held), "a removed driver that still gets an update does not step the shots");
+        UnityEngine.Component.Invoke(second, "OnDestroy");
+        Check(ManagedNpcShots.Count == 1, "and its removal does not take the shots in the air with it");
+        UnityEngine.Component.Invoke(mine, "Update");
+        Check(ManagedNpcShots.Count == 1 && !SameSpot(ManagedNpcShots.PositionAt(0), held), "the adopted driver is the one that steps them");
     }
 
     // ---------- spells in the air ----------

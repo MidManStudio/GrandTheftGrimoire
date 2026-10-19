@@ -142,6 +142,7 @@ namespace UnityEngine
     public class RangeAttribute : Attribute { public RangeAttribute(float a, float b) { } }
     public class DefaultExecutionOrderAttribute : Attribute { public DefaultExecutionOrderAttribute(int o) { } }
     public class DisallowMultipleComponentAttribute : Attribute { }
+    public class AddComponentMenuAttribute : Attribute { public AddComponentMenuAttribute(string s) { } }
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public class RequireComponentAttribute : Attribute { public RequireComponentAttribute(Type t) { } }
     public class RuntimeInitializeOnLoadMethodAttribute : Attribute { public RuntimeInitializeOnLoadMethodAttribute(RuntimeInitializeLoadType t) { } }
@@ -153,6 +154,7 @@ namespace UnityEngine
         internal static List<Component> All = new List<Component>();
         public static List<KeyValuePair<Object, float>> Destroyed = new List<KeyValuePair<Object, float>>();
         public static void Destroy(Object o, float delay) { Destroyed.Add(new KeyValuePair<Object, float>(o, delay)); }
+        public static void Destroy(Object o) { Destroy(o, 0f); }
         public static T FindFirstObjectByType<T>(FindObjectsInactive inactive) where T : Component
         {
             foreach (Component c in All) { T t = c as T; if (t != null && (inactive == FindObjectsInactive.Include || ((Behaviour)(object)t).enabled)) return t; }

@@ -35,6 +35,9 @@ only covers the code-level docs that do.
   -- `MidManStudio.Gtg.Managed.Crown`, the regional Crown Heat meter: witnessed
   crimes raise it, it fades when unseen, and its tier makes retaliatory guards
   fight the player on sight (ABI version 5), Managed stack only
+- [`GrandTheftGrimoire/npc-test-scene.md`](GrandTheftGrimoire/npc-test-scene.md)
+  -- the NPC test arena `Assets/SamlpleScene.unity`: layout, layers, the numbers
+  for a capsule character whose pivot is at its center, and what to expect
 - [`GrandTheftGrimoire/data.md`](GrandTheftGrimoire/data.md)
   -- `MidManStudio.Gtg.Data`, the ScriptableObjects the `.mdix` data files
   (enemies, items, NPC archetypes, dialogue) bake into, and how to bake them

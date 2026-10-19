@@ -3,16 +3,16 @@
     "com.unity.cinemachine": "2.9.7",
 
     "com.midmanstudio.mdix": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#d3333a907553eca7506bf82beba2f7098b0185b7",
-    "com.midmanstudio.alembic": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.alembic#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
-  "com.midmanstudio.nuclear": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.nuclear#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
+    "com.midmanstudio.alembic": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.alembic#37eec982fd91e50225a1a80bd70bb3c702697841",
+  "com.midmanstudio.nuclear": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.nuclear#37eec982fd91e50225a1a80bd70bb3c702697841",
 
 
-    "com.midmanstudio.dragndrop": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.dragndrop#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
-    "com.midmanstudio.gensettings": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.gensettings#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
-    "com.midmanstudio.hudman": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.hudman#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
-    "com.midmanstudio.inventorizz": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.inventorizz#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
+    "com.midmanstudio.dragndrop": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.dragndrop#37eec982fd91e50225a1a80bd70bb3c702697841",
+    "com.midmanstudio.gensettings": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.gensettings#37eec982fd91e50225a1a80bd70bb3c702697841",
+    "com.midmanstudio.hudman": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.hudman#37eec982fd91e50225a1a80bd70bb3c702697841",
+    "com.midmanstudio.inventorizz": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.inventorizz#37eec982fd91e50225a1a80bd70bb3c702697841",
   
-    "com.midmanstudio.questly": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.questly#dbc5d0107f9829e7e21c334dd9fe45b6db2da070",
+    "com.midmanstudio.questly": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.questly#37eec982fd91e50225a1a80bd70bb3c702697841",
 
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.2d.tilemap": "1.0.0",

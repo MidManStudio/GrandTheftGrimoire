@@ -64,8 +64,8 @@ missing script. Delete it, or switch the define back.
 
 ### Scene setup (NPC)
 
-1. On the player object add `ManagedNpcThreatSource`. Add `ManagedHealth` to it as well if the player can die, so a dead player stops being seen.
-2. On each NPC add `ManagedNpcBrain`, plus `ManagedHealth` if it can be hurt. Pick the role and backend. A merchant uses role Merchant, backend StateMachine and Can Move off. A goblin uses Enemy and Utility. Put the NPC's forward direction along its local Z axis, because the view cone points along it.
+1. On the player object add `ManagedNpcThreatSource`. Add `ManagedHealth` to it as well if the player can die, so a dead player stops being seen. Check its visible points against the body (step 13), because the defaults assume the pivot is at the feet.
+2. On each NPC add `ManagedNpcBrain`, plus `ManagedHealth` if it can be hurt. Pick the role and backend. A merchant uses role Merchant, backend StateMachine and Can Move off. A goblin uses Enemy and Utility. Put the NPC's forward direction along its local Z axis, because the view cone points along it. Set the Eye Offset to the height of its eyes from its own pivot (step 13).
 3. To make the NPC move and fight, add `ManagedNpcActor`. It brings a `NavMeshAgent` with it. Bake a NavMesh for the scene (a `NavMeshSurface` from the AI Navigation package, installed at 1.1.5) and place the NPC on it. Give the NPC a collider, otherwise the player's fireball passes through it. For a patrol route, drag transforms into the Waypoints list, or leave it empty to wander near the start. A merchant needs no actor.
 4. Fireballs hurt anything with a `ManagedHealth` inside the explosion, with no scene setup. The values are in `ManagedSpellDefinition`.
 5. The first brain creates a `GTG NPC Director` object. Add a `ManagedNpcDirector` to the scene yourself to change the tick rate or batch limits, or to turn the overlay on.
@@ -74,14 +74,22 @@ missing script. Delete it, or switch the define back.
 8. For a companion, choose the role Companion, set its Level, its Trustworthiness, Affinity and PaySatisfaction, and set its Leader to the player object. Give it orders from code with `brain.SetOrder(NpcOrder.Raid, 12)` and listen to `brain.OrderRefused` and `brain.Betrayed`. For a mission, resolve it with `brain.TryResolveMission` when it happens off screen. No UI for orders exists yet. A companion with no order follows its leader.
 9. For a non-hostile NPC, set its Disposition. Retaliatory ignores the player until it has been hit, and Peaceful runs and never fights.
 10. To change how a group fights, use the two Engagement fields on the `ManagedNpcThreatSource` of the target (the player). Max Melee Attackers (3) is how many NPCs may strike at once, and zero lets everyone strike. Attacker Rotation Seconds (5) is how long a striker keeps its turn before a waiting NPC gets it, and zero lets a striker keep it. The Engagement fields on each `ManagedNpcActor` set the waiting ring, the spacing and the circling speed. Select an attacker with the NPC debugger's Ranges switch on to see its place: a red ring means it holds a turn, an amber ring means it is waiting.
-11. For an archer, a crossbow guard or a mage, set the brain's Attack Style to Ranged, and add a `ManagedNpcShooter` to the same object (the brain warns once if it is missing). Pick the kind (Projectile for arrows and bolts, Spell for a mage and then the spell), the range, the stand-off distance, the cooldown and the ammo. A quiver does not refill (regeneration 0), a mage sets seconds per cast so its mana returns. The NPC needs `ManagedNpcActor` to move and fire. For a hybrid set the style to Hybrid, which shoots from afar, fights by hand close up and when it has nothing left to shoot. The target's `ManagedNpcThreatSource` has two more Engagement fields: Max Ranged Attackers (4) and Ranged Rotation Seconds (5), a pool of their own so archers never keep swordsmen from the target. Arrows and spells hurt anything with a `ManagedHealth` (or any `IManagedDamageable`) they hit, other NPCs included. Nothing needs adding to the scene for the shots themselves: the first shot creates a hidden `GTG NPC Shots` object.
+11. For an archer, a crossbow guard or a mage, set the brain's Attack Style to Ranged, and add a `ManagedNpcShooter` to the same object (the brain warns once if it is missing). Pick the kind (Projectile for arrows and bolts, Spell for a mage and then the spell), the range, the stand-off distance, the cooldown and the ammo. A quiver does not refill (regeneration 0), a mage sets seconds per cast so its mana returns. The NPC needs `ManagedNpcActor` to move and fire. For a hybrid set the style to Hybrid, which shoots from afar, fights by hand close up and when it has nothing left to shoot. The target's `ManagedNpcThreatSource` has two more Engagement fields: Max Ranged Attackers (4) and Ranged Rotation Seconds (5), a pool of their own so archers never keep swordsmen from the target. Arrows and spells hurt anything with a `ManagedHealth` (or any `IManagedDamageable`) they hit, other NPCs included. Nothing needs adding to the scene for the shots themselves: the first shot creates a hidden `GTG NPC Shots` object. Do not add a `ManagedNpcShotDriver` by hand. One placed in a scene before any shot is adopted and does the work, and any further one removes itself and logs a warning. A style of Hybrid or Ranged on an NPC with no `ManagedNpcShooter` logs a warning once, and a Hybrid then fights by hand and a Ranged one backs away, so use Melee for a fighter with no weapon.
 12. For a shopkeeper that fights back when attacked, give the merchant `ManagedNpcActor` and the Retaliatory disposition. A hostile or peaceful shopkeeper does not fight. A shopkeeper with Can Move off stays behind its stall and strikes (or fires, with a shooter) at what is in reach. A crossbow shopkeeper takes the Ranged style and a `ManagedNpcShooter`. The shop UI does not refuse service while its keeper is provoked, because that rule is not built.
+13. The pivot rule. Every default height in the NPC components assumes the pivot of the object is at its feet and the body is 2 m tall: the visible points of the threat source (head 1.6, chest 0.9), the Eye Offset of the brain (1.6) and the Shot Point Offset of the shooter (0.3, 1.4, 0.5). A Unity capsule primitive has its pivot at its center, and so does an object whose `NavMeshAgent` has Base Offset 1. For such an object subtract 1 from every height: visible points (0, 0.6, 0) and (0, -0.1, 0), eye (0, 0.6, 0), shot point (0.3, 0.4, 0.5). The `CharacterController` of the player must then be centered on the pivot too (center 0, 0, 0). A point left too high does not fail loudly: the sight rays still reach it and a shooter aims at the middle of the points, so the arrows fly over the head of the target and an NPC fires from above its own head. Select the object and look at the gizmos to check that the points sit on the body. See `npc-test-scene.md` for a scene with the numbers filled in.
+14. Layers. The scene in `npc-test-scene.md` uses Ground 6 for the floor, Player 7, Wall 8 and Npc 9. The brain's Sight Mask is Ground, Player and Wall (448), so a wall hides the player from an NPC. The caster's Hit Mask is Ground, Wall and Npc (832), which leaves the player out of its own spells. A player left on the Default layer is still seen, because a sight ray that hits nothing counts as seeing the target, but it is the wrong layer for both masks.
+15. NPC against NPC. Only an object with a `ManagedNpcThreatSource` is ever attacked or shot, and only the player has one in the scenes above, so an NPC never fights another NPC by itself. Factions are not built. For a test, add a `ManagedNpcThreatSource` and a `ManagedHealth` to each NPC: then every NPC takes every other NPC for a threat, and the nearest one in view is the target. The two must also be in sight of each other: inside the View Range (10 by default) and inside the view cone, which points along the local Z axis. Two NPCs that stand back to back never see each other.
+16. NavMesh. Set the Layer Mask of the `NavMeshSurface` to the floor and wall layers only. With Everything, the capsules of the player and the NPCs are baked into the NavMesh as obstacles, which can leave a hole of about a meter around wherever each of them stood when it was baked. Bake again after any change to the floor, the walls or their layers.
+17. Health is a runtime value. The Inspector of `ManagedHealth` shows only Max Health, because the current value is not serialized, so it cannot be watched there. The player's health is the bar of the HUD. For NPCs open GTG, NPC Debugger (Play mode): every row shows the action, `hp` in percent, `sees threat` while it has a target in sight and, in a fight, `striking`, `waiting` or `firing`. The director's Show Overlay switch prints only counts.
+18. A melee hit needs the attacker within its Attack Range plus the Hit Leeway on the ground plane (1.8 plus 0.75 by default, so 2.55 m), and the target needs a `ManagedHealth` (or any `IManagedDamageable`) on the threat source object or a parent. An arrow hits the first collider on its path and hurts the `IManagedDamageable` on it or on a parent.
 
 ### Scene setup (Managed)
 
 1. Create an empty GameObject at the feet position, on solid ground. Add
    `ManagedCharacter`, which also adds a `CharacterController` shaped as a 2 m
-   capsule, then `ManagedSpellCaster`.
+   capsule, then `ManagedSpellCaster`. A player made from a capsule primitive has
+   its pivot at the center instead: set the `CharacterController` center to 0, 0, 0
+   and read step 13 of the NPC setup.
 2. Create a second empty GameObject. Add `ManagedCameraRig` and
    `ManagedChemicalHazardField`.
 3. Press Play. With no camera assigned, the rig drives the main camera. A Cinemachine
@@ -1679,6 +1687,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - Each source owns the engagement of the NPCs that attack it, created on first use (see `ManagedCombatEngagement.cs`). `MaxMeleeAttackers` (default 3, zero is unlimited) and `AttackerRotationSeconds` (default 5, zero is no rotation) live here because the limit belongs to the target, not to the attackers. `AttackerCount` and `StrikingCount` are read-only for tests and debug tools. Negative values clamp to zero.
 - Shooters have a pool of their own on the same target: `MaxRangedAttackers` (default 4, zero is unlimited) and `RangedRotationSeconds` (default 5, zero is no rotation). `AttackerCount` counts melee attackers and shooters together, `StrikingCount` counts only the melee attackers that hold a place, and `ShooterCount` and `ShootingCount` are the same two numbers for shooters. A shooter never takes a melee token and a swordsman never takes a shooter's, so a crowd of archers does not keep the swordsmen from the target (owner answer: shooters get their own pool and an outer ring, separate from the melee limit). The 4 and the 5 s are placeholders.
 - `AimPoint` is the middle of the visible points (the body, not the feet), or the transform position when there are none. A shooter aims at the last seen position plus the offset of the aim point from the transform, so it shoots at the chest of where the target was.
+- The default points are for a pivot at the feet. On an object whose pivot is at its center they sit a meter too high, and the aim point ends above the head. The tooltip says so, and so does the pivot rule in the NPC scene setup.
 
 ### `ManagedNpcSight.cs`
 
@@ -1800,6 +1809,8 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 ### `ManagedNpcShotDriver.cs`
 
 **What it does:** The hidden object behind `ManagedNpcShots`, named `GTG NPC Shots`. `Update` steps the shots by the frame time, and `LateUpdate` fills one `ManagedSphereBatch` and draws it. The first shot creates it, nobody adds it to a scene. When it is destroyed, for instance on a scene change, the batch is disposed and the shots in the air go with it.
+
+**One driver only:** every driver steps every shot, so two of them fly each shot at twice the speed. On `Awake` a driver asks `ManagedNpcShots.Adopt`. The first to ask is the driver, which also covers one placed in a scene by hand before any shot was fired (the shots then use it and make no hidden one). Any other driver logs a warning that names its object and removes itself, and a removed driver does nothing for the one frame it may still receive. The component is hidden from the Add Component menu with an empty `AddComponentMenu`.
 
 **Decisions:**
 - It is `internal sealed`, and `ManagedNpcShots` is the only thing that knows it exists.
@@ -1933,7 +1944,7 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   plain .NET and runs them against the real Rust library. The `managed-npc` job compiles
   `Managed/Health`, `Managed/NPC` (including its `Editor/` folder), `Managed/Crown` and the spell damage files (C# 9, as in Unity 2022.3)
   against hand written `UnityEngine`, `UnityEditor` and `NavMeshAgent` stand-ins in
-  `rust/npc/managed-npc-test/` and runs 1130 checks, once on the managed fallback and
+  `rust/npc/managed-npc-test/` and runs 1138 checks, once on the managed fallback and
   once on the real library. The spell caster itself is replaced by a stub that has only
   the `Impact` event and `Raise` (and the sphere batch by one that only records what it is given). The spell definition is compiled too, so the flight, payload,
   modifier and vessel type files that it depends on are part of the project.
@@ -1954,7 +1965,7 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   system it covered and now covers the whole core stack.
   - The `managed-npc-fallback` job runs `rust/npc/managed-npc-test` on the managed fallback,
     which needs no native library. It compiles `Health/`, `NPC/` and `Crown/`, which includes
-    `ManagedCrownHudHeat.cs`, and runs their checks (1130 at the time of writing). The path filter
+    `ManagedCrownHudHeat.cs`, and runs their checks (1138 at the time of writing). The path filter
     of `npc-rust-ci.yml` does not list `Managed/Crown/` or `Managed/Hud/`, so without this job a
     change to the heat interface in `Hud/` would break `Crown/` unseen. That workflow stays the one
     that runs the real native library.
@@ -2391,7 +2402,7 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
 - Now: the manifest lists `com.midmanstudio.mdix` (from `Mid-D-Man/DixScript-Rust`) and
   `alembic`, `dragndrop`, `gensettings`, `hudman`, `inventorizz`, `nuclear` and `questly` (from
   `MidManStudio/unity-chem-sim`). Every URL is pinned with `#<commit>`: `unity-chem-sim`
-  `dbc5d01`, `DixScript-Rust` `d3333a9`. The old entry for Alembic was a `file:../../unity-chem-sim/...`
+  `dbc5d01` (now `37eec98`, see below), `DixScript-Rust` `d3333a9`. The old entry for Alembic was a `file:../../unity-chem-sim/...`
   path that only resolved on the old laptop layout, so on any other machine Alembic did not
   resolve. The lock file loses that stale entry and Unity writes the rest when it next opens the
   project.
@@ -2410,6 +2421,16 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   `Packages/packages-lock.json` of commits `fec9663` and `5c2daad` lists all eight packages, seven with
   the hash of `dbc5d01` and mdix with the hash of `d3333a9`, so Package Manager resolved them. Whether
   the project compiles clean after that is not recorded here.
+- Moved on 2026-10-19 to `unity-chem-sim` `37eec98`. A test of the scene showed the Console full of
+  `Asset Packages/com.midmanstudio.<name>/... has no meta file, but it's in an immutable folder. The asset will be
+  ignored.` for `dragndrop`, `gensettings`, `hudman`, `inventorizz` and `questly` (the list is in `refrence/Issue.md`).
+  A package that comes from a git URL is immutable, so Unity cannot write the missing `.meta` files, and it ignores
+  every file and folder that has none: the scripts and the asmdefs of those five packages were not part of the
+  project at all. `unity-chem-sim` got the 102 `.meta` files in `37eec98`, and nothing else in `packages/` changed
+  between `dbc5d01` and `37eec98`, so the move changes no code. Both packages that already had their metas
+  (`alembic`, `nuclear`) moved with them, because one repository keeps one pin. The lock file was edited to the
+  same hash, so Package Manager does not have to resolve it again. Not verified in Unity: that the warnings are
+  gone, and that the five packages, now that they compile, compile clean.
 - Risk, not verified in Unity: Questly, Inventorizz, HudMan and GenSettings declare mdix and
   dragndrop in their `package.json` as git URLs, and the Unity manual says Package Manager does
   not support git dependencies between packages. The manifest lists every package itself, which
@@ -2502,7 +2523,7 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   once that exists), bribes and pardons as game systems, saving the meter, a UI for the meter, and a way for a guard
   to tell the player from another threat. Local Favor is separate and not built. Every number is a placeholder.
 - Not verified in the Editor, not compiled by Unity. The files compile with .NET 8 (C# 9) against hand
-  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 1130 checks pass there on
+  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 1138 checks pass there on
   both the managed fallback and the real Rust library (836 before the ranged and shopkeeper work). CI job `managed-npc` repeats this on every push. The
   stub raycast is a callback, the NavMesh is a callback and the agent moves in a straight line, so the checks
   prove the logic around them (cone, budget, lingering, memory, patrol, chase, cooldown, retreat, damage
@@ -2552,6 +2573,41 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   managed fallback after one warning. Rust itself is not affected by the Burst `Illegal instruction` abort,
   because that comes from Burst code generation. Whether the Rust library runs on the 2010 MacBook is
   untested: the CI macOS leg is arm64, and no Intel macOS build exists yet.
+
+### First test of the NPC scene (`Assets/SamlpleScene.unity`, `ManagedNpcShotDriver.cs`, `ManagedNpcShots.cs`)
+
+- Reported: the melee NPC moved but did not attack the ranged NPC, and no health went down. Nothing was run
+  in Unity for the answer. The causes below come from reading the scene file and the code, and the scene was
+  corrected from them. The first run is the check, with the NPC Debugger open.
+- Why a melee NPC never attacked a ranged one. Only an object with a `ManagedNpcThreatSource` is ever targeted, and
+  only the player had one, so an NPC was invisible to every other NPC. There are no factions. The NPCs also
+  stood 17 m apart with the melee NPC's View Range at 10 and its back to the other. The scene now gives both NPCs a
+  threat source, and places them 8 m apart facing each other. This is a test arrangement: with it every NPC is the
+  enemy of every other NPC. Factions are the real answer.
+- Why the arrows could not hit. The player object had its pivot in the middle of the body (a capsule primitive at y 1.62,
+  `CharacterController` center -0.1), and the visible points of the threat source were the defaults for a pivot at the
+  feet. The aim point of a shooter is the middle of those points, so it came out about 0.35 m above the top of the head, and a
+  shot flown on a straight line to it passes over the player. The ranged NPC had the same mistake in its eye (1.6 above
+  a center pivot) and its shot point (1.4), so it fired from about 0.4 m above its own head. A melee hit does not care about
+  height, so it was not affected. The numbers for a center pivot are in `npc-test-scene.md`, and the docs
+  said nothing about the pivot until now.
+- Why the health "did not drain". The Inspector of `ManagedHealth` shows only Max Health, the current value is not
+  serialized, so no Inspector can show it going down. The player's health is the HUD bar, an NPC's is the `hp` of
+  the NPC Debugger. The ranged NPC also started 21.2 m from the player with a View Range of 20, so it never saw the player.
+  The melee NPC should have hurt the player once it reached it (10 per 1.2 s). That one is not explained by
+  anything found in the scene, so the first run should confirm it.
+- Other things in the scene, now corrected: the melee NPC had the Hybrid style and no shooter (it fought by hand, and
+  logged one warning), its eye was 0.55 m to the side, the player was on the Default layer instead of Player (7),
+  two `ManagedNpcShotDriver` components were added by hand (see below), the `NavMeshSurface` collected every layer, so
+  the capsules of the player and the NPCs were baked into the NavMesh, and the director's overlay was off.
+- Code change. `ManagedNpcShotDriver` now asks `ManagedNpcShots.Adopt` when it wakes up. The first driver is the
+  driver, and any other removes itself with a warning that names the object. Before, a driver placed by hand and the hidden
+  driver the first shot makes all stepped every shot, which flew the arrows at two or three times their speed. It
+  is hidden from the Add Component menu. The harness has 9 new checks for it (adopting a placed driver, removing
+  a second, a removed driver doing nothing for the frame it may still get), and they fail when the adoption rule is
+  broken.
+- Docs: the NPC scene setup has six new steps (pivot, layers, NPC against NPC, NavMesh, health, melee reach), and
+  `npc-test-scene.md` is new.
 
 ### Ranged, hybrid and shopkeeper fighters (`ManagedNpcShooter.cs`, `ManagedNpcShots.cs`, `ManagedNpcShotDriver.cs`, `ManagedNpcBallistics.cs`, `ManagedCombatEngagement.cs`, `ManagedNpcActor.cs`, `ManagedNpcBrain.cs`, `ManagedNpcThreatSource.cs`, `ManagedSpellCaster.cs`)
 
