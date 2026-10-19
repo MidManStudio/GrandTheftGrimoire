@@ -1,0 +1,84 @@
+# .github/workflows/managed-packages-ci.yml
+# Compile gate for the part of the Managed stack that needs a studio package. Managed/Quests/ reads the Questly
+# runtime, which is not in this repo, so managed-csharp-ci.yml leaves that folder out. This job downloads the
+# Questly sources and the managed MidManStudio.Mdix.Core.dll at the commits pinned in Packages/manifest.json,
+# compiles them together with Managed/Quests/, Managed/Missions/ and Managed/Flags/ at C# 9 against hand written
+# UnityEngine stand-ins, and runs the checks in packages-test/. The native mdix library is never loaded, and
+# a .mdix file is not parsed. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
+
+name: Managed Packages CI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Assets/MidManStudio/Gtg/Managed/Quests/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Missions/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Flags/**'
+      - 'packages-test/**'
+      - 'Packages/manifest.json'
+      - '.github/workflows/managed-packages-ci.yml'
+  pull_request:
+    paths:
+      - 'Assets/MidManStudio/Gtg/Managed/Quests/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Missions/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Flags/**'
+      - 'packages-test/**'
+      - 'Packages/manifest.json'
+      - '.github/workflows/managed-packages-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  quests-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      # Both repositories are public, so no token is needed. The script reads the pins from the manifest and
+      # fails with a message when one is missing or is not a commit pin.
+      - name: Fetch the pinned packages
+        run: |
+          set -o pipefail
+          mkdir -p ci-out
+          python3 packages-test/fetch_packages.py 2>&1 | tee ci-out/fetch.txt
+
+      # packages-test/nuget.config clears every package source, and the project has no package references,
+      # so the restore needs no network.
+      - name: Compile Questly and the Quests bridge at C# 9
+        run: |
+          set -o pipefail
+          dotnet build packages-test/PackagesTest.csproj -c Release --nologo 2>&1 | tee ci-out/build.txt
+
+      - name: Run the checks
+        run: |
+          set -o pipefail
+          dotnet run --project packages-test/PackagesTest.csproj -c Release --no-build 2>&1 | tee ci-out/checks.txt
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          {
+            echo '## GTG Managed Packages CI'
+            echo
+            echo 'The Questly runtime and the Quests bridge compiled at C# 9 with plain .NET against hand written UnityEngine stand-ins, then run through the checks in `packages-test/`. This is not Unity. A red compile step can mean a Quests file would break the Unity compile, or that Questly changed under the pinned commit. The native mdix library is not loaded and no .mdix file is parsed.'
+            echo
+            echo '### Pinned packages'
+            echo '```text'
+            cat ci-out/fetch.txt 2>/dev/null | head -c 4000 || echo '(no fetch output captured)'
+            echo '```'
+            echo
+            echo '### Compile'
+            echo '```text'
+            grep -E 'error|Warn|Build succeeded|Elapsed' ci-out/build.txt 2>/dev/null | head -c 20000 || echo '(no build output captured)'
+            echo '```'
+            echo
+            echo '### Checks'
+            echo '```text'
+            tail -n 60 ci-out/checks.txt 2>/dev/null | head -c 20000 || echo '(no check output captured)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
