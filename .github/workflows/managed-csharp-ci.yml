@@ -1,37 +1,37 @@
-# .github/workflows/managed-csharp-ci.yml
-# Compile gate for the Managed C# stack. The project has no assembly definitions, so one compile error in any
-# Managed file stops every system in Unity. This job compiles Managed/ (all folders except NPC, Crown and
-# Chemistry) at C# 9, the language level of Unity 2022.3, with plain .NET against hand written stand-ins for
-# UnityEngine, uGUI, TextMeshPro and the Input System, and then runs the checks in building-test/.
-# NPC, Crown and Health are compiled by the second job, with the NPC harness on its managed fallback, because the
-# path filter of npc-rust-ci.yml does not list Managed/Crown/ or Managed/Hud/ and the Crown heat component
-# implements an interface of Hud. That workflow still runs the real native library. Chemistry needs the Alembic
-# package and is not compiled by either. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
+# .github/workflows/managed-packages-ci.yml
+# Compile gate for the part of the Managed stack that needs a studio package. Managed/Quests/ reads the Questly
+# runtime, which is not in this repo, so managed-csharp-ci.yml leaves that folder out. This job downloads the
+# Questly sources and the managed MidManStudio.Mdix.Core.dll at the commits pinned in Packages/manifest.json,
+# compiles them together with Managed/Quests/, Managed/Missions/ and Managed/Flags/ at C# 9 against hand written
+# UnityEngine stand-ins, and runs the checks in packages-test/. The native mdix library is never loaded, and
+# a .mdix file is not parsed. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
 
-name: Managed C# CI
+name: Managed Packages CI
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'Assets/MidManStudio/Gtg/Managed/**'
-      - 'Assets/MidManStudio/Gtg/Data/**'
-      - 'building-test/**'
-      - 'rust/npc/managed-npc-test/**'
-      - '.github/workflows/managed-csharp-ci.yml'
+      - 'Assets/MidManStudio/Gtg/Managed/Quests/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Missions/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Flags/**'
+      - 'packages-test/**'
+      - 'Packages/manifest.json'
+      - '.github/workflows/managed-packages-ci.yml'
   pull_request:
     paths:
-      - 'Assets/MidManStudio/Gtg/Managed/**'
-      - 'Assets/MidManStudio/Gtg/Data/**'
-      - 'building-test/**'
-      - 'rust/npc/managed-npc-test/**'
-      - '.github/workflows/managed-csharp-ci.yml'
+      - 'Assets/MidManStudio/Gtg/Managed/Quests/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Missions/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Flags/**'
+      - 'packages-test/**'
+      - 'Packages/manifest.json'
+      - '.github/workflows/managed-packages-ci.yml'
 
 permissions:
   contents: read
 
 jobs:
-  managed-compile:
+  quests-bridge:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -39,26 +39,38 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # building-test/nuget.config clears every package source, and the project has no package references,
-      # so the restore needs no network.
-      - name: Compile Managed C# at C# 9
+      # Both repositories are public, so no token is needed. The script reads the pins from the manifest and
+      # fails with a message when one is missing or is not a commit pin.
+      - name: Fetch the pinned packages
         run: |
           set -o pipefail
           mkdir -p ci-out
-          dotnet build building-test/BuildingTest.csproj -c Release --nologo 2>&1 | tee ci-out/build.txt
+          python3 packages-test/fetch_packages.py 2>&1 | tee ci-out/fetch.txt
+
+      # packages-test/nuget.config clears every package source, and the project has no package references,
+      # so the restore needs no network.
+      - name: Compile Questly and the Quests bridge at C# 9
+        run: |
+          set -o pipefail
+          dotnet build packages-test/PackagesTest.csproj -c Release --nologo 2>&1 | tee ci-out/build.txt
 
       - name: Run the checks
         run: |
           set -o pipefail
-          dotnet run --project building-test/BuildingTest.csproj -c Release --no-build 2>&1 | tee ci-out/checks.txt
+          dotnet run --project packages-test/PackagesTest.csproj -c Release --no-build 2>&1 | tee ci-out/checks.txt
 
       - name: Publish run summary
         if: always()
         run: |
           {
-            echo '## GTG Managed C# CI'
+            echo '## GTG Managed Packages CI'
             echo
-            echo 'Managed sources compiled at C# 9 with plain .NET against hand written Unity, uGUI, TextMeshPro and Input System stand-ins, then run through the checks in `building-test/`. This is not Unity. A red compile step means a Managed file would break the Unity compile, or a file uses a Unity member the stand-ins do not have yet.'
+            echo 'The Questly runtime and the Quests bridge compiled at C# 9 with plain .NET against hand written UnityEngine stand-ins, then run through the checks in `packages-test/`. This is not Unity. A red compile step can mean a Quests file would break the Unity compile, or that Questly changed under the pinned commit. The native mdix library is not loaded and no .mdix file is parsed.'
+            echo
+            echo '### Pinned packages'
+            echo '```text'
+            cat ci-out/fetch.txt 2>/dev/null | head -c 4000 || echo '(no fetch output captured)'
+            echo '```'
             echo
             echo '### Compile'
             echo '```text'
@@ -68,33 +80,5 @@ jobs:
             echo '### Checks'
             echo '```text'
             tail -n 60 ci-out/checks.txt 2>/dev/null | head -c 20000 || echo '(no check output captured)'
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  managed-npc-fallback:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '8.0.x'
-
-      # The managed fallback of the NPC decision needs no native library. The run against the real library
-      # stays in npc-rust-ci.yml.
-      - name: Compile Crown, NPC and Health and run their checks on the managed fallback
-        run: |
-          set -o pipefail
-          mkdir -p ci-out
-          dotnet run --project rust/npc/managed-npc-test -c Release -- fallback 2>&1 | tee ci-out/managed-npc-fallback.txt
-
-      - name: Publish run summary
-        if: always()
-        run: |
-          {
-            echo '## GTG Managed NPC compile and checks (managed fallback)'
-            echo
-            echo 'Crown, NPC and Health compiled at C# 9 with plain .NET against the NPC harness stand-ins, which includes the Crown heat component of the HUD. Checks run on the managed fallback only.'
-            echo '```text'
-            tail -n 40 ci-out/managed-npc-fallback.txt 2>/dev/null | head -c 20000 || echo '(no output captured)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
