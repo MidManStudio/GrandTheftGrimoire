@@ -29,7 +29,7 @@ _Static_assert(offsetof(GtgNpcObservation,betrayal_opportunity)==56, "betrayal_o
 _Static_assert(offsetof(GtgNpcObservation,attack_style)==57, "attack_style offset");
 _Static_assert(offsetof(GtgNpcObservation,ranged_ready)==58, "ranged_ready offset");
 _Static_assert(offsetof(GtgNpcObservation,ranged_stance)==59, "ranged_stance offset");
-_Static_assert(offsetof(GtgNpcObservation,reserved_c)==60, "reserved_c offset");
+_Static_assert(offsetof(GtgNpcObservation,favor)==60, "favor offset");
 _Static_assert(offsetof(GtgNpcDecision,action)==8, "action offset");
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#x); return 1; } } while (0)
 
@@ -164,6 +164,28 @@ int main(void) {
  shop.disposition=GTG_NPC_DISPOSITION_PEACEFUL;
  CHECK(decide_one(shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_IDLE);
 
+ /* A shopkeeper or a civilian that likes the player does not take the player for a threat. Favor is clamped to -1..1,
+    and zero, what an older caller sends, is neutral. A fighter ignores it. */
+ GtgNpcObservation liked_shop=shop; liked_shop.provoked=0; liked_shop.attack_style=GTG_NPC_ATTACK_STYLE_MELEE; liked_shop.ranged_ready=0; liked_shop.threat_distance=0; liked_shop.disposition=GTG_NPC_DISPOSITION_HOSTILE;
+ CHECK(decide_one(liked_shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_IDLE);
+ liked_shop.favor=0.2f;
+ CHECK(decide_one(liked_shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_TRADE);
+ liked_shop.favor=-1.0f;
+ CHECK(decide_one(liked_shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_IDLE);
+ liked_shop.favor=50.0f;
+ CHECK(decide_one(liked_shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_TRADE);
+ liked_shop.favor=0.2f; liked_shop.provoked=1;
+ CHECK(decide_one(liked_shop,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_IDLE);
+ GtgNpcObservation villager={.npc_id=9,.role=GTG_NPC_ROLE_CIVILIAN,.backend=GTG_NPC_BACKEND_STATE_MACHINE,.threat_visible=1,.health_fraction=1,.can_move=1};
+ CHECK(decide_one(villager,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_RETREAT);
+ villager.favor=0.5f;
+ CHECK(decide_one(villager,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_PATROL);
+ villager.favor=-0.5f;
+ CHECK(decide_one(villager,&action)==GTG_NPC_OK && action==GTG_NPC_ACTION_RETREAT);
+ GtgNpcObservation loved_enemy=enemy; loved_enemy.threat_visible=1; loved_enemy.favor=1.0f;
+ { int32_t loved_action, plain_action; GtgNpcObservation plain=loved_enemy; plain.favor=0.0f;
+   CHECK(decide_one(loved_enemy,&loved_action)==GTG_NPC_OK && decide_one(plain,&plain_action)==GTG_NPC_OK && loved_action==plain_action); }
+
  /* Anything outside the defined values is rejected, and nothing is written. */
  GtgNpcObservation bad;
  bad=enemy; bad.disposition=3; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
@@ -175,7 +197,8 @@ int main(void) {
  bad=enemy; bad.ranged_ready=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.ranged_stance=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.threat_distance=NAN; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
- bad=enemy; bad.reserved_c=1; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.favor=NAN; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
+ bad=enemy; bad.favor=INFINITY; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.betrayal_opportunity=2; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.trustworthiness=NAN; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);
  bad=enemy; bad.role=6; CHECK(decide_one(bad,&action)==GTG_NPC_INVALID);

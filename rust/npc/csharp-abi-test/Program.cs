@@ -72,7 +72,8 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     CrownHeat = (byte)(((r2 >> 48) % 100) < 55 ? 0 : ((r2 >> 48) % 100) < 75 ? 1 : ((r2 >> 48) % 100) < 90 ? 2 : 3),
                     AttackStyle = (byte)((r4 % 100) < 60 ? 0 : (r4 % 100) < 85 ? 1 : 2),
                     RangedReady = (byte)(((r4 >> 8) % 100) < 80 ? 1 : 0),
-                    RangedStance = (byte)(((r4 >> 16) % 100) < 40 ? 1 : 0)
+                    RangedStance = (byte)(((r4 >> 16) % 100) < 40 ? 1 : 0),
+                    Favor = role <= 1 ? ((float)((r4 >> 32) % 2001UL) - 1000f) / 1000f : 0f
                 };
             }
             return pool;
@@ -85,7 +86,7 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             Check(Marshal.SizeOf<NPCNativeDecision>() == 16, "decision size is 16");
             string[] obsFields = { "NpcId", "Role", "Backend", "ThreatVisible", "HealthFraction", "CanMove", "ThreatDistance",
                 "Disposition", "Order", "Provoked", "CrownHeat", "Level", "OrderLevel", "Trustworthiness", "Affinity", "PaySatisfaction",
-                "Noise", "BetrayalOpportunity", "AttackStyle", "RangedReady", "RangedStance", "ReservedC" };
+                "Noise", "BetrayalOpportunity", "AttackStyle", "RangedReady", "RangedStance", "Favor" };
             int[] obsOffsets = { 0, 8, 12, 16, 20, 24, 28, 32, 33, 34, 35, 36, 38, 40, 44, 48, 52, 56, 57, 58, 59, 60 };
             for (int i = 0; i < obsFields.Length; i++)
                 Check((int)Marshal.OffsetOf<NPCNativeObservation>(obsFields[i]) == obsOffsets[i], "observation offset of " + obsFields[i]);
@@ -127,6 +128,9 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             var styles = new ulong[3];
             foreach (var o in pool) styles[o.AttackStyle]++;
             for (int t = 0; t < 3; t++) Check(styles[t] > 0, "attack style " + t + " occurs in the mixed pool");
+            ulong likedCount = 0, dislikedCount = 0;
+            foreach (var o in pool) { if (o.Favor >= 0.2f) likedCount++; if (o.Favor < 0f) dislikedCount++; }
+            Check(likedCount > 0 && dislikedCount > 0, "liked and disliked NPCs both occur in the mixed pool");
             Console.WriteLine("# mixed_actions idle={0} trade={1} patrol={2} attack={3} retreat={4} follow={5} hold={6} refuse={7} mission={8} betray={9} shoot={10} kite={11} fnv1a=0x{12:x16}",
                 hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8], hist[9], hist[10], hist[11], hash);
 
@@ -144,8 +148,8 @@ namespace MidManStudio.Gtg.NPC.AbiTest
             Check(native[0].Action == 77 && native[1].Action == 77, "rejected batch leaves outputs untouched");
 
             // Each field added since version 3 is validated by the native side. A bad value is rejected as a whole.
-            string[] badNames = { "disposition 3", "order 6", "provoked 2", "crown heat 4", "attack style 3", "reserved c", "opportunity 2", "trust nan", "affinity infinity",
-                "ranged ready 2", "ranged stance 2", "threat distance nan", "threat distance infinity" };
+            string[] badNames = { "disposition 3", "order 6", "provoked 2", "crown heat 4", "attack style 3", "favor nan", "opportunity 2", "trust nan", "affinity infinity",
+                "ranged ready 2", "ranged stance 2", "threat distance nan", "threat distance infinity", "favor infinity", "favor negative infinity" };
             for (int k = 0; k < badNames.Length; k++)
             {
                 Array.Copy(pool, 0, input, 0, 2);
@@ -156,14 +160,16 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                     case 2: input[1].Provoked = 2; break;
                     case 3: input[1].CrownHeat = 4; break;
                     case 4: input[1].AttackStyle = 3; break;
-                    case 5: input[1].ReservedC = 1; break;
+                    case 5: input[1].Favor = float.NaN; break;
                     case 6: input[1].BetrayalOpportunity = 2; break;
                     case 7: input[1].Trustworthiness = float.NaN; break;
                     case 8: input[1].Affinity = float.PositiveInfinity; break;
                     case 9: input[1].RangedReady = 2; break;
                     case 10: input[1].RangedStance = 2; break;
                     case 11: input[1].ThreatDistance = float.NaN; break;
-                    default: input[1].ThreatDistance = float.PositiveInfinity; break;
+                    case 12: input[1].ThreatDistance = float.PositiveInfinity; break;
+                    case 13: input[1].Favor = float.PositiveInfinity; break;
+                    default: input[1].Favor = float.NegativeInfinity; break;
                 }
 
                 native[0] = sentinel; native[1] = sentinel;
@@ -251,6 +257,52 @@ namespace MidManStudio.Gtg.NPC.AbiTest
                         " style " + row[4] + " ready " + row[5] + " distance " + row[6];
                     Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == want, "native: " + label + " gives " + want + ", got " + native[0].Action);
                     Check(NPCManagedFallback.Decide(input[0]).Action == want, "fallback: " + label + " gives " + want);
+                }
+            }
+
+            // Favor. A shopkeeper or a civilian that likes the player (favor 0.2 or more) does not take the player for a
+            // threat, unless the player has just attacked it. A retaliatory shopkeeper that was attacked still fights back.
+            // A number above 1 counts as 1 and below -1 as -1 in the library, and the fallback reads it the same way.
+            // Each row is role, favor, provoked, disposition, threat visible, can move, expected action.
+            float justUnder = MathF.BitDecrement(0.2f);
+            object[][] favorRows =
+            {
+                new object[] { 0u, 0f, 0, 0, 1, 0, 0 }, new object[] { 0u, 0.2f, 0, 0, 1, 0, 1 }, new object[] { 0u, justUnder, 0, 0, 1, 0, 0 },
+                new object[] { 0u, 1f, 0, 0, 1, 0, 1 }, new object[] { 0u, -1f, 0, 0, 1, 0, 0 }, new object[] { 0u, 50f, 0, 0, 1, 0, 1 }, new object[] { 0u, -50f, 0, 0, 1, 0, 0 },
+                new object[] { 0u, 1f, 1, 0, 1, 0, 0 }, new object[] { 0u, 1f, 1, 2, 1, 0, 0 }, new object[] { 0u, 1f, 1, 1, 1, 0, 3 },
+                new object[] { 0u, -1f, 0, 0, 0, 0, 1 }, new object[] { 0u, 1f, 0, 0, 0, 0, 1 },
+                new object[] { 1u, 0f, 0, 0, 1, 1, 4 }, new object[] { 1u, 0.2f, 0, 0, 1, 1, 2 }, new object[] { 1u, justUnder, 0, 0, 1, 1, 4 },
+                new object[] { 1u, 1f, 0, 0, 1, 0, 0 }, new object[] { 1u, 1f, 1, 0, 1, 1, 4 }, new object[] { 1u, 1f, 1, 0, 1, 0, 0 },
+                new object[] { 1u, -1f, 0, 0, 1, 1, 4 }, new object[] { 1u, 50f, 0, 0, 1, 1, 2 }, new object[] { 1u, 1f, 0, 0, 0, 1, 2 }
+            };
+            foreach (uint backend in new uint[] { 0, 1, 2 })
+            {
+                foreach (object[] row in favorRows)
+                {
+                    input[0] = new NPCNativeObservation
+                    {
+                        NpcId = 34, Role = (uint)row[0], Backend = backend, ThreatVisible = (uint)(int)row[4], HealthFraction = 1f, CanMove = (uint)(int)row[5], Level = 10,
+                        Disposition = (byte)(int)row[3], Provoked = (byte)(int)row[2], Favor = (float)row[1]
+                    };
+                    int want = (int)row[6];
+                    string label = "role " + row[0] + " backend " + backend + " favor " + row[1] + " provoked " + row[2] + " disposition " + row[3] + " threat " + row[4] + " can move " + row[5];
+                    Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == want, "native: " + label + " gives " + want + ", got " + native[0].Action);
+                    Check(NPCManagedFallback.Decide(input[0]).Action == want, "fallback: " + label + " gives " + want);
+                }
+            }
+
+            // No other role reads favor, so favor changes nothing for them.
+            foreach (uint role in new uint[] { 2, 3, 4, 5 })
+            {
+                foreach (byte disposition in new byte[] { 0, 1, 2 })
+                {
+                    var plain = new NPCNativeObservation { NpcId = 35, Role = role, Backend = 1, ThreatVisible = 1, HealthFraction = 1f, CanMove = 1, Level = 10, Disposition = disposition, Provoked = 1 };
+                    var loved = plain; loved.Favor = 1f;
+                    var hated = plain; hated.Favor = -1f;
+                    input[0] = plain; Check(NPCNativeLib.TryDecide(input, native, 1), "native: plain batch"); int baseline = native[0].Action;
+                    input[0] = loved; Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == baseline, "native: role " + role + " disposition " + disposition + " ignores a liked player");
+                    input[0] = hated; Check(NPCNativeLib.TryDecide(input, native, 1) && native[0].Action == baseline, "native: role " + role + " disposition " + disposition + " ignores a hated player");
+                    Check(NPCManagedFallback.Decide(loved).Action == baseline && NPCManagedFallback.Decide(hated).Action == baseline, "fallback: role " + role + " disposition " + disposition + " ignores favor");
                 }
             }
 

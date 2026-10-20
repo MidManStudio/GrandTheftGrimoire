@@ -175,6 +175,11 @@ pub struct Observation {
     /// Distance in meters from the NPC to the threat it is fighting. Zero or less means unknown, and an
     /// unknown distance counts as the buffer between the two ranges, so nothing switches.
     pub threat_distance: f32,
+    /// How much the NPC likes the player, from -1 (hates) to 1 (adores). The game keeps the meter and
+    /// sends the value. Zero means neutral, or no information, so a caller that never sets it gets the
+    /// behavior from before the field existed. A shopkeeper or a civilian that likes the player does not
+    /// treat a visible threat as one, see `FRIENDLY_FAVOR` in `gtg-npc-behavior`.
+    pub favor: f32,
 }
 
 /// The result of one decision.

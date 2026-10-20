@@ -36,6 +36,11 @@ pub const BETRAY_MAX_CHANCE: f32 = 0.5;
 /// whatever its disposition says about unprovoked threats. Tier 0 changes nothing. Placeholder value.
 pub const WANTED_CROWN_HEAT: u8 = 1;
 
+/// The lowest favor at which a shopkeeper or a civilian counts as liking the player. Favor runs from -1 to
+/// 1, so this is 20 on the 100 point meter of the game and the Liked tier starts there. Placeholder value,
+/// see docs/gtg-npc-behavior.md.
+pub const FRIENDLY_FAVOR: f32 = 0.2;
+
 /// A ranged fighter that can move backs away from a threat that is closer than this many meters, and
 /// shoots when it is not. Placeholder value, see docs/gtg-npc-behavior.md.
 pub const KITE_DISTANCE: f32 = 6.0;
@@ -54,13 +59,7 @@ pub fn decide(o: Observation) -> Decision {
     };
     let action = match o.role {
         NpcRole::Merchant => merchant(&o, health),
-        NpcRole::Civilian => {
-            if o.threat_visible && o.can_move {
-                NpcAction::Retreat
-            } else {
-                wander(o.can_move)
-            }
-        }
+        NpcRole::Civilian => civilian(&o),
         NpcRole::Guard | NpcRole::Enemy | NpcRole::Boss => combatant(&o, health),
         NpcRole::Companion => companion(&o, health),
     };
@@ -86,15 +85,34 @@ fn follow_or_idle(can_move: bool) -> NpcAction {
     }
 }
 
+// Whether the NPC likes the player enough to not take the player for a threat: its favor is at or above
+// `FRIENDLY_FAVOR`. A number that is not finite counts as neutral, so bad input never makes an NPC friendly.
+fn likes_player(o: &Observation) -> bool {
+    o.favor.is_finite() && o.favor >= FRIENDLY_FAVOR
+}
+
+// A civilian runs from a visible threat when it can move. A civilian that likes the player does not take the
+// player for a threat and goes about its day, unless the player has just attacked it.
+fn civilian(o: &Observation) -> NpcAction {
+    if o.threat_visible && o.can_move && !(likes_player(o) && !o.provoked) {
+        NpcAction::Retreat
+    } else {
+        wander(o.can_move)
+    }
+}
+
 // A shopkeeper trades when nothing threatens it and stands still when something does. A shopkeeper with the
 // retaliatory disposition that has been attacked fights back instead, the way a retaliatory guard does, and
 // fights in its own attack style. Hostile and peaceful shopkeepers never fight, and neither does a retaliatory
-// one that has not been attacked. Once the threat is out of sight the shopkeeper trades again.
+// one that has not been attacked. A shopkeeper that likes the player keeps trading under the player's eye,
+// unless the player has just attacked it. Once the threat is out of sight the shopkeeper trades again.
 fn merchant(o: &Observation, health: f32) -> NpcAction {
     if !o.threat_visible {
         NpcAction::Trade
     } else if o.disposition == NpcDisposition::Retaliatory && o.provoked {
         fight(o, health)
+    } else if likes_player(o) && !o.provoked {
+        NpcAction::Trade
     } else {
         NpcAction::Idle
     }
@@ -365,6 +383,7 @@ mod tests {
             ranged_ready: false,
             ranged_stance: false,
             threat_distance: 0.0,
+            favor: 0.0,
         }
     }
 
@@ -940,6 +959,7 @@ mod companion_v4_tests {
             ranged_ready: false,
             ranged_stance: false,
             threat_distance: 0.0,
+            favor: 0.0,
         }
     }
 
@@ -1319,6 +1339,7 @@ mod attack_style_tests {
             ranged_ready: true,
             ranged_stance: false,
             threat_distance: 0.0,
+            favor: 0.0,
         }
     }
 
@@ -1689,6 +1710,219 @@ mod attack_style_tests {
         o.ranged_stance = true;
         for _ in 0..100 {
             assert_eq!(act(o), act(o));
+        }
+    }
+}
+
+// How favor changes a shopkeeper and a civilian. A fighter and a companion never read it.
+#[cfg(test)]
+mod favor_tests {
+    use super::*;
+
+    fn obs(role: NpcRole) -> Observation {
+        Observation {
+            npc_id: 77,
+            role,
+            backend: DecisionBackend::Utility,
+            threat_visible: false,
+            health_fraction: 1.0,
+            can_move: true,
+            disposition: NpcDisposition::Hostile,
+            order: NpcOrder::None,
+            provoked: false,
+            level: 10,
+            order_level: 0,
+            trustworthiness: 0.5,
+            affinity: 0.5,
+            pay_satisfaction: 0.5,
+            noise: 0,
+            betrayal_opportunity: false,
+            crown_heat: 0,
+            attack_style: AttackStyle::Melee,
+            ranged_ready: false,
+            ranged_stance: false,
+            threat_distance: 0.0,
+            favor: 0.0,
+        }
+    }
+
+    fn act(o: Observation) -> NpcAction {
+        decide(o).action
+    }
+
+    fn watched(role: NpcRole) -> Observation {
+        let mut o = obs(role);
+        o.threat_visible = true;
+        o
+    }
+
+    #[test]
+    fn the_friendly_line_is_inside_the_range_of_favor() {
+        const {
+            assert!(FRIENDLY_FAVOR > 0.0 && FRIENDLY_FAVOR < 1.0);
+        }
+    }
+
+    #[test]
+    fn a_shopkeeper_that_likes_the_player_keeps_trading_under_a_visible_threat() {
+        let mut o = watched(NpcRole::Merchant);
+        assert_eq!(act(o), NpcAction::Idle, "neutral: stands still, as before");
+        o.favor = FRIENDLY_FAVOR;
+        assert_eq!(
+            act(o),
+            NpcAction::Trade,
+            "exactly at the line counts as liking"
+        );
+        o.favor = 1.0;
+        assert_eq!(act(o), NpcAction::Trade, "adoring");
+        o.can_move = false;
+        assert_eq!(act(o), NpcAction::Trade, "a stall keeper too");
+    }
+
+    #[test]
+    fn the_friendly_line_is_exact() {
+        let mut o = watched(NpcRole::Merchant);
+        o.favor = f32::from_bits(FRIENDLY_FAVOR.to_bits() - 1);
+        assert_eq!(act(o), NpcAction::Idle, "one step under the line");
+        o.favor = FRIENDLY_FAVOR;
+        assert_eq!(act(o), NpcAction::Trade, "on the line");
+        let mut c = watched(NpcRole::Civilian);
+        c.favor = f32::from_bits(FRIENDLY_FAVOR.to_bits() - 1);
+        assert_eq!(
+            act(c),
+            NpcAction::Retreat,
+            "a civilian one step under the line"
+        );
+        c.favor = FRIENDLY_FAVOR;
+        assert_eq!(act(c), NpcAction::Patrol, "a civilian on the line");
+    }
+
+    #[test]
+    fn a_shopkeeper_that_dislikes_the_player_is_no_different_from_a_neutral_one() {
+        let mut o = watched(NpcRole::Merchant);
+        for favor in [0.0, -0.1, -0.5, -1.0] {
+            o.favor = favor;
+            assert_eq!(act(o), NpcAction::Idle, "favor {favor}");
+        }
+    }
+
+    #[test]
+    fn a_shopkeeper_the_player_just_attacked_does_not_stay_friendly() {
+        let mut o = watched(NpcRole::Merchant);
+        o.favor = 1.0;
+        o.provoked = true;
+        for disposition in [NpcDisposition::Hostile, NpcDisposition::Peaceful] {
+            o.disposition = disposition;
+            assert_eq!(
+                act(o),
+                NpcAction::Idle,
+                "{disposition:?} does not trade after a blow"
+            );
+        }
+        o.disposition = NpcDisposition::Retaliatory;
+        assert_eq!(
+            act(o),
+            NpcAction::Attack,
+            "a retaliatory shopkeeper still fights back however much it liked the player"
+        );
+    }
+
+    #[test]
+    fn a_friendly_shopkeeper_with_nothing_in_view_trades_as_always() {
+        let mut o = obs(NpcRole::Merchant);
+        for favor in [-1.0, 0.0, 1.0] {
+            o.favor = favor;
+            assert_eq!(act(o), NpcAction::Trade, "favor {favor}");
+        }
+    }
+
+    #[test]
+    fn a_civilian_that_likes_the_player_does_not_run() {
+        let mut o = watched(NpcRole::Civilian);
+        assert_eq!(act(o), NpcAction::Retreat, "neutral: runs, as before");
+        o.favor = 0.5;
+        assert_eq!(act(o), NpcAction::Patrol, "liked: goes about its day");
+        o.can_move = false;
+        assert_eq!(
+            act(o),
+            NpcAction::Idle,
+            "a civilian that cannot move stays put"
+        );
+        o.can_move = true;
+        o.favor = -1.0;
+        assert_eq!(act(o), NpcAction::Retreat, "disliked: runs");
+    }
+
+    #[test]
+    fn a_civilian_the_player_just_attacked_runs_whatever_it_felt() {
+        let mut o = watched(NpcRole::Civilian);
+        o.favor = 1.0;
+        o.provoked = true;
+        assert_eq!(act(o), NpcAction::Retreat);
+        o.can_move = false;
+        assert_eq!(act(o), NpcAction::Idle, "and stands when it cannot move");
+    }
+
+    #[test]
+    fn a_number_that_is_not_finite_is_neutral() {
+        for favor in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let mut m = watched(NpcRole::Merchant);
+            m.favor = favor;
+            assert_eq!(act(m), NpcAction::Idle, "merchant, favor {favor}");
+            let mut c = watched(NpcRole::Civilian);
+            c.favor = favor;
+            assert_eq!(act(c), NpcAction::Retreat, "civilian, favor {favor}");
+        }
+    }
+
+    #[test]
+    fn fighters_and_companions_do_not_read_favor() {
+        let dispositions = [
+            NpcDisposition::Hostile,
+            NpcDisposition::Retaliatory,
+            NpcDisposition::Peaceful,
+        ];
+        let orders = [
+            NpcOrder::None,
+            NpcOrder::Follow,
+            NpcOrder::Hold,
+            NpcOrder::Attack,
+            NpcOrder::Deliver,
+            NpcOrder::Raid,
+        ];
+        for role in [
+            NpcRole::Guard,
+            NpcRole::Enemy,
+            NpcRole::Boss,
+            NpcRole::Companion,
+        ] {
+            for disposition in dispositions {
+                for order in orders {
+                    for (visible, provoked, can_move) in [
+                        (false, false, true),
+                        (true, false, true),
+                        (true, true, true),
+                        (true, true, false),
+                    ] {
+                        let mut o = obs(role);
+                        o.disposition = disposition;
+                        o.order = order;
+                        o.threat_visible = visible;
+                        o.provoked = provoked;
+                        o.can_move = can_move;
+                        o.crown_heat = 1;
+                        let baseline = act(o);
+                        for favor in [-1.0, 0.3, 1.0] {
+                            o.favor = favor;
+                            assert_eq!(
+                                act(o),
+                                baseline,
+                                "{role:?} {disposition:?} {order:?} visible {visible} provoked {provoked}, favor {favor}"
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
 }

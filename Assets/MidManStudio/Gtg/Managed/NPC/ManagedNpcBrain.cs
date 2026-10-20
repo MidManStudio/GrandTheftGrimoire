@@ -5,6 +5,7 @@
 
 using System;
 using MidManStudio.Gtg.Managed.Crown;
+using MidManStudio.Gtg.Managed.Favor;
 using MidManStudio.Gtg.Managed.Health;
 using MidManStudio.Gtg.NPC.Components;
 using MidManStudio.Gtg.NPC.Native;
@@ -86,6 +87,12 @@ namespace MidManStudio.Gtg.Managed.NPC
 
         // The earliest time a hit on this NPC counts as a new assault, see ManagedCrownRegion.
         internal float CrimeRepeatTime = float.NegativeInfinity;
+
+        // The same for the favor penalty of a hit, see ManagedFavorRegion.
+        internal float FavorRepeatTime = float.NegativeInfinity;
+
+        // The favor gauge on this object, set by the gauge itself. Null for an NPC with no opinion of its own.
+        internal ManagedNpcFavor FavorGauge;
 
         /// <summary>(this, old action, new action). Raised on the main thread inside the director tick.</summary>
         public event Action<ManagedNpcBrain, NpcAction, NpcAction> ActionChanged;
@@ -213,6 +220,16 @@ namespace MidManStudio.Gtg.Managed.NPC
                 _health.Damaged += OnDamaged;
             }
 
+            // A gauge added to the object before this brain existed could not link to it, so look for one here.
+            if (FavorGauge == null)
+            {
+                ManagedNpcFavor gauge = GetComponent<ManagedNpcFavor>();
+                if (gauge != null && gauge.isActiveAndEnabled)
+                {
+                    FavorGauge = gauge;
+                }
+            }
+
             ManagedNpcDirector.Register(this);
         }
 
@@ -241,6 +258,9 @@ namespace MidManStudio.Gtg.Managed.NPC
             // Hurting somebody the law protects, in sight of a guard, earns Crown Heat. The killing blow arrives here
             // with the health already at zero.
             ManagedCrownRegion.ReportHurt(this, !health.IsAlive, source);
+
+            // The same hit costs favor, with the victim, with whoever watched it and with the town.
+            ManagedFavorRegion.ReportHurt(this, !health.IsAlive, source);
         }
 
         private void OnValidate()
@@ -415,8 +435,22 @@ namespace MidManStudio.Gtg.Managed.NPC
                 // A melee fighter sends zeros for the shooting fields, which Rust ignores for it.
                 AttackStyle = (byte)_attackStyle,
                 RangedReady = _attackStyle != AttackStyle.Melee && RangedReady() ? (byte)1 : (byte)0,
-                RangedStance = _attackStyle != AttackStyle.Melee && (_action == NpcAction.Shoot || _action == NpcAction.Kite) ? (byte)1 : (byte)0
+                RangedStance = _attackStyle != AttackStyle.Melee && (_action == NpcAction.Shoot || _action == NpcAction.Kite) ? (byte)1 : (byte)0,
+                Favor = FavorTowardPlayer()
             };
+        }
+
+        // How much this NPC likes the player, from -1 to 1. An NPC with a gauge of its own sends it, and an NPC with
+        // none feels the crowd of the region it stands in. Zero is neutral, and is also what an NPC outside every region sends.
+        private float FavorTowardPlayer()
+        {
+            ManagedNpcFavor gauge = FavorGauge;
+            if (gauge != null)
+            {
+                return gauge.Normalized;
+            }
+
+            return ManagedFavorRegion.CrowdAt(transform.position);
         }
 
         // Meters to where the threat was last seen, along the ground like the rings of the engagement. Zero means unknown,

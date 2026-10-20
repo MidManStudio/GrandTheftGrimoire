@@ -55,6 +55,7 @@ static void fill_mixed(GtgNpcObservation *p) {
   { uint64_t h = (r2 >> 48) % 100; p[i].crown_heat = h < 55 ? 0 : h < 75 ? 1 : h < 90 ? 2 : 3; }
   p[i].threat_distance = (float)((r4 >> 24) % 3001) / 100.0f;
   { uint64_t a = r4 % 100; p[i].attack_style = a < 60 ? 0 : a < 85 ? 1 : 2; }
+  p[i].favor = (role<=1) ? ((float)((r4 >> 32) % 2001) - 1000.0f) / 1000.0f : 0.0f;
   p[i].ranged_ready = ((r4 >> 8) % 100) < 80;
   p[i].ranged_stance = ((r4 >> 16) % 100) < 40;
  }

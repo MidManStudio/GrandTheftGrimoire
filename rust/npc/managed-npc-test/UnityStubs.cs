@@ -65,7 +65,7 @@ namespace UnityEngine
     public struct Color
     {
         public float r, g, b, a;
-        public static Color red = new Color(1, 0, 0, 1), yellow = new Color(1, 1, 0, 1);
+        public static Color red = new Color(1, 0, 0, 1), yellow = new Color(1, 1, 0, 1), green = new Color(0, 1, 0, 1);
         public Color(float r, float g, float b, float a) { this.r = r; this.g = g; this.b = b; this.a = a; }
     }
     public static class Application { public static bool isPlaying; }

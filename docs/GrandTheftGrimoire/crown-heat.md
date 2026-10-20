@@ -123,8 +123,9 @@ guard standing in a region with heat shows `crown wanted` (or hunted, outlaw) in
 
 - Rules for tiers 2 and 3 (bounty hunters, the Crown's knights, a bigger response than the local guards).
 - Crimes other than hurting and killing: theft, trespass, drug dealing once that exists, spell use in town.
-- Bribes, pardons and Local Favor as game systems, and the guard who is secretly loyal to the late King
-  or on the Uncle's payroll.
+- Bribes and pardons as game systems, and the guard who is secretly loyal to the late King
+  or on the Uncle's payroll. Personal favor and the Local Favor of a town are built (ABI version 7, see
+  `favor.md`), and a guard does not read them yet.
 - Telling the player from another threat. A guard fights whatever threat it sees once heat is up, and
   today the player is the only threat source.
 - Saving the meter, and witnesses other than guards (a civilian who runs to fetch one).
@@ -139,6 +140,7 @@ guard standing in a region with heat shows `crown wanted` (or hunted, outlaw) in
 - The workflow `npc-rust-ci.yml` lists the folders that start it. `Assets/MidManStudio/Gtg/Managed/Crown/**` is not
   in the list yet, so a change to the region alone does not start the `managed-npc` job. The workflow file is
   outside the replacements archive on purpose, so add the line by hand in both places (push and pull request).
+- Favor (observation version 7, `favor.md`) is separate from Crown Heat. Hurting somebody reports to both systems, and neither reads the other. A guard that adores the player still fights it once the heat is up.
 - A shopkeeper that fights back (observation version 6, `observation.md`) changes no heat number. The player's blows still count as assault, and a kill as murder, whether or not the shopkeeper was hitting back. A shopkeeper only fights after it was hit, so it never starts a fight, and self defense by the player is not modelled.
 - Every number above is a placeholder, and the three design choices (regional meter, heat only when a guard
   sees the crime, fade only while unseen) are my reading of the design notes and need the owner's word.

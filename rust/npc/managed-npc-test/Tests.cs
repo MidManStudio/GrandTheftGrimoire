@@ -1,4 +1,4 @@
-// CI harness for the Managed NPC code (Managed/Health, Managed/NPC and Managed/Crown). It compiles those files with plain .NET
+// CI harness for the Managed NPC code (Managed/Health, Managed/NPC, Managed/Crown and Managed/Favor). It compiles those files with plain .NET
 // against the hand written UnityEngine stand-ins in UnityStubs.cs and runs the checks below. The stub raycast is a
 // callback, so these checks cover the logic around the ray (cone, budget, lingering, dead and self sources,
 // rotation, events), not real colliders or layers. Unity itself is never involved.
@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using MidManStudio.Gtg.Managed.Crown;
+using MidManStudio.Gtg.Managed.Favor;
 using MidManStudio.Gtg.Managed.Health;
 using MidManStudio.Gtg.Managed.Magic;
 using MidManStudio.Gtg.Managed.NPC;
@@ -41,6 +42,8 @@ internal static partial class Tests
         typeof(ManagedNpcDirector).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
         typeof(ManagedNpcThreatSource).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
         typeof(ManagedCrownRegion).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+        typeof(ManagedFavorRegion).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+        typeof(ManagedNpcFavor).GetMethod("ResetStatics", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
         Time.time = 0; Time.deltaTime = 0.02f; Debug.Logs.Clear(); Debug.Warnings.Clear(); Physics.RayCount = 0; Physics.OnRaycast = null;
         UnityEngine.Object.Destroyed.Clear(); NavMesh.IsWalkable = null; UnityEngine.Random.Seed(7);
         ManagedSpellDamage.Enabled = true; ManagedSpellDamage.HurtCaster = false; ManagedSpellCaster.ClearForTest();
@@ -275,7 +278,7 @@ internal static partial class Tests
             ManagedNpcDirector d = Director();
             if (d != null) { Update(d); Note(d); }
             List<UnityEngine.Component> all = new List<UnityEngine.Component>(UnityEngine.Object.All);
-            foreach (UnityEngine.Component c in all) if ((c is ManagedNpcActor || c is ManagedCrownRegion || c is ManagedNpcShotDriver) && ((Behaviour)c).enabled) UnityEngine.Component.Invoke(c, "Update");
+            foreach (UnityEngine.Component c in all) if ((c is ManagedNpcActor || c is ManagedCrownRegion || c is ManagedFavorRegion || c is ManagedNpcShotDriver) && ((Behaviour)c).enabled) UnityEngine.Component.Invoke(c, "Update");
             foreach (UnityEngine.Component c in all) { NavMeshAgent a = c as NavMeshAgent; if (a != null) a.Simulate(dt); }
         }
     }
@@ -717,7 +720,7 @@ internal static partial class Tests
         GameObject g = new GameObject("g"); g.AddComponent<ManagedHealth>();
         ManagedNpcBrain b = g.AddComponent<ManagedNpcBrain>();
         NPCNativeObservation o = b.BuildObservation();
-        Check(o.Disposition == 0 && o.Order == 0 && o.Provoked == 0 && o.Level == 1 && o.OrderLevel == 0 && o.CrownHeat == 0 && o.AttackStyle == 0 && o.RangedReady == 0 && o.RangedStance == 0 && o.ThreatDistance == 0f && o.ReservedC == 0, "defaults are hostile, no order, not provoked, level 1, melee");
+        Check(o.Disposition == 0 && o.Order == 0 && o.Provoked == 0 && o.Level == 1 && o.OrderLevel == 0 && o.CrownHeat == 0 && o.AttackStyle == 0 && o.RangedReady == 0 && o.RangedStance == 0 && o.ThreatDistance == 0f && o.Favor == 0f, "defaults are hostile, no order, not provoked, level 1, melee");
         b.Disposition = NpcDisposition.Peaceful; b.Level = 7; b.SetOrder(NpcOrder.Attack, 9);
         o = b.BuildObservation();
         Check(o.Disposition == 2 && o.Level == 7 && o.Order == 3 && o.OrderLevel == 9, "the settings reach the observation");
@@ -1111,6 +1114,7 @@ internal static partial class Tests
         EngagementBlocked(); EngagementLeave(); EngagementHandover(); TargetChoice(); HitReach(); EngagementDebug(); EngagementRules(); EngagementCost();
         CrownRegionArea(); CrownCrimes(); CrownTiers(); CrownHeatFade(); CrownObservation(); CrownGuards();
         RangedBallistics(); RangedShooter(); RangedShotFlight(); RangedSpellShots(); RangedObservation(); RangedDecisions(); RangedEngagement(); RangedActors(); RangedKiting(); RangedHybrids(); RangedDebug(); ShopkeeperRetaliation();
+        FavorMath(); FavorGauge(); FavorRegionArea(); FavorLocal(); FavorObservation(); FavorDecisions(); FavorHurt(); FavorDebug();
         Console.WriteLine("decision path in director batches: " + (sawNative && sawFallback ? "mixed" : sawNative ? "native" : sawFallback ? "managed fallback" : "none"));
         if (expectPath == "native") Check(sawNative && !sawFallback, "every batch used the native library");
         else if (expectPath == "fallback") Check(sawFallback && !sawNative, "every batch used the managed fallback");

@@ -48,11 +48,11 @@
       "hash": "37eec982fd91e50225a1a80bd70bb3c702697841"
     },
     "com.midmanstudio.mdix": {
-      "version": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#d3333a907553eca7506bf82beba2f7098b0185b7",
+      "version": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#d658d0d1be9f73b450222c3dfc3a660b04a0ed9c",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "d3333a907553eca7506bf82beba2f7098b0185b7"
+      "hash": "d658d0d1be9f73b450222c3dfc3a660b04a0ed9c"
     },
     "com.midmanstudio.nuclear": {
       "version": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.nuclear#37eec982fd91e50225a1a80bd70bb3c702697841",

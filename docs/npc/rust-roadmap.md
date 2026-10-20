@@ -1,17 +1,17 @@
 # NPC Rust side: what is done and what is left
 
-Status (2026-10-17, after observation version 6). Facts below come from the repository unless marked as a design source or an owner decision. Items marked **decision** need an answer from the project owner before anyone builds them.
+Status (2026-10-20, after observation version 7). Facts below come from the repository unless marked as a design source or an owner decision. Items marked **decision** need an answer from the project owner before anyone builds them.
 
 ## What exists
 
 | Crate | Tests | What it holds |
 |---|---:|---|
 | `npc-core` | 0 | `NpcRole` (6), `DecisionBackend` (3), `NpcDisposition` (3), `NpcOrder` (6), `AttackStyle` (3), `NpcAction` (12), `MissionOutcome` (4), `Observation`, `Decision`, `MAX_CROWN_HEAT` |
-| `npc-behavior` | 69 | `decide()`: merchant, civilian, combatant (guard, enemy, boss) and companion rules, disposition, orders, the per-type refusal gap, emergent betrayal, the Crown Heat rule for guards, the attack styles (melee, ranged with kiting, hybrid with a buffer), the retaliatory shopkeeper, and `resolve_mission` |
+| `npc-behavior` | 79 | `decide()`: merchant, civilian, combatant (guard, enemy, boss) and companion rules, disposition, orders, the per-type refusal gap, emergent betrayal, the Crown Heat rule for guards, the attack styles (melee, ranged with kiting, hybrid with a buffer), the retaliatory shopkeeper, the favor rules for shopkeepers and civilians, and `resolve_mission` |
 | `npc-ml` | 0 | `LearningMode`, a `Policy` trait and `PolicyError`. No model, no framework, no weights |
-| `npc-ffi` | 29 | ABI version 6, `gtg_npc_decide_batch` (up to 4096 per call, atomic validation, overlap rejection), `gtg_npc_resolve_mission`, size and version getters, and the older one-NPC stub |
+| `npc-ffi` | 32 | ABI version 7, `gtg_npc_decide_batch` (up to 4096 per call, atomic validation, overlap rejection), `gtg_npc_resolve_mission`, size and version getters, and the older one-NPC stub |
 
-Every crate follows `RUST_RUST_CRATE_GUIDE.md` now: version 0.0.1, the workspace lint table, `SAFETY` comments on every `unsafe` block, a source notice and a doc per crate. The decision has 21 inputs (see `observation.md`) and returns one of twelve actions. It ran at about 5 to 10 ns per NPC on hosted runners with the version 2 layout. The version 3 to 6 cost is not measured on hosted runners. In the authoring sandbox the version 6 layout added about 2 to 3 ns per NPC, inside the noise of that machine.
+Every crate follows `RUST_RUST_CRATE_GUIDE.md` now: version 0.0.1, the workspace lint table, `SAFETY` comments on every `unsafe` block, a source notice and a doc per crate. The decision has 22 inputs (see `observation.md`) and returns one of twelve actions. It ran at about 5 to 10 ns per NPC on hosted runners with the version 2 layout. The version 3 to 7 cost is not measured on hosted runners. In the authoring sandbox the version 6 layout added about 2 to 3 ns per NPC, inside the noise of that machine.
 
 ## Decided by the owner
 
@@ -28,18 +28,18 @@ Every crate follows `RUST_RUST_CRATE_GUIDE.md` now: version 0.0.1, the workspace
 
 - **Allies and enemies nearby**, for morale and group tactics.
 - **Time of day**, for routines.
-- **Local Favor**, which the design reference makes the other basis of guard reactions (the guard who is secretly loyal to the late King, the bribable one, the one on the Uncle's payroll, and the "Do you know who I am?" outcome). Crown Heat is built as a tier in observation version 5, with one rule: a retaliatory guard fights a visible threat at tier 1 or more. Tiers 2 and 3 have no rule yet.
+- **Local Favor**, personal favor is built (observation version 7: the favor of the NPC, from -1 to 1, read by shopkeepers and civilians, with the gauges, regions and Local Favor in Unity, see `../GrandTheftGrimoire/favor.md`). What is not built is the other basis of guard reactions (the guard who is secretly loyal to the late King, the bribable one, the one on the Uncle's payroll, and the "Do you know who I am?" outcome). Crown Heat is built as a tier in observation version 5, with one rule: a retaliatory guard fights a visible threat at tier 1 or more. Tiers 2 and 3 have no rule yet.
 - **Loyalty and pay**, for emergent betrayal.
 - **A random number**, for a chance in a rule that stays reproducible. Unity would supply it.
 
-The distance to the threat was on this list until version 6, which built it for the attack styles (melee, ranged, hybrid). These are the planned uses of the reserved space in the observation. Adding any of them changes the ABI version.
+The distance to the threat was on this list until version 6, which built it for the attack styles (melee, ranged, hybrid). Version 7 used the last reserved word for favor, so there is no reserved space left in the observation. Any of the rest makes the struct bigger and changes the ABI version and the size that the host checks.
 
 ## Backlog
 
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 1 | Crate guide conformance | done | Clippy has not run on it yet |
-| 2 | Observation and action versions 3 to 6 | done for disposition, provoked, level, orders, betrayal inputs, missions, Crown Heat tier, attack style, ammo, stance and threat distance | Allies, time and favor are not built |
+| 2 | Observation and action versions 3 to 6 | done for disposition, provoked, level, orders, betrayal inputs, missions, Crown Heat tier, attack style, ammo, stance and threat distance | Allies and time are not built. Favor is, as a number per NPC (version 7) |
 | 3 | Disposition | done | Hostile, retaliatory, peaceful. "Good humanoids never fight back" is an interpretation to confirm. Since version 6 a retaliatory shopkeeper that was attacked fights back in its own style, a hostile one does not (owner note: some shopkeepers attack if attacked first) |
 | 4 | NPC memory | decided | In Unity. The Managed brain holds level, order, provoked and the last attacker. Persistence (save and load) is not built |
 | 5 | Utility AI with considerations and curves | open | Replaces the hard-coded `utility_combat`. Scoring tables belong in `.mdix` data |
@@ -52,7 +52,7 @@ The distance to the threat was on this list until version 6, which built it for 
 | 12 | Persistence | open | Save and load of NPC memory and weights, in Unity |
 | 13 | Robustness tests | open | Property tests, fuzzing the batch entry with random bytes, a Miri pass on the unsafe code |
 | 14 | Native builds | paused | See below |
-| 15 | Factions | open | Which sources are threats to which NPC. Companions need it before they can fight anything |
+| 15 | Factions | open, next | Which sources are threats to which NPC. Companions need it before they can fight anything. Owner decisions (2026-10-18): kingdom, then races, then factions, every NPC carries all three tags, and the most specific rule wins (faction over race over kingdom). Their standing builds up from the NPCs that carry the tag, in the same pipeline as the Local Favor of a town (`../GrandTheftGrimoire/favor.md`) |
 | 16 | Emergent betrayal rule | done, placeholder numbers | Loyalty weights 0.4 / 0.3 / 0.3, ceiling 0.5, maximum chance 0.5. Needs balance and the pay model |
 | 18 | Mission scheduling, notification, rewards, capture and rescue | open | Unity systems around `ManagedMissionResolver` |
 | 19 | Crown Heat | partly done | Done: observation version 5, the guard rule at tier 1, and in Unity the regional meter, witnessed crimes, tiers and fade (`crown-heat.md`). Open: rules for tiers 2 and 3 (bounty hunters, the Crown's knights), crimes other than assault and murder, bribes and pardons that lower heat, a guard rule that tells the player from another threat, and saving the meter. All numbers are placeholders |
@@ -94,7 +94,7 @@ What is not built, and why:
 
 ## Suggested order
 
-1. Factions (item 15), so companions and enemies can see each other, then a first companion scene in Unity.
+1. Factions (item 15, the favor stage is done), so companions and enemies can see each other, then a first companion scene in Unity.
 2. Confirm the placeholder numbers above, then a first companion scene in Unity with orders, refusals, a mission and a betrayal.
 3. Memory persistence and the mission systems (scheduling, notification, rewards, capture), all in Unity.
 4. Utility AI, tactics and schedules (items 5 to 7).

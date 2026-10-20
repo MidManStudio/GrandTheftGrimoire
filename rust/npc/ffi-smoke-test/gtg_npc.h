@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 /* Must equal ABI_VERSION in rust/npc/crates/npc-ffi/src/lib.rs. */
-#define GTG_NPC_ABI_VERSION 6u
+#define GTG_NPC_ABI_VERSION 7u
 #define GTG_NPC_MAX_BATCH 4096u
 /* The highest Crown Heat tier: 0 none, 1 wanted, 2 hunted, 3 outlaw. A larger value is rejected. */
 #define GTG_NPC_CROWN_HEAT_MAX 3u
@@ -57,12 +57,14 @@
 #define GTG_NPC_MISSION_CAUGHT 2
 #define GTG_NPC_MISSION_KILLED 3
 
-/* One NPC, 64 bytes. Booleans are 0 or 1. Every reserved field must be zero. A zero in every field
-   added after version 2 means: hostile, no order, not provoked, level 0, no betrayal opportunity, no Crown Heat,
-   melee, nothing to shoot, not in a ranged stance, unknown distance to the threat.
+/* One NPC, 64 bytes. Booleans are 0 or 1. A zero in every field added after version 2 means: hostile, no order,
+   not provoked, level 0, no betrayal opportunity, no Crown Heat, melee, nothing to shoot, not in a ranged stance,
+   unknown distance to the threat, neutral favor.
    `threat_distance` is meters to the threat, finite, zero or less means unknown (offset 28 was a reserved word up
    to version 5). `attack_style`, `ranged_ready` and `ranged_stance` sit at offsets 57, 58 and 59 (reserved bytes
-   up to version 5). `reserved_c` at offset 60 is still reserved. */
+   up to version 5). `favor` at offset 60 is how much the NPC likes the player, finite, from -1 (hates) to 1 (adores),
+   clamped to that range, zero is neutral (offset 60 was a reserved word up to version 6). Shopkeepers and civilians
+   read it, no other role does. */
 typedef struct {
     uint64_t npc_id;
     uint32_t role, backend, threat_visible;
@@ -74,7 +76,7 @@ typedef struct {
     float trustworthiness, affinity, pay_satisfaction;
     uint32_t noise;
     uint8_t betrayal_opportunity, attack_style, ranged_ready, ranged_stance;
-    uint32_t reserved_c;
+    float favor;
 } GtgNpcObservation;
 
 /* One decision, 16 bytes. `reserved` is always zero. */

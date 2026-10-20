@@ -368,7 +368,7 @@ internal static partial class Tests
 
     static void NPCNativeObservationCheck(MidManStudio.Gtg.NPC.Native.NPCNativeObservation o)
     {
-        Check(o.Role == (uint)NpcRole.Guard && o.ReservedC == 0 && o.AttackStyle == 0 && o.RangedReady == 0 && o.RangedStance == 0 && o.ThreatDistance == 0f, "the reserved field and the shooting fields are still zero");
+        Check(o.Role == (uint)NpcRole.Guard && o.Favor == 0f && o.AttackStyle == 0 && o.RangedReady == 0 && o.RangedStance == 0 && o.ThreatDistance == 0f, "the favor and the shooting fields are still zero");
     }
 
     // ---------- what a guard does about it ----------

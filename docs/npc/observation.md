@@ -1,14 +1,14 @@
-# NPC observation contract (ABI version 6)
+# NPC observation contract (ABI version 7)
 
-Status (2026-10-17): implemented in Rust, C, the C# bridge and the Managed NPC code, and checked by tests. Not run inside Unity, not run on GitHub. The ABI version is 6. This page replaces `observation-v3.md`.
+Status (2026-10-20): implemented in Rust, C, the C# bridge and the Managed NPC code, and checked by tests. Not run inside Unity, not run on GitHub. The ABI version is 7. This page replaces `observation-v3.md`.
 
 This is the contract between the game and the Rust decision. It lists every field, what it means, how it is validated, and what each rule does with it. Read it before adding a field.
 
 ## Principles
 
 1. **The game owns the data, Rust owns the choice.** NPC memory, levels, orders, loyalty and the economy live in Unity and are saved by Unity (owner decision, 2026-10-05). Rust receives a small snapshot with every decision and returns an action. The decision is a pure function of that snapshot: the same observation always gives the same action, and Rust keeps no state. A chance in a rule uses a random number that Unity supplies in the observation (`noise`), so a run stays reproducible and testable. Static, predictable tables, such as the refusal gaps and the mission profiles, live in Rust.
-2. **Zero means no information.** Every field added after version 2 has a safe default of zero: hostile, no order, not provoked, level 0, no betrayal opportunity, no Crown Heat, a melee fighter, nothing to shoot, no ranged stance, and an unknown distance to the threat. A caller that sets only older fields behaves as before, and tests check it.
-3. **Reserved space must be zero.** A non-zero reserved field is rejected, so a caller built for a later layout fails loudly instead of being half understood.
+2. **Zero means no information.** Every field added after version 2 has a safe default of zero: hostile, no order, not provoked, level 0, no betrayal opportunity, no Crown Heat, a melee fighter, nothing to shoot, no ranged stance, an unknown distance to the threat, and neutral favor. A caller that sets only older fields behaves as before, and tests check it.
+3. **Reserved space must be zero.** A non-zero reserved field is rejected, so a caller built for a later layout fails loudly instead of being half understood. Version 7 used the last reserved word, so the 64 bytes are full and there is no reserved space left. The next field makes the struct bigger, which changes `gtg_npc_observation_size`, and the C# bridge refuses a library whose size differs from its own.
 4. **Add a field only when a rule uses it.**
 5. **A batch is all or nothing.** Every observation is validated before any output is written.
 
@@ -37,7 +37,7 @@ This is the contract between the game and the Rust decision. It lists every fiel
 | 57 | 1 | `attack_style` | u8 | 0 melee, 1 ranged, 2 hybrid. Guards, enemies, bosses, companions and shopkeepers that fight use it. Version 5 callers sent 0 here as a reserved byte, which is melee |
 | 58 | 1 | `ranged_ready` | u8 | 1 when the NPC has something to shoot (arrows, bolts or mana), else 0. Read by ranged and hybrid fighters only |
 | 59 | 1 | `ranged_stance` | u8 | 1 when the NPC's last combat action was shoot or kite, else 0. The game keeps this memory. A hybrid fighter uses it between its two distances |
-| 60 | 4 | `reserved_c` | u32 | Must be 0. Room for a later field |
+| 60 | 4 | `favor` | f32 | How much the NPC likes the player, from -1 (hates) to 1 (adores), 0 neutral. Must be finite, and a value outside the range is clamped. Shopkeepers and civilians read it. Version 6 callers sent 0 here as a reserved word, which is neutral |
 
 Decision (16 bytes): `npc_id` u64, `action` i32, `reserved` u32 (always 0).
 
@@ -47,7 +47,7 @@ Mission outcomes (from `gtg_npc_resolve_mission`): 0 success, 1 failed, 2 caught
 
 The numbers come from `npc-ffi`, the C header `gtg_npc.h`, the C# enums and structs, and the enums in `archetypes.mdix`. `scripts/check_npc_enum_sync.py` fails CI when the enum values differ, and the C smoke test, the Rust tests and the C# test check sizes and offsets.
 
-Validation (`STATUS_INVALID` for the whole batch, nothing written): an unknown role, backend, disposition, order or attack style; a `crown_heat` above 3; `threat_visible`, `can_move`, `provoked`, `betrayal_opportunity`, `ranged_ready` or `ranged_stance` above 1; a non-finite health, trustworthiness, affinity, pay satisfaction or threat distance; a non-zero `reserved_c`; input and output buffers that overlap. A count above 4096, or an output smaller than the input, is `STATUS_CAPACITY`. A null or misaligned pointer is `STATUS_NULL`.
+Validation (`STATUS_INVALID` for the whole batch, nothing written): an unknown role, backend, disposition, order or attack style; a `crown_heat` above 3; `threat_visible`, `can_move`, `provoked`, `betrayal_opportunity`, `ranged_ready` or `ranged_stance` above 1; a non-finite health, trustworthiness, affinity, pay satisfaction, threat distance or favor; input and output buffers that overlap. A count above 4096, or an output smaller than the input, is `STATUS_CAPACITY`. A null or misaligned pointer is `STATUS_NULL`.
 
 ## What each rule does
 
@@ -56,6 +56,8 @@ Validation (`STATUS_INVALID` for the whole batch, nothing written): an unknown r
 A civilian runs from a threat when it can move, and otherwise walks around or stands. Disposition, orders, levels and the companion inputs do nothing for a civilian.
 
 A merchant trades, and stands still when a threat is in view. One exception, added with version 6: a merchant with the retaliatory disposition that was attacked (`provoked`) fights back, in its own attack style, with the same rule as any fighter (so it still runs below 0.2 health when it can move, and a stationary shopkeeper strikes or shoots from its stall). A hostile merchant is unchanged and still only stands still, a peaceful one never fights, and a retaliatory one that was not attacked keeps trading and standing. Orders, levels, Crown Heat and the companion inputs do nothing for a merchant. A merchant that is not attacked is never affected, and a test walks every disposition, backend, provoked and can-move combination to prove it.
+
+Favor (version 7) changes two cases. A merchant that likes the player (`favor` at or above 0.2, the `FRIENDLY_FAVOR` line, which is 20 on the 100 point meter of the game) keeps trading under a visible threat instead of standing still, whatever its disposition, unless it was just attacked: a provoked merchant is no friend, so a retaliatory one still fights back and any other one stands still. A civilian that likes the player and was not just attacked does not take it for a threat and goes about its day (patrols, or idles when it cannot move) instead of running. Favor is read only when a threat is in view, and only for these two roles. Guards, enemies, bosses and companions ignore it, so a hostile guard that adores the player still fights it. Below the line, and for a favor that is not finite, nothing changes.
 
 ### Guard, enemy and boss: disposition
 
@@ -158,13 +160,15 @@ The success chance is the base plus the per-level number times (companion level 
 | Ranged ready | `ManagedNpcShooter` | Ammo (arrows, bolts, or casts for a mage) above zero. Sent for ranged and hybrid fighters only |
 | Ranged stance | `ManagedNpcBrain` | True while the last action was Shoot or Kite. Sent for ranged and hybrid fighters only |
 | Threat distance | `ManagedNpcBrain` | The distance on the ground plane to where the threat was last seen, at least 0.01 so a known distance is never zero. Sent for every NPC, and zero when no threat is in view |
+| Favor | `ManagedNpcFavor`, `ManagedFavorRegion` | A gauge on the NPC sends its own value over 100. An NPC with no gauge sends the crowd value of the favor region it stands in, and zero outside every region. See `GrandTheftGrimoire/managed.md` and `GrandTheftGrimoire/favor.md` |
 | Crown Heat meter, regions, crimes, fade | `ManagedCrownRegion` | A box volume in the scene owns the numbers. The brain reads the tier at its position and sends it for guards only. See `GrandTheftGrimoire/crown-heat.md` |
 | Mission scheduling, notification, reward, capture, rescue | not built | Game systems around `ManagedMissionResolver` |
 | Pay, profit split, the economy | not built | Feed pay satisfaction |
 
 ## Planned and not built
 
-- Allies and enemies nearby, time of day and Local Favor, for rules that act on groups, routines and guard reactions. (`threat_distance` was built with version 6, for the attack styles.)
+- Allies and enemies nearby and time of day, for rules that act on groups and routines. (`threat_distance` was built with version 6, for the attack styles, and personal favor with version 7. The Local Favor of a town is built in Unity from the gauges of its relevant NPCs, and reaches Rust only through the favor of each NPC, so a rule that reads the Local Favor of a region directly, such as a guard's reaction to a hated or adored town, is not built and needs a field of its own.)
+- Favor rules for guards and companions (refuse to help, snitch, misdirect, give a discount). The gauges, regions and tiers exist in Unity, and the decision does not use them yet.
 - Rules for tiers 2 and 3 (bounty hunters, the Crown's knights), and a way to tell the player from another threat when a guard decides on Crown Heat.
 - Factions, so companions can see enemies at all.
 - A scripted betrayal is a story event and is not decided here. The story changes the companion directly.
@@ -180,12 +184,13 @@ Adding a field means: add it in `npc-ffi`, the C header, the C# struct, the thre
 | 4 | Order types deliver and raid with per-type refusal gaps, the betrayal inputs and the actions mission and betray, and the off-screen mission export |
 | 5 | `crown_heat` at offset 35 (a reserved byte before), validated up to 3. Retaliatory guards fight a visible threat at tier 1 or more |
 | 6 | `threat_distance` at offset 28, `attack_style`, `ranged_ready` and `ranged_stance` at offsets 57 to 59 (reserved before), the actions shoot and kite, and the retaliatory shopkeeper rule. `reserved_c` at 60 stays reserved |
+| 7 | `favor` (f32) at offset 60, the last reserved word. A liked shopkeeper keeps trading under a threat and a liked civilian does not run, unless they were just attacked. Nothing is reserved any more |
 
 ## Checks
 
-- `npc-behavior`: 69 unit tests, including the exact boundaries (every refusal gap, the 0.2 health threshold, the betrayal line at roll 0.5, the mission lines, the kite line and the two hybrid lines), the Crown Heat rule and the walk that proves it changes one case only, the attack style rules for every backend and can-move case, the hybrid buffer sequence, the shopkeeper walk, overflow, and distribution checks.
-- `npc-ffi`: 29 unit tests for layout, every validation rule (including the style, the two flags and a non-finite distance), the Crown Heat tier limit, version 3 and 2 behavior preserved, the mission export, overlap and alignment rejection.
+- `npc-behavior`: 79 unit tests, including the exact boundaries (every refusal gap, the 0.2 health threshold, the betrayal line at roll 0.5, the mission lines, the kite line and the two hybrid lines), the Crown Heat rule and the walk that proves it changes one case only, the attack style rules for every backend and can-move case, the hybrid buffer sequence, the shopkeeper walk, ten favor tests (the exact line, the roles that read it and those that do not, provoked, bad numbers), overflow, and distribution checks.
+- `npc-ffi`: 32 unit tests for layout, every validation rule (including the style, the two flags, a non-finite distance and a non-finite favor), favor reaching the decision, its clamp, and fighters and companions ignoring it, the Crown Heat tier limit, version 3 and 2 behavior preserved, the mission export, overlap and alignment rejection.
 - `test.c`: layout asserts for every offset and the same behaviors through a real C caller.
-- Rust, C and C# generate the same 16,384 mixed NPCs (companions with all six orders, trust, liking, pay, noise, betrayal opportunities, Crown Heat tiers, attack styles, ammo, stances and distances) and must produce the same decisions. All twelve actions must occur. The decision hash is `0xcdb9285c1d3ebd8e` on all three. The C# test also runs a table of shopkeeper cases (every disposition, provoked, threat, can-move, style, ammo and distance) on every backend, native and managed, and the C smoke test has a shopkeeper block.
+- Rust, C and C# generate the same 16,384 mixed NPCs (companions with all six orders, trust, liking, pay, noise, betrayal opportunities, Crown Heat tiers, attack styles, ammo, stances, distances and favor) and must produce the same decisions. All twelve actions must occur. The decision hash is `0xdd97a1437f8256ed` on all three (the favor of shopkeepers and civilians joined the generator with version 7, which changed it from `0xcdb9285c1d3ebd8e`). The C# test also runs a table of shopkeeper cases (every disposition, provoked, threat, can-move, style, ammo and distance) on every backend, native and managed, and the C smoke test has a shopkeeper block.
 - The C# test also compares 200,000 mission resolutions between the Rust library and the managed copy, with no differences allowed.
 - 1130 Managed checks run against Unity stubs on both the fallback and the real library.

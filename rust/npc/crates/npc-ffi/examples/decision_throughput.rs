@@ -152,7 +152,11 @@ fn mixed_pool() -> Vec<NpcObservationAbi> {
                 },
                 ranged_ready: u8::from((r4 >> 8) % 100 < 80),
                 ranged_stance: u8::from((r4 >> 16) % 100 < 40),
-                ..Default::default()
+                favor: if role <= 1 {
+                    (((r4 >> 32) % 2001) as f32 - 1000.0) / 1000.0
+                } else {
+                    0.0
+                },
             }
         })
         .collect()

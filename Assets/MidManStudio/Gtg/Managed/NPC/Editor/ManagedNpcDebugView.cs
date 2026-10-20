@@ -5,6 +5,7 @@
 
 using System.Collections.Generic;
 using MidManStudio.Gtg.Managed.Crown;
+using MidManStudio.Gtg.Managed.Favor;
 using MidManStudio.Gtg.NPC.Components;
 using UnityEditor;
 using UnityEngine;
@@ -118,6 +119,12 @@ namespace MidManStudio.Gtg.Managed.NPC
             if (brain.ThreatVisible)
             {
                 text += "  sees threat";
+            }
+
+            ManagedNpcFavor favor = brain.GetComponent<ManagedNpcFavor>();
+            if (favor != null)
+            {
+                text += "  favor " + favor.Value.ToString("0") + " " + ManagedFavorTier.Name(favor.Tier);
             }
 
             if (brain.Role == NpcRole.Guard)

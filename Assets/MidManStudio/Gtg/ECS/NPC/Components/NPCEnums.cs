@@ -1,6 +1,6 @@
 namespace MidManStudio.Gtg.NPC.Components
 {
-    // Values are the Rust ABI v6 values (rust/npc/crates/npc-ffi/src/lib.rs) and the numbers in
+    // Values are the Rust ABI v7 values (rust/npc/crates/npc-ffi/src/lib.rs) and the numbers in
     // Assets/NPC/Archetypes/archetypes.mdix. Do not renumber without bumping the ABI version.
     // scripts/check_npc_enum_sync.py fails CI if the three sources drift apart.
     // Serialized as integers by Unity, so switching a field from int to one of these enums keeps

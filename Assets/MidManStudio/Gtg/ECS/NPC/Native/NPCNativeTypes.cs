@@ -2,13 +2,15 @@ using System.Runtime.InteropServices;
 
 namespace MidManStudio.Gtg.NPC.Native
 {
-    // Must match npc-ffi/src/lib.rs exactly (ABI version 6, 64 bytes). The first 32 bytes are the version 2
-    // layout. Booleans are 32-bit integers up to offset 28 and bytes after that, and ReservedC must stay zero.
+    // Must match npc-ffi/src/lib.rs exactly (ABI version 7, 64 bytes). The first 32 bytes are the version 2
+    // layout. Booleans are 32-bit integers up to offset 28 and bytes after that, and Favor is a float from -1 to 1 with zero neutral.
     // A zero in every field added after version 2 means: hostile, no order, not provoked, level 0, no betrayal
-    // opportunity, no Crown Heat, melee, nothing to shoot, no ranged stance and an unknown distance.
+    // opportunity, no Crown Heat, melee, nothing to shoot, no ranged stance, an unknown distance and neutral favor.
     // CrownHeat is the tier 0 to 3 of the region the NPC stands in, read by guards only (a reserved byte up to
     // version 4). ThreatDistance is meters to the threat, finite, zero or less meaning unknown (a reserved word up
     // to version 5). AttackStyle, RangedReady and RangedStance took the reserved bytes at 57 to 59 in version 6.
+    // Favor took the last reserved word at offset 60 in version 7: how much the NPC likes the player, finite, from
+    // -1 to 1, read by shopkeepers and civilians only.
     [StructLayout(LayoutKind.Explicit, Size = 64)]
     internal struct NPCNativeObservation
     {
@@ -33,7 +35,7 @@ namespace MidManStudio.Gtg.NPC.Native
         [FieldOffset(57)] public byte AttackStyle;
         [FieldOffset(58)] public byte RangedReady;
         [FieldOffset(59)] public byte RangedStance;
-        [FieldOffset(60)] public uint ReservedC;
+        [FieldOffset(60)] public float Favor;
     }
 
     [StructLayout(LayoutKind.Explicit, Size = 16)]

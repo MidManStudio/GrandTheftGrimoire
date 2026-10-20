@@ -16,15 +16,15 @@ use gtg_npc_core::{
 };
 
 /// Version of the C layout and meaning of every field. The host refuses a library with another version.
-pub const ABI_VERSION: u32 = 6;
+pub const ABI_VERSION: u32 = 7;
 /// Success.
 pub const STATUS_OK: i32 = 0;
 /// A pointer was null or not aligned for its type.
 pub const STATUS_NULL: i32 = -1;
 /// A count was above [`MAX_BATCH`], or the output buffer was smaller than the input.
 pub const STATUS_CAPACITY: i32 = -2;
-/// An observation had an unknown value, a non-finite number or a non-zero reserved field, or the
-/// input and output buffers overlapped. Nothing was written.
+/// An observation had an unknown value or a non-finite number, or the input and output buffers
+/// overlapped. Nothing was written.
 pub const STATUS_INVALID: i32 = -3;
 /// Most observations accepted by one call.
 pub const MAX_BATCH: usize = 4096;
@@ -32,7 +32,8 @@ pub const MAX_BATCH: usize = 4096;
 /// One NPC, as C sees it. 64 bytes, 8-byte alignment on supported 64-bit targets. C# uses explicit
 /// offsets. Booleans are integers that must be 0 or 1. A zero in every field added after version 2
 /// means "no information": hostile, no order, not provoked, level 0, no betrayal opportunity, no
-/// Crown Heat, melee, nothing to shoot, not in a ranged stance and an unknown distance to the threat.
+/// Crown Heat, melee, nothing to shoot, not in a ranged stance, an unknown distance to the threat and
+/// neutral favor.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NpcObservationAbi {
@@ -86,8 +87,10 @@ pub struct NpcObservationAbi {
     /// keeps its stance while the threat is between its two distances. Offset 59 held a reserved byte up
     /// to version 5.
     pub ranged_stance: u8, // 59
-    /// Must be zero. Room for a field that a later version defines.
-    pub reserved_c: u32, // 60
+    /// How much the NPC likes the player, from -1 (hates) to 1 (adores). Must be finite. A value outside
+    /// the range is clamped. Zero is neutral. Offset 60 was a reserved word up to version 6, so a caller
+    /// that still sends zero there means neutral. Only shopkeepers and civilians read it.
+    pub favor: f32, // 60
 }
 
 /// One decision, as C sees it. 16 bytes.
@@ -161,8 +164,7 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         2 => AttackStyle::Hybrid,
         _ => return None,
     };
-    if raw.reserved_c != 0
-        || raw.threat_visible > 1
+    if raw.threat_visible > 1
         || raw.can_move > 1
         || raw.provoked > 1
         || raw.betrayal_opportunity > 1
@@ -171,6 +173,7 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         || raw.crown_heat > MAX_CROWN_HEAT
         || !raw.health_fraction.is_finite()
         || !raw.threat_distance.is_finite()
+        || !raw.favor.is_finite()
         || !raw.trustworthiness.is_finite()
         || !raw.affinity.is_finite()
         || !raw.pay_satisfaction.is_finite()
@@ -200,6 +203,7 @@ fn parse(raw: &NpcObservationAbi) -> Option<Observation> {
         ranged_stance: raw.ranged_stance == 1,
         // A negative distance means unknown, the same as zero.
         threat_distance: raw.threat_distance.max(0.0),
+        favor: raw.favor.clamp(-1.0, 1.0),
     })
 }
 
@@ -417,9 +421,9 @@ mod tests {
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, attack_style), 57);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, ranged_ready), 58);
         assert_eq!(std::mem::offset_of!(NpcObservationAbi, ranged_stance), 59);
-        assert_eq!(std::mem::offset_of!(NpcObservationAbi, reserved_c), 60);
+        assert_eq!(std::mem::offset_of!(NpcObservationAbi, favor), 60);
         assert_eq!(std::mem::offset_of!(NpcDecisionAbi, action), 8);
-        assert_eq!(gtg_npc_abi_version(), 6);
+        assert_eq!(gtg_npc_abi_version(), 7);
         assert_eq!(gtg_npc_observation_size(), 64);
         assert_eq!(gtg_npc_decision_size(), 16);
     }
@@ -460,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_nonfinite_and_reserved() {
+    fn rejects_nonfinite() {
         let mut o = raw(3);
         o.health_fraction = f32::NAN;
         let mut out = [NpcDecisionAbi::default()];
@@ -479,8 +483,14 @@ mod tests {
             "distance negative infinite"
         );
         o.threat_distance = 0.0;
-        let bad = NpcObservationAbi { reserved_c: 1, ..o };
-        assert_eq!(call(&[bad], &mut out), STATUS_INVALID, "reserved_c");
+        for (name, favor) in [
+            ("favor nan", f32::NAN),
+            ("favor infinite", f32::INFINITY),
+            ("favor negative infinite", f32::NEG_INFINITY),
+        ] {
+            let bad = NpcObservationAbi { favor, ..o };
+            assert_eq!(call(&[bad], &mut out), STATUS_INVALID, "{name}");
+        }
         assert_eq!(call(&[o], &mut out), STATUS_OK);
     }
 
@@ -1119,6 +1129,58 @@ mod tests {
             let mut out = [sentinel; 2];
             assert_eq!(call(&[raw(0), bad], &mut out), STATUS_INVALID, "{name}");
             assert_eq!(out, [sentinel; 2], "{name} writes nothing");
+        }
+    }
+
+    #[test]
+    fn favor_reaches_the_decision_of_a_shopkeeper_and_a_civilian() {
+        let watched = |role: u32, favor: f32| NpcObservationAbi {
+            threat_visible: 1,
+            favor,
+            ..raw(role)
+        };
+        assert_eq!(one(watched(0, 0.0)), 0, "neutral shopkeeper stands still");
+        assert_eq!(one(watched(0, 0.2)), 1, "liked shopkeeper trades");
+        assert_eq!(one(watched(0, -1.0)), 0, "hated shopkeeper stands still");
+        assert_eq!(one(watched(1, 0.0)), 4, "neutral civilian retreats");
+        assert_eq!(one(watched(1, 0.5)), 2, "liked civilian patrols");
+        assert_eq!(one(watched(1, -0.5)), 4, "disliked civilian retreats");
+    }
+
+    #[test]
+    fn favor_is_clamped_and_zero_is_neutral() {
+        let with = |favor: f32| parse(&NpcObservationAbi { favor, ..raw(0) }).map(|o| o.favor);
+        assert_eq!(with(7.0), Some(1.0));
+        assert_eq!(with(-7.0), Some(-1.0));
+        assert_eq!(with(0.25), Some(0.25));
+        assert_eq!(with(-0.25), Some(-0.25));
+        assert_eq!(with(0.0), Some(0.0));
+        assert_eq!(
+            parse(&raw(0)).map(|o| o.favor),
+            Some(0.0),
+            "a caller that never sets it sends zero"
+        );
+        let liked = NpcObservationAbi {
+            threat_visible: 1,
+            favor: 100.0,
+            ..raw(0)
+        };
+        assert_eq!(one(liked), 1, "a huge favor counts as 1, so it is liked");
+    }
+
+    #[test]
+    fn fighters_and_companions_read_no_favor_through_the_abi() {
+        for role in [2, 3, 4, 5] {
+            let watched = |favor: f32| NpcObservationAbi {
+                threat_visible: 1,
+                provoked: 1,
+                disposition: 1,
+                favor,
+                ..raw(role)
+            };
+            let baseline = one(watched(0.0));
+            assert_eq!(one(watched(1.0)), baseline, "role {role} liked");
+            assert_eq!(one(watched(-1.0)), baseline, "role {role} hated");
         }
     }
 

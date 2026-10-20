@@ -710,13 +710,13 @@ internal static partial class Tests
         Fighter archer = RgArcher(new Vector3(1f, 0f, 0f));
         Fighter knight = RgArcher(new Vector3(-1f, 0f, 0f), AttackStyle.Hybrid);
         NPCNativeObservation o = melee.Brain.BuildObservation();
-        Check(o.AttackStyle == 0 && o.RangedReady == 0 && o.RangedStance == 0 && o.ThreatDistance == 0f && o.ReservedC == 0, "before anything is seen a melee fighter sends zeros for the new fields");
+        Check(o.AttackStyle == 0 && o.RangedReady == 0 && o.RangedStance == 0 && o.ThreatDistance == 0f && o.Favor == 0f, "before anything is seen a melee fighter sends zeros for the new fields");
         Tick(0.1f);
         o = melee.Brain.BuildObservation();
         Check(o.AttackStyle == 0 && o.RangedReady == 0 && o.RangedStance == 0, "a melee fighter never sends a ranged flag, whatever it is doing");
         Check(RgNear(o.ThreatDistance, 10f, 0.01f), "but is told the distance, " + o.ThreatDistance);
         o = archer.Brain.BuildObservation();
-        Check(o.AttackStyle == 1 && o.RangedReady == 1 && o.ReservedC == 0, "an archer with ammo sends its style and ready");
+        Check(o.AttackStyle == 1 && o.RangedReady == 1 && o.Favor == 0f, "an archer with ammo sends its style and ready");
         Check(o.RangedStance == 1 && archer.Brain.Action == NpcAction.Shoot, "and is in the shooting stance once its action is Shoot");
         o = knight.Brain.BuildObservation();
         Check(o.AttackStyle == 2 && o.RangedReady == 1 && o.RangedStance == 1, "a hybrid sends style 2 and, shooting from 10 m, the shooting stance");

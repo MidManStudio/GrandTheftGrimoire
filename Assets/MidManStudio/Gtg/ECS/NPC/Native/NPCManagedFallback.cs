@@ -80,7 +80,7 @@ namespace MidManStudio.Gtg.NPC.Native
                     action = Merchant(o, threat, mobile, health);
                     break;
                 case NpcRole.Civilian:
-                    action = threat && mobile ? NpcAction.Retreat : Wander(mobile);
+                    action = Civilian(o, threat, mobile);
                     break;
                 case NpcRole.Companion:
                     action = Companion(o, threat, mobile, health);
@@ -112,13 +112,34 @@ namespace MidManStudio.Gtg.NPC.Native
         // WANTED_CROWN_HEAT in npc-behavior.
         internal const int WantedCrownHeat = 1;
 
+        // The lowest favor at which a shopkeeper or a civilian counts as liking the player. Same as FRIENDLY_FAVOR in
+        // npc-behavior.
+        internal const float FriendlyFavor = 0.2f;
+
+        // Whether the NPC likes the player enough to not take the player for a threat. A number that is not finite counts
+        // as neutral. Same as likes_player() in npc-behavior.
+        private static bool LikesPlayer(NPCNativeObservation o)
+        {
+            return !float.IsNaN(o.Favor) && !float.IsInfinity(o.Favor) && o.Favor >= FriendlyFavor;
+        }
+
+        // A civilian runs from a visible threat when it can move. One that likes the player and was not just attacked
+        // goes about its day. Same as civilian() in npc-behavior.
+        private static NpcAction Civilian(NPCNativeObservation o, bool threat, bool mobile)
+        {
+            if (threat && mobile && !(LikesPlayer(o) && o.Provoked == 0)) return NpcAction.Retreat;
+            return Wander(mobile);
+        }
+
         // A shopkeeper trades when nothing threatens it and stands still when something does. One with the retaliatory
-        // disposition that has been attacked fights back in its own attack style, as a retaliatory guard does. Same as
+        // disposition that has been attacked fights back in its own attack style, as a retaliatory guard does. One that
+        // likes the player keeps trading under the player's eye, unless the player has just attacked it. Same as
         // merchant() in npc-behavior.
         private static NpcAction Merchant(NPCNativeObservation o, bool threat, bool mobile, float health)
         {
             if (!threat) return NpcAction.Trade;
             if ((NpcDisposition)o.Disposition == NpcDisposition.Retaliatory && o.Provoked != 0) return Fight(o, mobile, health);
+            if (LikesPlayer(o) && o.Provoked == 0) return NpcAction.Trade;
             return NpcAction.Idle;
         }
 

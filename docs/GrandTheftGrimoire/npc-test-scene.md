@@ -51,6 +51,6 @@ For a pivot at the feet use the component defaults, which are exactly these numb
 
 ## Known limits
 
-- NPC against NPC is a test arrangement. Factions are the real answer and are not built, see the design record in `docs/` (favor and factions).
+- NPC against NPC is a test arrangement. Factions are the real answer and are not built, they are the next stage after favor (`favor.md`).
 - `Npc_Ranged` uses the HybridMl backend, which has no model and takes the deterministic path. It behaves like Utility.
 - Shooters aim at the last seen position, without leading a moving target, so a target that runs sideways takes fewer hits.

@@ -5,6 +5,7 @@
 
 using System.Collections.Generic;
 using MidManStudio.Gtg.Managed.Crown;
+using MidManStudio.Gtg.Managed.Favor;
 using UnityEditor;
 using UnityEngine;
 
@@ -64,6 +65,11 @@ namespace MidManStudio.Gtg.Managed.NPC
             for (int r = 0; r < ManagedCrownRegion.Count; r++)
             {
                 GUILayout.Label("Crown Heat: " + ManagedCrownRegion.Get(r).Describe());
+            }
+
+            for (int r = 0; r < ManagedFavorRegion.Count; r++)
+            {
+                GUILayout.Label("Favor: " + ManagedFavorRegion.Get(r).Describe());
             }
 
             _options.Mode = (ManagedNpcDrawMode)EditorGUILayout.Popup("Scene drawing", (int)_options.Mode, ModeNames);

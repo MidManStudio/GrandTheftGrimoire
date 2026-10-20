@@ -170,6 +170,11 @@ To give a town a Crown Heat meter, add `ManagedCrownRegion` to an empty object a
 town's center and size its box to cover the town. Guards inside the box enforce the law
 there. The rules, the numbers and the debugger line are in `crown-heat.md`.
 
+To give a town a favor meter, add `ManagedFavorRegion` to an empty object at the town's center and size its
+box to cover the town, then add `ManagedNpcFavor` next to the brain of every NPC whose opinion matters. A shopkeeper
+or a civilian that likes the player (20 or more) no longer treats it as a threat. The rules, the numbers and the
+debugger line are in `favor.md`.
+
 To show Crown Heat on the HUD's crowns, add `ManagedCrownHudHeat` to any object, one is enough.
 To fill the missions panel, add `ManagedMissionBoard` to any object and list missions in the
 Inspector, or add them from code through its `Tracker`. A scene with neither still works, and the
@@ -227,8 +232,9 @@ the arrows pointing one way, and put a new link in this table when it is added.
 |---|---|
 | `Economy`, `Flags`, `Health`, `Rendering`, `CharacterController`, `Missions` | nothing |
 | `Items` | `Data`, in two files: the catalog adapter and `ManagedPlayerItemBag` |
-| `NPC` | `Health`; `Crown` in the brain, which reads the tier of the region it stands in; `Magic` and `Rendering` in `ManagedNpcShooter.cs`, `ManagedNpcShots.cs` and `ManagedNpcShotDriver.cs` only (the spell table, the flight and the sphere batch) |
+| `NPC` | `Health`; `Crown` in the brain, which reads the tier of the region it stands in; `Favor` in the brain, which reads the favor of its gauge or of the region it stands in; `Magic` and `Rendering` in `ManagedNpcShooter.cs`, `ManagedNpcShots.cs` and `ManagedNpcShotDriver.cs` only (the spell table, the flight and the sphere batch) |
 | `Crown` | `Health`, `NPC`; `Hud` in `ManagedCrownHudHeat.cs` only, which implements the interface of `ManagedHudHeatSource.cs` |
+| `Favor` | `NPC`, and the crime kinds of `Crown` in `ManagedFavorTypes.cs` only |
 | `Magic` | `CharacterController`, `Economy`, `Health`, `Rendering` |
 | `Chemistry` | `Magic`, `Rendering` |
 | `Camera` | `CharacterController`, `Economy`, `Magic` |
@@ -1726,6 +1732,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 - Attack style (ABI version 6). `AttackStyle` is an Inspector setting, melee by default, and is sent as `attack_style`. A ranged or hybrid brain looks for a `ManagedNpcShooter` on its object (again each tick while it is missing, so one added in code after `Awake` is found), and sends `ranged_ready` as the shooter's `IsReady`. With no shooter it warns once and sends not ready, which makes a ranged fighter retreat and a hybrid fight by hand, the two outcomes the rules give for an empty quiver. `ranged_stance` is true while the last action was Shoot or Kite, which is how a hybrid keeps its stance between its two distances (the game keeps this memory, the decision keeps none). A melee brain sends zeros for the three shooting fields.
 - `threat_distance` is the distance on the ground plane to where the threat was last seen, so height is not part of it and a target on a roof is as far as one below it. It is at least 0.01, so a known distance is never taken for an unknown one, and zero when no threat is in view. It is sent for every NPC, and only ranged and hybrid fighters read it.
 - Shopkeepers (ABI version 6). A merchant with the Retaliatory disposition that was hurt (provoked, see above) now fights back in its own attack style, which Rust decides. Nothing changes in the brain for this, it only sends the same fields. Provoked is global, not per target: a shopkeeper hurt by anyone but its own side fights whatever it sees next, which the actor then aims at the nearest or the sticky threat as usual. Hostile and peaceful merchants are unchanged.
+- Favor (ABI version 7). `Favor` is a number from -1 to 1 sent for every NPC, and Rust reads it for shopkeepers and civilians only. An NPC with a `ManagedNpcFavor` on its object sends the gauge over 100. An NPC without one sends the crowd value of the `ManagedFavorRegion` that holds its position, and 0 outside every region (neutral, the behavior before version 7). The gauge links itself to the brain when it enables, and the brain also looks for a gauge in `OnEnable`, so the order the two components were added in does not matter. The brain also hands every hit that has a source to `ManagedFavorRegion.ReportHurt`, right after the Crown Heat report, see `favor.md`. Rust never sees the Local Favor of a region, only the favor of each NPC.
 - Crown Heat (ABI version 5). A guard sends the tier of the `ManagedCrownRegion` that holds its position as `CrownHeat`, and every other role sends 0, so only guards can react. Outside every region the tier is 0. The tier is read when the observation is built, so a guard reacts at the next tick after the tier changes. When something hurts the brain, `OnDamaged` hands the hit to `ManagedCrownRegion.ReportHurt`, which decides whether it is a crime. `CrimeRepeatTime` is internal state of that check: the earliest time another hit on this NPC counts as a new assault.
 ### `ManagedCombatEngagement.cs`
 
@@ -1830,7 +1837,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 
 ### `ManagedNpcDebuggerWindow.cs`
 
-**What it does:** The window behind it, opened from the menu GTG, NPC Debugger. It shows the director line (NPC count, batch size, rays this tick, native library or managed fallback), one line per Crown region (name, heat and tier), the switches above, and a live list of NPCs. A click on a row selects the NPC and frames it in the Scene view. It subscribes to `SceneView.duringSceneGui` while it is open and unsubscribes when it closes.
+**What it does:** The window behind it, opened from the menu GTG, NPC Debugger. It shows the director line (NPC count, batch size, rays this tick, native library or managed fallback), one line per Crown region (name, heat and tier), one line per favor region (name, Local Favor, tier, crowd and member count), the switches above, and a live list of NPCs. A click on a row selects the NPC and frames it in the Scene view. It subscribes to `SceneView.duringSceneGui` while it is open and unsubscribes when it closes.
 
 **Decisions:**
 - Nothing is drawn in Edit mode, and the window says so. The registry of brains only fills in Play mode.
@@ -1931,6 +1938,49 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   needs `ManagedCrownRegion`, so the building harness does not compile it. The NPC harness does,
   see CI and Workflows.
 
+### `ManagedFavorTypes.cs`
+
+**What it does:** The small types of favor, with no Unity types. `ManagedFavorTier` holds the tier numbers (Hated -2, Disliked -1, Neutral 0, Liked 1, Adored 2), the lines between them (-60, -20, 20 and 60 on the 100 point meter), `For(favor)` and `Name(tier)`. `ManagedFavorSeverity` says how heavy violence is: a blow weighs 1 and a kill 3, and `Of(ManagedCrimeKind)` maps the Crown crime kinds to those.
+
+**Decisions:**
+- The Liked line is 20, which is `FRIENDLY_FAVOR` (0.2) times 100 in `npc-behavior`. A check compares the managed constant with the one in the managed fallback of the decision, so the two cannot drift apart unseen.
+- The tier numbers are constants and not an enum, like the Crown tiers, so a tier can be compared and stored as a plain int.
+- Severity reuses `ManagedCrimeKind` from `Crown/`, which is why `building-test/` leaves `Favor/` out: that project only includes two plain files of `Crown/`.
+- A number that is not a number is Neutral. All lines and weights are placeholders.
+
+### `ManagedFavorMath.cs`
+
+**What it does:** The arithmetic of favor. `Clamp` holds a value between -100 and 100 (NaN is 0), `Normalize` gives the value for the native decision (over 100), and `Blend(sum, count, crowd, crowdWeight)` builds the favor of a group from its members and a crowd.
+
+**Decisions:**
+- `Blend` counts the members one each and the crowd as `crowdWeight` more members who all feel the crowd value: (sum + weight x crowd) / (count + weight). So a group with no members is its crowd, a group with few members leans on the crowd, and a group with many is their average. This is the "relevant NPCs plus a crowd value" decision of the owner.
+- A weight that is not above zero (or NaN) means the crowd counts for nothing, and a group with no members and no crowd weight is still the crowd value, so the result is never a division by zero.
+- A sum that is NaN counts as zero. The result is clamped.
+
+### `ManagedNpcFavor.cs`
+
+**What it does:** The favor gauge of one relevant NPC, from -100 to 100, on the same object as its `ManagedNpcBrain`. It exposes `Value`, `Normalized` (the number sent to Rust), `Tier`, `IsAlive`, `Region`, `Add`, `Set`, `Describe` and a `Changed` event. Its Inspector holds the start favor, an optional home region, the hurt penalty (20) and the witness penalty (5).
+
+**Decisions:**
+- An NPC without a gauge has no opinion of its own and feels the crowd of its region. A gauge is only for NPCs the story cares about, which keeps the cost of the system proportional to them.
+- The gauge links itself to the brain in `OnEnable` and unlinks in `OnDisable`, so a disabled gauge sends nothing and the brain falls back to the crowd. All live gauges are in a static list, cleared at `SubsystemRegistration`.
+- A static `Version` counter goes up on every change, enable and disable of any gauge, so a region can tell its Local Favor is out of date without polling.
+- `Region` is the home region when one is set, otherwise the region whose box holds the NPC now. A dead NPC (`IsAlive` false) stops counting toward its region and keeps its value.
+- `Add` and `Set` ignore NaN, clamp, raise `Changed` once per real change and do nothing for the same value. The start value is read when first needed, so a gauge made in code works before its `Awake`.
+- The meter is not saved.
+
+### `ManagedFavorRegion.cs`
+
+**What it does:** One town, a box volume (size in meters, not rotated) on an empty GameObject. It owns the crowd value, builds the Local Favor from the live gauges that count toward it and the crowd (`Blend`), raises `TierChanged`, and is the place where hurting somebody costs favor (`ReportHurt`).
+
+**Decisions:**
+- Local Favor is rebuilt when the crowd or any gauge changed, on the next read, and every 0.5 s by itself because the NPCs walk from region to region and a death changes no gauge. A region that nobody reads costs one compare a frame.
+- Region lookup is by position and the first region to register wins where boxes overlap, as for Crown regions. A gauge with a home region counts toward that region wherever it stands.
+- `ReportHurt` is called by the victim's brain. The offender is the `ManagedNpcThreatSource` of the damage source, and it must not belong to an NPC, so an NPC's blows cost nothing and the player's do. A blow counts once per victim per `AssaultRepeatSeconds` (3 s, or 3 s for a victim in no region), a kill always counts. The victim loses its hurt penalty times the severity. For a merchant, civilian or guard victim, the live gauges of NPCs that have the offender in view right now lose the witness penalty times the severity, and the crowd of the region around the victim loses the crowd penalty (4) times the severity. An enemy, boss or companion victim costs only its own gauge.
+- A victim in no region still loses its own favor and the watchers still lose theirs, but no crowd.
+- Everything is a placeholder, see `favor.md`. The crowd value is not saved.
+- The region list is static and cleared at `SubsystemRegistration`. `OnDrawGizmosSelected` draws the box, green when the people like the player, red when they dislike him, yellow between.
+
 ## CI and Workflows
 
 - `.github/workflows/run-patch.yml` - runs `.mdix/patches/patch.mdix`. The current
@@ -1942,9 +1992,9 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
 - `.github/workflows/npc-rust-ci.yml` - checks the shared NPC layer. The `csharp-abi` job
   compiles `NPCNativeLib`, `NPCNativeTypes`, `NPCManagedFallback` and `NPCEnums` with
   plain .NET and runs them against the real Rust library. The `managed-npc` job compiles
-  `Managed/Health`, `Managed/NPC` (including its `Editor/` folder), `Managed/Crown` and the spell damage files (C# 9, as in Unity 2022.3)
+  `Managed/Health`, `Managed/NPC` (including its `Editor/` folder), `Managed/Crown`, `Managed/Favor` and the spell damage files (C# 9, as in Unity 2022.3)
   against hand written `UnityEngine`, `UnityEditor` and `NavMeshAgent` stand-ins in
-  `rust/npc/managed-npc-test/` and runs 1138 checks, once on the managed fallback and
+  `rust/npc/managed-npc-test/` and runs 1282 checks, once on the managed fallback and
   once on the real library. The spell caster itself is replaced by a stub that has only
   the `Impact` event and `Raise` (and the sphere batch by one that only records what it is given). The spell definition is compiled too, so the flight, payload,
   modifier and vessel type files that it depends on are part of the project.
@@ -1952,7 +2002,7 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   The project has no assembly definitions, so one compile error in any Managed file stops
   every system in Unity, and nothing else in CI catches it. The `managed-compile` job builds
   `building-test/BuildingTest.csproj` and runs it. The project compiles every file under
-  `Managed/` except `NPC/`, `Crown/`, `Chemistry/` and `Quests/` (the first two need the NPC
+  `Managed/` except `NPC/`, `Crown/`, `Favor/`, `Chemistry/` and `Quests/` (the first three need the NPC
   native bindings and are compiled by the `managed-npc-fallback` job below, `Chemistry/` needs
   the Alembic package, and `Quests/` needs Questly and is compiled by `managed-packages-ci.yml`), plus `Data/ItemDatabase.cs` and the two plain arithmetic files of `Crown/`,
   `ManagedCrownTypes.cs` and `ManagedCrownHeatMap.cs`, at C# 9 with .NET 8, against hand written
@@ -1964,8 +2014,8 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   `rust/npc/managed-npc-test/` or the workflow, and by hand. The folder is named for the first
   system it covered and now covers the whole core stack.
   - The `managed-npc-fallback` job runs `rust/npc/managed-npc-test` on the managed fallback,
-    which needs no native library. It compiles `Health/`, `NPC/` and `Crown/`, which includes
-    `ManagedCrownHudHeat.cs`, and runs their checks (1138 at the time of writing). The path filter
+    which needs no native library. It compiles `Health/`, `NPC/`, `Crown/` and `Favor/`, which includes
+    `ManagedCrownHudHeat.cs`, and runs their checks (1282 at the time of writing). The path filter
     of `npc-rust-ci.yml` does not list `Managed/Crown/` or `Managed/Hud/`, so without this job a
     change to the heat interface in `Hud/` would break `Crown/` unseen. That workflow stays the one
     that runs the real native library.
@@ -2521,10 +2571,10 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   with stubs. It does not run real guards with real sight, so witness detection has not seen a real raycast.
 - Crown Heat not built: rules for tiers 2 and 3, crimes other than hurting and killing (theft, trespass, drug dealing
   once that exists), bribes and pardons as game systems, saving the meter, a UI for the meter, and a way for a guard
-  to tell the player from another threat. Local Favor is separate and not built. Every number is a placeholder.
+  to tell the player from another threat. Local Favor is built separately, see `favor.md`. Every number is a placeholder.
 - Not verified in the Editor, not compiled by Unity. The files compile with .NET 8 (C# 9) against hand
-  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 1138 checks pass there on
-  both the managed fallback and the real Rust library (836 before the ranged and shopkeeper work). CI job `managed-npc` repeats this on every push. The
+  written stubs of the `UnityEngine`, `UnityEngine.AI` and `UnityEditor` types, and 1282 checks pass there on
+  both the managed fallback and the real Rust library (836 before the ranged and shopkeeper work, 1138 before favor). CI job `managed-npc` repeats this on every push. The
   stub raycast is a callback, the NavMesh is a callback and the agent moves in a straight line, so the checks
   prove the logic around them (cone, budget, lingering, memory, patrol, chase, cooldown, retreat, damage
   falloff, debugger filters and drawing) and not real colliders, layers, NavMesh pathing or `Physics.Raycast`
@@ -2608,6 +2658,17 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   broken.
 - Docs: the NPC scene setup has six new steps (pivot, layers, NPC against NPC, NavMesh, health, melee reach), and
   `npc-test-scene.md` is new.
+
+### Favor (ABI version 7: `Managed/Favor/`, `ManagedNpcBrain.cs`, `ManagedNpcDebugView.cs`, `ManagedNpcDebuggerWindow.cs`)
+
+- What changed. Personal favor, favor regions and the Local Favor built from them, as the owner decided (bottom-up, relevant NPCs plus a crowd value, one pipeline). The NPC decision gained `favor` (f32 at offset 60, the last reserved word of the observation, ABI version 7). A shopkeeper that likes the player keeps trading under a threat and a civilian that likes it does not run, unless they were just attacked. Hurting somebody costs favor with the victim, the watchers and the crowd. Details are in `favor.md`.
+- The observation has no reserved space left. The next field makes the struct bigger. The mixed workload now includes favor for shopkeepers and civilians, so the shared decision hash changed to `0xdd97a1437f8256ed` (it was `0xcdb9285c1d3ebd8e`).
+- A leftover of the change: the throughput example had `..Default::default()` after every field was written, which Clippy denies (`needless_update`), so it was removed.
+- Found by the new checks: a gauge added to an object before the brain never reached the brain, so the brain now looks for a gauge in `OnEnable` too. A witness check that tested only `ThreatVisible` would have charged NPCs that were watching somebody else, so it also compares the threat with the offender.
+- The harness grew to 1282 checks (from 1138), passes on both decision paths, and 25 of 26 deliberate breaks of the new code were caught. The one survivor is an equivalent mutant. The stub `Color` gained `green`. `building-test/` leaves `Managed/Favor/` out, like `NPC/` and `Crown/`, because the favor types use the Crown crime kinds, and the folder is compiled by the NPC harness instead.
+- Interpretations and placeholders to confirm: a liked NPC does not fear the player; an NPC with no gauge feels the crowd of its region; only non-NPC objects with a threat source count as the player; a victim in no region costs no crowd; only merchants, civilians and guards cost the crowd and the watchers; the tiers, the penalties (20, 5, 4), the severities (1 and 3) and the crowd weight (3) are placeholders.
+- Not built: factions and the kingdom, race and faction tags, seeding, gossip, favor for good deeds, decay, saving, and what favor unlocks (refusing service, snitching, misdirecting, discounts). Not verified in the Editor.
+- Package pins. `com.midmanstudio.mdix` moved to `d658d0d` (the editor and LSP work, and every file has its `.meta`). The Quests bridge compiles against it and its 181 checks pass in `packages-test/`. The other five packages stay at `37eec98`, which is still the head of `unity-chem-sim`.
 
 ### Ranged, hybrid and shopkeeper fighters (`ManagedNpcShooter.cs`, `ManagedNpcShots.cs`, `ManagedNpcShotDriver.cs`, `ManagedNpcBallistics.cs`, `ManagedCombatEngagement.cs`, `ManagedNpcActor.cs`, `ManagedNpcBrain.cs`, `ManagedNpcThreatSource.cs`, `ManagedSpellCaster.cs`)
 
