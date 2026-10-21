@@ -2,7 +2,7 @@
   "dependencies": {
     "com.unity.cinemachine": "2.9.7",
 
-    "com.midmanstudio.mdix": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#d658d0d1be9f73b450222c3dfc3a660b04a0ed9c",
+    "com.midmanstudio.mdix": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#9aa652aa9bd0487aad2182cd43e37c8ce6859cad",
     "com.midmanstudio.alembic": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.alembic#37eec982fd91e50225a1a80bd70bb3c702697841",
   "com.midmanstudio.nuclear": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.nuclear#756eefe3347b72e3f1afc6d01d3039e7bcb10bda",
 
@@ -12,7 +12,7 @@
     "com.midmanstudio.hudman": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.hudman#37eec982fd91e50225a1a80bd70bb3c702697841",
     "com.midmanstudio.inventorizz": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.inventorizz#37eec982fd91e50225a1a80bd70bb3c702697841",
   
-    "com.midmanstudio.questly": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.questly#37eec982fd91e50225a1a80bd70bb3c702697841",
+    "com.midmanstudio.questly": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.questly#b96cf58e88d2186e8a119170fb063b6330f23d98",
 
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.2d.tilemap": "1.0.0",
