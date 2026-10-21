@@ -77,6 +77,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacementController.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/Components/ChemistryComponents.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheatSceneHost.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Favor/ManagedNpcFavor.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Camera/Presentation/CharacterCameraBridge.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselBelt.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildRules.cs" />
@@ -114,6 +115,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/ManagedPlayerWallet.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/ManagedCrystal.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/IManagedItemHolder.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Favor/ManagedFavorTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildUiHost.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildGrid.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheat.cs" />
@@ -124,6 +126,8 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDefinition.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudFeed.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellFlight.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Favor/ManagedFavorMath.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Quests/ManagedQuestHost.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselCharging.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudWheel.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellModifiers.cs" />
@@ -138,10 +142,12 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildInput.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Data/NpcDialogue.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedPlayerItemBag.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Quests/ManagedQuestFlagSource.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Data/ItemDatabase.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/ManagedCameraRig.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterMovementSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudStyle.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Quests/ManagedQuestMissionSource.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcShotDriver.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcActor.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/ManagedCrownHudHeat.cs" />
@@ -152,6 +158,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedRenderer.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacter.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcBallistics.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Favor/ManagedFavorRegion.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudState.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterGravitySystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/Presentation/ChemicalHazardPresentationSystem.cs" />
@@ -169,6 +176,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudLayout.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/ManagedCursorBlock.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Quests/ManagedQuestText.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudClickView.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/PhysicsRayUtility.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/ManagedCrownRegion.cs" />
@@ -1060,6 +1068,14 @@
       <HintPath>/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/NetStandard/compat/2.1.0/shims/netfx/mscorlib.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.Questly.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Questly.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.DragDrop.UIToolkit">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.DragDrop.UIToolkit.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Services.Analytics.Editor">
       <HintPath>Library/ScriptAssemblies/Unity.Services.Analytics.Editor.dll</HintPath>
       <Private>False</Private>
@@ -1104,6 +1120,10 @@
       <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.DragDrop.UGUI">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.DragDrop.UGUI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.VisualScripting.Flow">
       <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Flow.dll</HintPath>
       <Private>False</Private>
@@ -1112,8 +1132,16 @@
       <HintPath>Library/ScriptAssemblies/Unity.Mathematics.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.HudMan.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.HudMan.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Services.Core.Environments">
       <HintPath>Library/ScriptAssemblies/Unity.Services.Core.Environments.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.Nuclear">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Nuclear.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.Purchasing.SecurityCore">
@@ -1128,10 +1156,6 @@
       <HintPath>Library/ScriptAssemblies/Unity.Collections.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="MidManStudio.Nuclear">
-      <HintPath>Library/ScriptAssemblies/MidManStudio.Nuclear.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="UnityEngine.Purchasing.Codeless">
       <HintPath>Library/ScriptAssemblies/UnityEngine.Purchasing.Codeless.dll</HintPath>
       <Private>False</Private>
@@ -1140,8 +1164,16 @@
       <HintPath>Library/ScriptAssemblies/Unity.Collections.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.GenSettings.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.GenSettings.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="PPv2URPConverters">
       <HintPath>Library/ScriptAssemblies/PPv2URPConverters.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.DragDrop.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.DragDrop.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
@@ -1254,6 +1286,10 @@
     </Reference>
     <Reference Include="MidManStudio.Mdix.Runtime">
       <HintPath>Library/ScriptAssemblies/MidManStudio.Mdix.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.Inventorizz.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Inventorizz.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Purchasing.Common">

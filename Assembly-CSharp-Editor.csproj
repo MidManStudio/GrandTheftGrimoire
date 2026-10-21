@@ -993,6 +993,14 @@
       <HintPath>Library/ScriptAssemblies/UnityEngine.TestRunner.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.Questly.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Questly.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.DragDrop.UIToolkit">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.DragDrop.UIToolkit.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Services.Analytics.Editor">
       <HintPath>Library/ScriptAssemblies/Unity.Services.Analytics.Editor.dll</HintPath>
       <Private>False</Private>
@@ -1037,6 +1045,10 @@
       <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.DragDrop.UGUI">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.DragDrop.UGUI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.VisualScripting.Flow">
       <HintPath>Library/ScriptAssemblies/Unity.VisualScripting.Flow.dll</HintPath>
       <Private>False</Private>
@@ -1045,8 +1057,16 @@
       <HintPath>Library/ScriptAssemblies/Unity.Mathematics.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.HudMan.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.HudMan.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Services.Core.Environments">
       <HintPath>Library/ScriptAssemblies/Unity.Services.Core.Environments.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.Nuclear">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Nuclear.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.Purchasing.SecurityCore">
@@ -1069,8 +1089,16 @@
       <HintPath>Library/ScriptAssemblies/Unity.Collections.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.GenSettings.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.GenSettings.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="PPv2URPConverters">
       <HintPath>Library/ScriptAssemblies/PPv2URPConverters.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.DragDrop.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.DragDrop.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
@@ -1185,6 +1213,10 @@
       <HintPath>Library/ScriptAssemblies/MidManStudio.Mdix.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.Inventorizz.Runtime">
+      <HintPath>Library/ScriptAssemblies/MidManStudio.Inventorizz.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Purchasing.Common">
       <HintPath>Library/ScriptAssemblies/Purchasing.Common.dll</HintPath>
       <Private>False</Private>
@@ -1270,6 +1302,10 @@
     <ProjectReference Include="MidManStudio.Alembic.Samples.Playground.csproj">
       <Project>{954ED032-78FE-39DC-72FD-51F4889A6361}</Project>
       <Name>MidManStudio.Alembic.Samples.Playground</Name>
+    </ProjectReference>
+    <ProjectReference Include="MidManStudio.Nuclear.Samples.NuclearLab.csproj">
+      <Project>{FC528717-8290-B393-2900-6D229106B6A8}</Project>
+      <Name>MidManStudio.Nuclear.Samples.NuclearLab</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)/Microsoft.CSharp.targets" />
