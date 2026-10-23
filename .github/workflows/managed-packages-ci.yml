@@ -1,10 +1,11 @@
 # .github/workflows/managed-packages-ci.yml
 # Compile gate for the part of the Managed stack that needs a studio package. Managed/Quests/ reads the Questly
-# runtime, which is not in this repo, so managed-csharp-ci.yml leaves that folder out. This job downloads the
-# Questly sources and the managed MidManStudio.Mdix.Core.dll at the commits pinned in Packages/manifest.json,
-# compiles them together with Managed/Quests/, Managed/Missions/ and Managed/Flags/ at C# 9 against hand written
-# UnityEngine stand-ins, and runs the checks in packages-test/. The native mdix library is never loaded, and
-# a .mdix file is not parsed. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
+# runtime and Managed/Inventory/ reads the Inventorizz runtime. Neither is in this repo, so managed-csharp-ci.yml
+# leaves those folders out. This job downloads the Questly and Inventorizz sources and the managed
+# MidManStudio.Mdix.Core.dll at the commits pinned in Packages/manifest.json, compiles them together with
+# Managed/Quests/, Managed/Inventory/, Managed/Items/, Managed/Missions/ and Managed/Flags/ at C# 9 against hand
+# written UnityEngine stand-ins, and runs the checks in packages-test/. The native mdix library is never loaded,
+# and a .mdix file is not parsed. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
 
 name: Managed Packages CI
 
@@ -13,16 +14,22 @@ on:
   push:
     paths:
       - 'Assets/MidManStudio/Gtg/Managed/Quests/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Inventory/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Items/**'
       - 'Assets/MidManStudio/Gtg/Managed/Missions/**'
       - 'Assets/MidManStudio/Gtg/Managed/Flags/**'
+      - 'Assets/MidManStudio/Gtg/Data/ItemDatabase.cs'
       - 'packages-test/**'
       - 'Packages/manifest.json'
       - '.github/workflows/managed-packages-ci.yml'
   pull_request:
     paths:
       - 'Assets/MidManStudio/Gtg/Managed/Quests/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Inventory/**'
+      - 'Assets/MidManStudio/Gtg/Managed/Items/**'
       - 'Assets/MidManStudio/Gtg/Managed/Missions/**'
       - 'Assets/MidManStudio/Gtg/Managed/Flags/**'
+      - 'Assets/MidManStudio/Gtg/Data/ItemDatabase.cs'
       - 'packages-test/**'
       - 'Packages/manifest.json'
       - '.github/workflows/managed-packages-ci.yml'
@@ -49,7 +56,7 @@ jobs:
 
       # packages-test/nuget.config clears every package source, and the project has no package references,
       # so the restore needs no network.
-      - name: Compile Questly and the Quests bridge at C# 9
+      - name: Compile Questly, Inventorizz and the two bridges at C# 9
         run: |
           set -o pipefail
           dotnet build packages-test/PackagesTest.csproj -c Release --nologo 2>&1 | tee ci-out/build.txt
@@ -65,7 +72,7 @@ jobs:
           {
             echo '## GTG Managed Packages CI'
             echo
-            echo 'The Questly runtime and the Quests bridge compiled at C# 9 with plain .NET against hand written UnityEngine stand-ins, then run through the checks in `packages-test/`. This is not Unity. A red compile step can mean a Quests file would break the Unity compile, or that Questly changed under the pinned commit. The native mdix library is not loaded and no .mdix file is parsed.'
+            echo 'The Questly and Inventorizz runtimes and the Quests and Inventory bridges compiled at C# 9 with plain .NET against hand written UnityEngine stand-ins, then run through the checks in `packages-test/`. This is not Unity. A red compile step can mean a Quests or Inventory file would break the Unity compile, or that a package changed under its pinned commit. The native mdix library is not loaded and no .mdix file is parsed.'
             echo
             echo '### Pinned packages'
             echo '```text'

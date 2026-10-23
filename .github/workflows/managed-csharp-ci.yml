@@ -1,13 +1,13 @@
 # .github/workflows/managed-csharp-ci.yml
 # Compile gate for the Managed C# stack. The project has no assembly definitions, so one compile error in any
-# Managed file stops every system in Unity. This job compiles Managed/ (all folders except NPC, Crown, Chemistry
-# and Quests) at C# 9, the language level of Unity 2022.3, with plain .NET against hand written stand-ins for
+# Managed file stops every system in Unity. This job compiles Managed/ (all folders except NPC, Crown, Chemistry,
+# Quests and Inventory) at C# 9, the language level of Unity 2022.3, with plain .NET against hand written stand-ins for
 # UnityEngine, uGUI, TextMeshPro and the Input System, and then runs the checks in building-test/.
 # NPC, Crown and Health are compiled by the second job, with the NPC harness on its managed fallback, because the
 # path filter of npc-rust-ci.yml does not list Managed/Crown/ or Managed/Hud/ and the Crown heat component
 # implements an interface of Hud. That workflow still runs the real native library. Quests needs the Questly
-# package and is compiled by managed-packages-ci.yml. Chemistry needs the Alembic package and is compiled by
-# no job. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
+# package and Inventory needs the Inventorizz package, and managed-packages-ci.yml compiles both. Chemistry needs
+# the Alembic package and is compiled by no job. Documentation: docs/GrandTheftGrimoire/managed.md, section "CI and Workflows".
 
 name: Managed C# CI
 
