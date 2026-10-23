@@ -2,8 +2,9 @@
 """Fetches the package sources that packages-test/ compiles, at the commits pinned in Packages/manifest.json.
 
 Writes packages-test/fetched/:
-  questly/   the Runtime folder of com.midmanstudio.questly
-  mdix/      the managed MidManStudio.Mdix.Core.dll of com.midmanstudio.mdix, and none of its native libraries
+  questly/      the Runtime folder of com.midmanstudio.questly
+  inventorizz/  the Runtime folder of com.midmanstudio.inventorizz
+  mdix/         the managed MidManStudio.Mdix.Core.dll of com.midmanstudio.mdix, and none of its native libraries
   PINS.txt   what was fetched, one package per line
 
 Needs git and Python 3 only, and reads public repositories. Run from anywhere:
@@ -27,6 +28,7 @@ OUT = os.path.join(HERE, "fetched")
 # (package name, folder or file taken from the package, folder it lands in under fetched/)
 WANTED = [
     ("com.midmanstudio.questly", "Runtime", "questly"),
+    ("com.midmanstudio.inventorizz", "Runtime", "inventorizz"),
     ("com.midmanstudio.mdix", "Runtime/Plugins/MidManStudio.Mdix.Core.dll", "mdix"),
 ]
 

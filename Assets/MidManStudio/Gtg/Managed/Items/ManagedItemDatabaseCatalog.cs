@@ -13,7 +13,7 @@ namespace MidManStudio.Gtg.Managed.Items
     /// This is the only file of the Items folder that knows the Data folder. If the table changes
     /// shape, this adapter changes and nothing else does.
     /// </summary>
-    public sealed class ManagedItemDatabaseCatalog : IManagedItemCatalog
+    public sealed class ManagedItemDatabaseCatalog : IManagedItemCatalog, IManagedItemList
     {
         private readonly Dictionary<int, ManagedItemInfo> _items = new Dictionary<int, ManagedItemInfo>();
 
@@ -46,6 +46,16 @@ namespace MidManStudio.Gtg.Managed.Items
         }
 
         public int Count { get { return _items.Count; } }
+
+        public IReadOnlyList<ManagedItemInfo> Items
+        {
+            get
+            {
+                List<ManagedItemInfo> list = new List<ManagedItemInfo>(_items.Values);
+                list.Sort((a, b) => a.Id.CompareTo(b.Id));
+                return list;
+            }
+        }
 
         public bool TryGet(int itemId, out ManagedItemInfo info)
         {

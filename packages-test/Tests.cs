@@ -108,6 +108,11 @@ namespace MidManStudio.Gtg.Managed.Quests.Tests
             Group("mission source: tracking", TrackingChecks);
             Group("mission source: change and cost", ChangeChecks);
             Group("host", HostChecks);
+            Group("inventory catalog", InventoryCatalogChecks);
+            Group("inventory bag", InventoryBagChecks);
+            Group("inventory bag: same answers as the plain bag", InventoryParityChecks);
+            Group("inventory link", InventoryLinkChecks);
+            Group("inventory host", InventoryHostChecks);
             Console.WriteLine(_checks + " checks, " + _failures + " failed");
             return _failures == 0 ? 0 : 1;
         }

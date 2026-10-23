@@ -10,10 +10,10 @@ namespace MidManStudio.Gtg.Managed.Items
     /// <summary>
     /// A small bag of slots. A slot holds one kind of item and up to its stack size, and an item
     /// that does not stack takes a slot of its own. It stands in until an inventory package is
-    /// used, and the shop only sees <see cref="IManagedItemHolder"/>. It holds plain values and
-    /// knows nothing about Unity.
+    /// used. The shop sees only <see cref="IManagedItemHolder"/> and the HUD sees
+    /// <see cref="IManagedItemSlots"/>. It holds plain values and knows nothing about Unity.
     /// </summary>
-    public sealed class ManagedItemBag : IManagedItemHolder
+    public sealed class ManagedItemBag : IManagedItemSlots
     {
         /// <summary>The slot count used when none is given. A placeholder.</summary>
         public const int DefaultSlotCount = 20;

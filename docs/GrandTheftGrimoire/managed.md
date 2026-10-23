@@ -926,10 +926,12 @@ on while the panel is closed. It creates itself when play starts and survives sc
 ### `ManagedItemCatalog.cs`
 
 **What it does:** A catalog filled from code with `Add`. An item with the same id is
-replaced.
+replaced. It also implements `IManagedItemList`.
 
 **Decisions:**
 - Tests and the shop test panel use it. It has no Unity types.
+- `Items` copies the dictionary into a new list sorted by id on every read, so a caller may
+  keep the list and the order does not depend on the order of `Add` calls.
 
 ### `ManagedItemDatabaseCatalog.cs`
 
@@ -943,7 +945,21 @@ replaced.
   stackable item gets that size and any other item gets 1.
 - A null row is skipped, and when two rows share an id the first is used. A null table or
   a null list gives an empty catalog.
-- Nothing builds one in a scene yet. The shop test panel uses the sample items.
+- It implements `IManagedItemList` too, with the same rules as the code catalog: a new list
+  sorted by id on every read.
+- `ManagedPlayerItemBag` builds one when it has a database. The shop test panel uses the
+  sample items.
+
+### `IManagedItemList.cs`
+
+**What it does:** One property, `Items`, every item a catalog knows, ordered by id.
+
+**Decisions:**
+- It is a second interface and not a member of `IManagedItemCatalog`, because the shop and
+  the bag only ask about one id and a catalog that cannot list itself stays valid. A system
+  that has to know the whole list before it starts, the inventory bridge, asks for this
+  interface and says so when the catalog does not have it.
+- Each read gives a new list, so what the caller keeps never changes under it.
 
 ### `IManagedItemHolder.cs`
 
@@ -952,13 +968,26 @@ or none.
 
 **Decisions:**
 - This is what the shop sees of the player's carried items. `ManagedItemBag` is the plain
-  one, and an inventory package can be wrapped to fit the same four methods.
+  one, and an inventory package is wrapped to fit the same four methods, see
+  `ManagedInventoryBag.cs`.
+
+### `IManagedItemSlots.cs`
+
+**What it does:** An `IManagedItemHolder` whose slots can be read: `SlotCount`, `UsedSlots`
+and `TryGetSlot(slot, out itemId, out count)`.
+
+**Decisions:**
+- The HUD and the shop test panel draw the bag, so they ask for this and not for
+  `ManagedItemBag`. The shop itself still sees only `IManagedItemHolder`.
+- `TryGetSlot` is false for an empty slot and for an index outside the holder, the rule the
+  plain bag already had.
+- Both bags implement it: `ManagedItemBag` and `ManagedInventoryBag`.
 
 ### `ManagedItemBag.cs`
 
 **What it does:** A bag of slots. A slot holds one kind of item up to its stack size. An item
 that does not stack takes a slot of its own. `SlotCount`, `UsedSlots` and `TryGetSlot` let an
-overlay draw it.
+overlay draw it, and it implements `IManagedItemSlots`.
 
 **Decisions:**
 - Slots, not a bare count, because that is how a real inventory refuses an item, and the
@@ -1014,14 +1043,21 @@ being carried and where it came from (`Other`, `Bag` or `QuickSlot`).
 
 ### `ManagedPlayerItemBag.cs`
 
-**What it does:** The component that gives the player a `ManagedItemBag` and a
-`ManagedQuickSlots`, built over one catalog. `Bag`, `QuickSlots` and `Catalog` build on first
-use, and `UseCatalog` replaces the catalog and starts both empty.
+**What it does:** The component that gives the player a bag and a `ManagedQuickSlots`, built
+over one catalog. `Bag`, `QuickSlots` and `Catalog` build on first use, and `UseCatalog`
+replaces the catalog and starts both empty. The bag is the plain `ManagedItemBag` until
+`UseBag` installs another `IManagedItemSlots`.
 
 **Decisions:**
 - The catalog comes from an assigned `ItemDatabase`, or from an asset named `ItemDatabase` in a
   Resources folder. With neither, the bag knows no items and the component logs one warning, so
   nothing is added until a catalog exists. A null passed to `UseCatalog` is an empty catalog.
+- `UseBag(bag)` installs a bag that an inventory package stands behind. The quick row stays,
+  because it holds item ids and reads the amounts from whatever bag is in use. Anything the plain
+  bag held is dropped. A null bag throws `ArgumentNullException`.
+- `UseCatalog` puts a new plain bag and a new quick row back and then raises `CatalogReplaced`.
+  A system that installed its own bag listens and installs it again, which is what
+  `ManagedInventoryHost` does. Whatever listened to the old quick row has to listen again.
 - It is the second file of `Items/` that reads `Gtg/Data`, next to the catalog adapter.
 - The HUD adds it to the player when the player has none and the HUD's option is on. The bag
   and the quick slots are what the shop, a bag window and the HUD will share.
@@ -1152,6 +1188,8 @@ describes the bag.
 - The price in a message is read before the trade, because a trade can empty the stock the
   price depends on.
 - Sell-all with nothing carried says so, instead of reporting a bad count.
+- Its `Bag` is an `IManagedItemSlots`, built as a plain `ManagedItemBag`. The panel only reads
+  counts and slots, so it draws any bag.
 
 ### `ManagedShopDevPanel.cs`
 
@@ -1431,6 +1469,8 @@ draws from `ManagedHudState`, the wheel model and the quick slots.
   drew, and not when `SetMissions` is called. Earlier the call set a flag, so a feed that wrote to
   the state directly never refreshed the panel. A change from any writer shows on the next frame
   and setting what is shown already redraws nothing.
+- `Bag` is an `IManagedItemSlots` and is read from the player's component on every frame, so a
+  bag installed with `UseBag` shows at once and the HUD needs no event for it.
 - `SetHeat`, `SetMissions`, `Wheel`, `QuickSlots`, `Bag` and `QuickSlotUsed` are the public
   surface. The heat follows a registered heat source and the missions a registered mission source,
   see `ManagedHudFeed.cs`. Both calls still work while no source is registered. Nothing feeds
@@ -1609,6 +1649,89 @@ reports progress through `Runtime`.
   an EXTERNAL objective with no evaluator never completes.
 - Placeholders: no quest data and no text file exist in the project yet. The quests and their wording
   are not decided.
+
+### `ManagedInventoryCatalog.cs`
+
+**What it does:** The content of Inventorizz for GTG, built in code from a list of
+`ManagedItemInfo` and a slot count. It implements `IInventoryCatalog`. Every GTG item becomes an
+Inventorizz item with the id `item_<id>`, and one container type, `gtg_bag`, holds the slots.
+`KeyOf(itemId)` and `TryGetItemId(key, out itemId)` map between the two id spaces, because GTG
+items have integer ids and Inventorizz items have text ids.
+
+**Decisions:**
+- It is built from the list and not from an `.mdix` file, so the item table of GTG stays the one
+  place where items are written, and the bridge has no second content file to keep in step.
+- The container type counts slots and has no weight limit, and every item has weight 0. That is the
+  size Su chose: 20 slots, no weight.
+- `StackPolicy` is `STACKABLE` when the item stacks and `UNIQUE` when it does not, and `MaxStack` is
+  the stack size of the item.
+- When two entries share an id the first one is used. A null list gives a catalog with no items. A
+  slot count below 1 gives 1.
+- `FindItem` and `FindContainerType` return null for a key or type that is not known, and `KeyOf`
+  returns null for an id that is not known.
+- The content is fixed after construction, so `DefinitionsChanged` accepts subscribers and never
+  raises.
+
+### `ManagedInventoryBag.cs`
+
+**What it does:** One Inventorizz container shown as a GTG bag. It implements `IManagedItemSlots`
+over an `InventorizzRuntime`, a `ManagedInventoryCatalog` and a container id, with the ids and the
+all or none rules of `ManagedItemBag`, so the shop, the HUD and the quick slots treat both the same.
+
+**Decisions:**
+- Inventorizz `TryAddItem` fills as much as fits and returns true for a partial add. The holder
+  interface is all or none. The adapter counts the room first, the room left in the stacks the item
+  has plus a full stack for every empty slot, and refuses when the count does not fit. If the runtime
+  still takes only part, the part is taken out again and the call is false.
+- Inventorizz `TryRemoveItem` takes from the first slot. The plain bag takes from the last slot
+  first, so the earlier stacks stay full. The adapter checks the count and then removes from the last
+  slot with `TryRemoveFromSlot`, so the two bags leave the same layout.
+- It keeps no copy of the slots. Every read goes to the container, so a restored save or a lock shows
+  at once.
+- A locked container has no room and refuses a removal, and it still reads. A destroyed container has
+  no slots and refuses everything without throwing.
+- A saved slot that holds an item the catalog no longer knows stays in the container. `TryGetSlot`
+  and `CountOf` do not see it, `UsedSlots` counts it and it gives no room. Nothing deletes a saved
+  item because the content changed.
+- The room is counted with the catalog the bag was given. A catalog that disagrees with the one of
+  the runtime is a setup error, and the rollback keeps the call all or none anyway.
+- A container whose type is not the bag type of the catalog has no room.
+
+### `ManagedInventoryLink.cs`
+
+**What it does:** The whole bridge as plain values: the catalog, an `InventorizzRuntime`, the
+player's one container (owner `player`, instance id `player_bag`) and the `ManagedInventoryBag` over
+it. `Capture()` and `Restore(snapshot)` are saving and loading.
+
+**Decisions:**
+- It has no Unity types, so the checks build it directly, and `ManagedInventoryHost` only decides
+  when to build it.
+- The instance id is fixed, so a saved game finds the same container.
+- `Restore` replaces the whole state. A snapshot with no player container, such as an empty one or
+  null, leaves a new empty container, so the bag keeps working. A saved slot past the end of a
+  container that has become smaller is dropped, which is the rule of Inventorizz.
+- The link stores nothing. The game decides where a snapshot is written.
+
+### `ManagedInventoryHost.cs`
+
+**What it does:** The scene component that puts the player's bag on Inventorizz. Add it to the player
+next to `ManagedPlayerItemBag`, or assign that component. In `Start` it builds a
+`ManagedInventoryLink` from the items of the component's catalog and installs the link's bag with
+`UseBag`. `IsLinked` and `Link` say what it did.
+
+**Decisions:**
+- The bag keeps the slot count of the component, 20 by default.
+- The catalog has to be an `IManagedItemList`. Both catalogs of the game are. Another one leaves the
+  plain bag in place and logs `[GTG Inventory]` with the reason.
+- It listens to `CatalogReplaced`, and a new catalog gives a new link over the new items. Whatever
+  the old container held is gone, the same as the plain bag it replaced.
+- With no `ManagedPlayerItemBag` it logs a warning and does nothing.
+- `OnDestroy` stops listening and drops the link. The bag stays installed, and a later
+  `UseCatalog` puts the plain bag back.
+- Anything the plain bag held when `Start` ran is dropped. `ManagedItemSamples.StockPlayerBag` calls
+  `UseCatalog` first, so while a host runs the dev stock goes into the Inventorizz bag.
+- Nothing is saved yet. `Link.Capture()` and `Link.Restore()` are the calls a save system uses.
+- Placeholders: the 20 slots, and no weight.
 
 ### `ManagedChemistryTypes.cs`
 
@@ -2002,14 +2125,17 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   The project has no assembly definitions, so one compile error in any Managed file stops
   every system in Unity, and nothing else in CI catches it. The `managed-compile` job builds
   `building-test/BuildingTest.csproj` and runs it. The project compiles every file under
-  `Managed/` except `NPC/`, `Crown/`, `Favor/`, `Chemistry/` and `Quests/` (the first three need the NPC
+  `Managed/` except `NPC/`, `Crown/`, `Favor/`, `Chemistry/`, `Quests/` and `Inventory/` (the first three need the NPC
   native bindings and are compiled by the `managed-npc-fallback` job below, `Chemistry/` needs
-  the Alembic package, and `Quests/` needs Questly and is compiled by `managed-packages-ci.yml`), plus `Data/ItemDatabase.cs` and the two plain arithmetic files of `Crown/`,
+  the Alembic package, and `Quests/` and `Inventory/` need Questly and Inventorizz and are compiled by `managed-packages-ci.yml`), plus `Data/ItemDatabase.cs` and the two plain arithmetic files of `Crown/`,
   `ManagedCrownTypes.cs` and `ManagedCrownHeatMap.cs`, at C# 9 with .NET 8, against hand written
   stand-ins for `UnityEngine`, uGUI, TextMeshPro and the Input System in `building-test/`. Then
-  it runs the checks in that folder: 803 at the time of writing, covering building, the camera
+  it runs the checks in that folder: 803 before the item checks were added and not counted again
+  since, covering building, the camera
   rig's cursor hook, the cursor block, the HUD and the bottom group, the Crown heat map, the heat
-  and mission sources, the mission tracker and board, and how the feed and the HUD read them. It
+  and mission sources, the mission tracker and board, how the feed and the HUD read them, and the
+  item seams (`TestsItems.cs`: the slot reader of the plain bag, the item lists of the two
+  catalogs, the player bag taking another bag, and the HUD reading it). It
   runs on a push or pull request that touches `Managed/`, `Data/`, `building-test/`,
   `rust/npc/managed-npc-test/` or the workflow, and by hand. The folder is named for the first
   system it covered and now covers the whole core stack.
@@ -2037,24 +2163,30 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
     `UguiStubs.cs`, `UiStubs.cs` and `PackageStubs.cs`. `RigStubs.cs` is a comment only and the
     project skips it. It stays because the replacements Action replaces files and cannot delete one.
   - No job covers `Managed/Chemistry/`, which needs Alembic.
-- `.github/workflows/managed-packages-ci.yml` - the compile gate for `Managed/Quests/`. The
-  `quests-bridge` job runs `packages-test/fetch_packages.py`, which reads the pins of Questly and
-  mdix from `Packages/manifest.json` and downloads, sparse and at depth 1, the `Runtime` folder of
-  Questly and the managed `MidManStudio.Mdix.Core.dll` (not the native libraries) into
-  `packages-test/fetched/`. Then it builds `packages-test/PackagesTest.csproj` at C# 9 with .NET 8:
-  the Questly sources as shipped, the `Missions/`, `Flags/` and `Quests/` folders, and hand written
-  stand-ins for `UnityEngine` and for the asset class of mdix. Then it runs the checks, 181 at
-  the time of writing, covering the text table, the flag source, the mission source (which quest is
-  shown, every kind of line, change detection, the cost of a refresh that finds nothing) and the
-  host (loading, registering, the update, attach and restore, the failed loads). It runs on a push or
-  pull request that touches `Quests/`, `Missions/`, `Flags/`, `packages-test/`, the manifest or the
-  workflow, and by hand. It needs the network for the fetch (github.com, public repositories, no token).
+- `.github/workflows/managed-packages-ci.yml` - the compile gate for `Managed/Quests/` and
+  `Managed/Inventory/`. The `quests-bridge` job runs `packages-test/fetch_packages.py`, which reads
+  the pins of Questly, Inventorizz and mdix from `Packages/manifest.json` and downloads, sparse and at
+  depth 1, the `Runtime` folder of Questly and of Inventorizz and the managed
+  `MidManStudio.Mdix.Core.dll` (not the native libraries) into `packages-test/fetched/`. Then it builds
+  `packages-test/PackagesTest.csproj` at C# 9 with .NET 8: the Questly sources as shipped, the `Core/`
+  and `Generated/` folders of Inventorizz as shipped (its `UnityBinding/` folder needs the drag and
+  drop package and is left out), the `Missions/`, `Flags/`, `Quests/`, `Items/` and `Inventory/`
+  folders, `Data/ItemDatabase.cs`, and hand written stand-ins for `UnityEngine` and for the asset class
+  of mdix. Then it runs the checks, 181 before the Inventory checks were added and not counted again
+  since, covering the text table, the flag source, the mission source (which quest is
+  shown, every kind of line, change detection, the cost of a refresh that finds nothing), the
+  quest host (loading, registering, the update, attach and restore, the failed loads), the Inventory
+  catalog and bag, the same answers from the Inventorizz bag and the plain bag for one run of adds and
+  removes, the link and its save and restore, and the Inventory host (installing, replacing, a catalog
+  that cannot list its items, no component). It runs on a push or
+  pull request that touches `Quests/`, `Missions/`, `Flags/`, `Inventory/`, `Items/`, `packages-test/`,
+  the manifest or the workflow, and by hand. It needs the network for the fetch (github.com, public repositories, no token).
   - A red fetch step means a pin is missing from the manifest, is not
     `https://github.com/ORG/REPO.git?path=DIR#<40 hex>`, or names a commit or path that does not exist.
-  - A red compile step means a `Quests/` file would break the Unity compile, or Questly changed under
-    the commit of the pin. The first error says which.
-  - It proves that the bridge compiles at C# 9 against the real Questly sources and passes its
-    checks on the real `QuestRuntime` and `BakedQuestTable`. It does not load the native mdix library,
+  - A red compile step means a `Quests/` or `Inventory/` file would break the Unity compile, or one of
+    the packages changed under the commit of its pin. The first error says which.
+  - It proves that the bridges compile at C# 9 against the real Questly and Inventorizz sources and
+    pass their checks on the real `QuestRuntime`, `BakedQuestTable` and `InventorizzRuntime`. It does not load the native mdix library,
     parse a `.mdix` file, or run Unity. The mdix asset is a stand-in that returns an error or throws,
     and the lifecycle methods of the host are called by reflection in the order Unity uses.
   - `packages-test/fetched/` and the build output exist only in the runner. Nothing there is
@@ -2489,10 +2621,10 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   and Su named only the mdix package as the cause of the errors on the first open. If an
   unresolved dependency still shows up, the fix is to take the new manifest lines out again. A
   package that fails to resolve blocks every system.
-- `Chemistry/` uses Alembic and `Quests/` uses Questly and mdix. `managed-csharp-ci.yml` does not touch
-  the manifest and compiles neither folder. `managed-packages-ci.yml` fetches the two pins and compiles
-  `Quests/`, so a pin that does not exist fails there, but it says nothing about package resolution
-  in Unity.
+- `Chemistry/` uses Alembic, `Quests/` uses Questly and mdix, and `Inventory/` uses Inventorizz and mdix.
+  `managed-csharp-ci.yml` does not touch the manifest and compiles none of the three folders.
+  `managed-packages-ci.yml` fetches the pins and compiles `Quests/` and `Inventory/`, so a pin that does
+  not exist fails there, but it says nothing about package resolution in Unity.
 - To move a package on, change the commit after `#` in the manifest. The Package Manager needs
   git installed on the machine that opens the project.
 - Earlier entries above (Vessels, Currency and cheats, Shop) say the packages are not in the
@@ -2697,3 +2829,43 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
 - Now. mdix sets the DLL to auto-referenced (`isExplicitlyReferenced: 0`, one line in its `.meta` and in the template that `build-upm.yml` writes). questly keeps the list that `QuestlySchema.Validate(db)` returns and prints it. No GTG code changed. Pins: `com.midmanstudio.mdix` at `9aa652a`, `com.midmanstudio.questly` at `b96cf58`, nuclear at `756eefe`, and alembic, dragndrop, gensettings, hudman and inventorizz still at `37eec98`.
 - Checked. Both pinned commits were read: the mdix one has the DLL at `isExplicitlyReferenced: 0` and the questly one has the new window. The window's changes were compared with the old file and the type members were checked against the real `MidManStudio.Mdix.Core` source. `Packages/manifest.json` parses. `Packages/packages-lock.json` updates by itself when Unity resolves the new pins.
 - Not verified. Not compiled in Unity, and `packages-test/` was not run for this change. The editor window has no automated check, so its Validate tab is untested.
+
+### Inventorizz bridge (`Inventory/`, `Items/`, `Hud/`, `Shop/`, `packages-test/`, `building-test/`)
+
+- Asked for: the Inventorizz bridge, with the answers Su gave to a batched question: the bridge plus
+  the switch of the HUD and the shop test panel to it, items generated from the `ItemDatabase`, and a bag
+  of 20 slots with no weight.
+- Now: `Managed/Inventory/` with `ManagedInventoryCatalog.cs`, `ManagedInventoryBag.cs`,
+  `ManagedInventoryLink.cs` and `ManagedInventoryHost.cs`. Two new interfaces in `Items/`:
+  `IManagedItemSlots` (an `IManagedItemHolder` with `SlotCount`, `UsedSlots` and `TryGetSlot`) and
+  `IManagedItemList` (every item of a catalog). `ManagedItemBag` implements the first and both catalogs
+  implement the second. `ManagedPlayerItemBag` gained `UseBag` and `CatalogReplaced`. The HUD and the
+  shop dev session now hold an `IManagedItemSlots` instead of the `ManagedItemBag` class.
+  `packages-test/` fetches and compiles Inventorizz and has `TestsInventory.cs`. `building-test/` leaves
+  `Inventory/` out and has `TestsItems.cs`.
+- Why a folder of its own: `Inventory/` reads the Inventorizz types, which `building-test/` does not
+  have, the same reason as `Quests/`.
+- Found on the way, in Inventorizz: `TryAddItem` is best effort and returns true when only part fitted,
+  `TryRemoveItem` takes from the first slot, and a container of a fixed slot count is pre-sized with
+  empty slots. The bag and the shop need all or none and the last slot first, so the adapter counts the
+  room itself and removes by slot, see `ManagedInventoryBag.cs`.
+- Checked by reading: every Inventorizz member the bridge calls was read in the pinned sources
+  (`37eec98`), and the mdix DLL of the pinned commit (`9aa652a`) was read with a .NET metadata reader
+  for every member that Inventorizz uses. The expected layout after each step of the parity run was
+  worked out by hand and is asserted against the plain bag, so a wrong expectation fails on the plain bag
+  and a difference between the bags fails on the Inventorizz bag.
+- Not verified: nothing of this was compiled or run. The sandbox has no .NET SDK, so the new C# was
+  parsed with a C# grammar only, and `building-test/` and `packages-test/` have not run on the new
+  files. The workflow has not run on GitHub. Unity has not opened the change. The host in a real scene
+  (execution order of `Start`, the Inspector field) is untested.
+- Known limits. Nothing is saved. The bag has 20 slots and no weight. The host drops whatever the plain
+  bag held when it starts, and it needs a catalog that lists its items. The window of Inventorizz
+  (`UnityBinding/`) is not used, because it needs the drag and drop package.
+- Defaults chosen without asking: the item key is `item_<id>`, the container id is `player_bag`, the
+  owner is `player`, and a saved slot of an unknown item stays in the container and is hidden from the
+  bag.
+- Edits to existing files: `ManagedItemBag.cs`, `ManagedItemCatalog.cs`, `ManagedItemDatabaseCatalog.cs`,
+  `ManagedPlayerItemBag.cs`, `ManagedShopDevSession.cs`, `ManagedHud.cs`,
+  `building-test/BuildingTest.csproj`, `building-test/Tests.cs`, `packages-test/PackagesTest.csproj`,
+  `packages-test/fetch_packages.py`, `packages-test/Tests.cs`, `packages-test/UnityStandIns.cs`,
+  `managed-packages-ci.yml`, `managed.md` and `GTG_REPO_CONVENTIONS.md` (section 6).

@@ -1,4 +1,4 @@
-// Stand-ins for the UnityEngine and mdix Unity types the Quests bridge uses. Verification harness only.
+// Stand-ins for the UnityEngine and mdix Unity types the Quests bridge and the Inventory bridge use. Verification harness only.
 using System;
 using System.Collections.Generic;
 using MidManStudio.Mdix.Core;
@@ -10,7 +10,25 @@ namespace UnityEngine
         public string name = "stand-in";
     }
 
-    public class Component : Object { }
+    public class Component : Object
+    {
+        // Real Unity finds the other components of the same GameObject. The checks list them here by hand.
+        public readonly List<Component> Siblings = new List<Component>();
+
+        public T GetComponent<T>() where T : class
+        {
+            for (int i = 0; i < Siblings.Count; i++)
+            {
+                T found = Siblings[i] as T;
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+    }
 
     public class Behaviour : Component { }
 
@@ -32,6 +50,15 @@ namespace UnityEngine
     {
         public string text;
         public TextAsset(string text) { this.text = text; }
+    }
+
+    // The checks never place an asset in a Resources folder, so every load finds nothing.
+    public static class Resources
+    {
+        public static T Load<T>(string path) where T : Object
+        {
+            return null;
+        }
     }
 
     public static class Debug
@@ -73,6 +100,13 @@ namespace UnityEngine
 
 namespace MidManStudio.Mdix.Unity
 {
+    /// <summary>Stand-in for the attribute that marks a ScriptableObject the mdix package can bake. Gtg/Data/ItemDatabase.cs carries it.</summary>
+    [AttributeUsage(AttributeTargets.Class)]
+    public sealed class MdixBakeableAttribute : Attribute
+    {
+        public MdixBakeableAttribute(string source, string title) { }
+    }
+
     /// <summary>
     /// Stand-in for the asset of the mdix package, which needs the whole Unity binder. The real class returns
     /// Dix.LoadStr(source), and this one answers as a test tells it to.

@@ -133,8 +133,8 @@ namespace MidManStudio.Gtg.Managed.Hud
         /// <summary>The player's bag component, or null until the player is found.</summary>
         public ManagedPlayerItemBag PlayerBag { get { return _feed != null ? _feed.PlayerBag : null; } }
 
-        /// <summary>The player's bag, or null.</summary>
-        public ManagedItemBag Bag
+        /// <summary>The player's bag, or null. It is the plain bag unless something installed another one.</summary>
+        public IManagedItemSlots Bag
         {
             get
             {
@@ -243,7 +243,7 @@ namespace MidManStudio.Gtg.Managed.Hud
         public bool UseQuickSlot(int slot)
         {
             ManagedQuickSlots quick = QuickSlots;
-            ManagedItemBag bag = Bag;
+            IManagedItemSlots bag = Bag;
             return quick != null && bag != null && quick.TryUse(slot, bag);
         }
 
@@ -648,7 +648,7 @@ namespace MidManStudio.Gtg.Managed.Hud
         private void RefreshSlots()
         {
             ManagedQuickSlots quick = _boundQuick;
-            ManagedItemBag bag = Bag;
+            IManagedItemSlots bag = Bag;
             float now = Time.unscaledTime;
 
             for (int i = 0; i < _slots.Length; i++)

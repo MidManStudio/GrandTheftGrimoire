@@ -51,7 +51,7 @@ namespace MidManStudio.Gtg.Managed.Shop
 
         public IManagedItemCatalog Catalog { get; private set; }
 
-        public ManagedItemBag Bag { get; private set; }
+        public IManagedItemSlots Bag { get; private set; }
 
         public ManagedWorldFlags Flags { get; private set; }
 

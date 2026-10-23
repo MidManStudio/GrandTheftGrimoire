@@ -272,6 +272,6 @@ Rules:
   namespaces, never inside a package.
 - A Managed folder that reads a package is a folder of its own, because `building-test/` compiles
   `Managed/**` without any package and leaves such a folder out. `packages-test/` compiles it instead:
-  its script downloads the package sources at the commits pinned in the manifest. `Quests/` is the
-  first, and `Chemistry/` is still compiled by no job.
+  its script downloads the package sources at the commits pinned in the manifest. `Quests/` and
+  `Inventory/` are such folders, and `Chemistry/` is still compiled by no job.
 - The machine that opens the project needs git installed.

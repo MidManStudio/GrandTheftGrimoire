@@ -113,6 +113,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             PanelTests();
             UiHostTests();
             ModeTests();
+            ItemTests();
             HudTests();
             FeederTests();
             Console.WriteLine(_checks + " checks, " + _failures + " failed");

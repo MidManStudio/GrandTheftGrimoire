@@ -3,6 +3,7 @@
 // live in docs/GrandTheftGrimoire/managed.md, section "ManagedPlayerItemBag.cs"
 // ============================================================================
 
+using System;
 using MidManStudio.Gtg.Data;
 using UnityEngine;
 
@@ -13,6 +14,7 @@ namespace MidManStudio.Gtg.Managed.Items
     /// way <c>ManagedPlayerWallet</c> does for the purse. The item table comes from the assigned
     /// <see cref="ItemDatabase"/>, or from a database asset named <c>ItemDatabase</c> in a
     /// Resources folder. With neither, the catalog is empty and the bag refuses every item.
+    /// The bag is the plain <see cref="ManagedItemBag"/> until <see cref="UseBag"/> installs another.
     /// Nothing is saved.
     /// </summary>
     [DisallowMultipleComponent]
@@ -31,11 +33,17 @@ namespace MidManStudio.Gtg.Managed.Items
         [SerializeField] private int _quickSlots = ManagedQuickSlots.DefaultSlotCount;
 
         private IManagedItemCatalog _catalog;
-        private ManagedItemBag _bag;
+        private IManagedItemSlots _bag;
         private ManagedQuickSlots _quick;
 
+        /// <summary>
+        /// Raised after <see cref="UseCatalog"/> has replaced the catalog, the bag and the quick row. A catalog
+        /// change puts the plain bag back, so a system that installed its own bag installs it again here.
+        /// </summary>
+        public event Action CatalogReplaced;
+
         /// <summary>The player's bag.</summary>
-        public ManagedItemBag Bag
+        public IManagedItemSlots Bag
         {
             get
             {
@@ -76,6 +84,27 @@ namespace MidManStudio.Gtg.Managed.Items
         public void UseCatalog(IManagedItemCatalog catalog)
         {
             Build(catalog ?? new ManagedItemCatalog());
+            Action replaced = CatalogReplaced;
+            if (replaced != null)
+            {
+                replaced();
+            }
+        }
+
+        /// <summary>
+        /// Uses this bag in place of the plain one, for a bag that an inventory package stands behind. The
+        /// quick row stays as it is, because it holds item ids and reads the amounts from whatever bag is in
+        /// use. Anything the plain bag held is dropped. A later <see cref="UseCatalog"/> puts a plain bag back.
+        /// </summary>
+        public void UseBag(IManagedItemSlots bag)
+        {
+            if (bag == null)
+            {
+                throw new ArgumentNullException("bag");
+            }
+
+            Ensure();
+            _bag = bag;
         }
 
         private void Ensure()
