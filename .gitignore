@@ -27,3 +27,7 @@ rust_lib/**/target/
 .DS_Store
 **/.DS_Store
 *.swp
+
+# MDIX encryption keys: never commit (added by MDIX Studio)
+*.mdix.key
+*.mdix.key.meta

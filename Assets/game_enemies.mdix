@@ -1,33 +1,34 @@
-<color=#C586C0>@CONFIG</color>(
-  <color=#9CDCFE>version</color> <color=#8AB4F8>-></color> <color=#CE9178>"1.0.0"</color>
+@CONFIG(
+  version -> "1.0.0"
 )
 
-<color=#C586C0>@ENUMS</color>(
-  <color=#9CDCFE>AIType</color> { <color=#9CDCFE>PASSIVE</color>, <color=#9CDCFE>NEUTRAL</color>, <color=#9CDCFE>AGGRESSIVE</color>, <color=#9CDCFE>BOSS</color> }
-  <color=#9CDCFE>Rarity</color> { <color=#9CDCFE>COMMON</color>, <color=#9CDCFE>UNCOMMON</color>, <color=#9CDCFE>RARE</color>, <color=#9CDCFE>LEGENDARY</color> }
+@ENUMS(
+  AIType { PASSIVE, NEUTRAL, AGGRESSIVE, BOSS }
+  Rarity { COMMON, UNCOMMON, RARE, LEGENDARY }
 )
 
-<color=#C586C0>@QUICKFUNCS</color>(
-  <color=#8AB4F8>~</color><color=#DCDCAA>createEnemy</color><noparse><</noparse><color=#4EC9B0>object</color>>(<color=#9CDCFE>name</color>, <color=#9CDCFE>health</color>, <color=#9CDCFE>damage</color>, <color=#9CDCFE>ai</color><noparse><</noparse><color=#4EC9B0>enum</color>>, <color=#9CDCFE>rarity</color><noparse><</noparse><color=#4EC9B0>enum</color>>) {
-    <color=#C586C0>return</color> {
-      <color=#9CDCFE>name</color>      = <color=#9CDCFE>name</color>
-      <color=#9CDCFE>health</color>    = <color=#9CDCFE>health</color>
-      <color=#9CDCFE>damage</color>    = <color=#9CDCFE>damage</color>
-      <color=#9CDCFE>armor</color>     = <color=#9CDCFE>health</color> / <color=#B5CEA8>10</color>
-      <color=#9CDCFE>xp</color>        = <color=#9CDCFE>health</color> / <color=#B5CEA8>2</color>
-      <color=#9CDCFE>ai_type</color>   = <color=#9CDCFE>ai</color>
-      <color=#9CDCFE>rarity</color>    = <color=#9CDCFE>rarity</color>
-      <color=#9CDCFE>spawn_rate</color> = <color=#9CDCFE>ai</color> == <color=#4EC9B0>AIType</color>.<color=#4FC1FF>BOSS</color> ? <color=#B5CEA8>0.01f</color> : <color=#B5CEA8>0.3f</color>
+@QUICKFUNCS(
+  ~createEnemy<object>(name, health, damage, ai<enum>, rarity<enum>) {
+    return {
+      name      = name
+      health    = health
+      damage    = damage
+      armor     = health / 10
+      xp        = health / 2
+      ai_type   = ai
+      rarity    = rarity
+      spawn_rate = ai == AIType.BOSS ? 0.01f : 0.3f
     }
   }
 )
 
-<color=#C586C0>@DATA</color>(
-  <color=#9CDCFE>spawn_cap</color>   = <color=#B5CEA8>12</color>
-  <color=#9CDCFE>respawn_delay</color> = <color=#B5CEA8>5000</color>
-  <color=#9CDCFE>enemies</color><color=#8AB4F8>::</color>
-    <color=#DCDCAA>createEnemy</color>(<color=#CE9178>"Goblin"</color>,  <color=#B5CEA8>50</color>,   <color=#B5CEA8>10</color>,  <color=#4EC9B0>AIType</color>.<color=#4FC1FF>AGGRESSIVE</color>, <color=#4EC9B0>Rarity</color>.<color=#4FC1FF>COMMON</color>),
-    <color=#DCDCAA>createEnemy</color>(<color=#CE9178>"Orc"</color>,     <color=#B5CEA8>100</color>,  <color=#B5CEA8>20</color>,  <color=#4EC9B0>AIType</color>.<color=#4FC1FF>AGGRESSIVE</color>, <color=#4EC9B0>Rarity</color>.<color=#4FC1FF>UNCOMMON</color>),
-    <color=#DCDCAA>createEnemy</color>(<color=#CE9178>"Troll"</color>,   <color=#B5CEA8>250</color>,  <color=#B5CEA8>45</color>,  <color=#4EC9B0>AIType</color>.<color=#4FC1FF>AGGRESSIVE</color>, <color=#4EC9B0>Rarity</color>.<color=#4FC1FF>RARE</color>),
-    <color=#DCDCAA>createEnemy</color>(<color=#CE9178>"Dragon"</color>,  <color=#B5CEA8>1000</color>, <color=#B5CEA8>150</color>, <color=#4EC9B0>AIType</color>.<color=#4FC1FF>BOSS</color>,       <color=#4EC9B0>Rarity</color>.<color=#4FC1FF>LEGENDARY</color>)
+@DATA(
+  spawn_cap   = 12
+  respawn_delay = 5000
+
+  enemies::
+    createEnemy("Goblin",  50,   10,  AIType.AGGRESSIVE, Rarity.COMMON),
+    createEnemy("Orc",     100,  20,  AIType.AGGRESSIVE, Rarity.UNCOMMON),
+    createEnemy("Troll",   250,  45,  AIType.AGGRESSIVE, Rarity.RARE),
+    createEnemy("Dragon",  1000, 150, AIType.BOSS,       Rarity.LEGENDARY)
 )

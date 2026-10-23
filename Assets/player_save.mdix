@@ -1,0 +1,22 @@
+@CONFIG(
+  version -> "1.0.0"
+)
+
+@ENUMS(
+  GameDifficulty { EASY, NORMAL, HARD, NIGHTMARE }
+)
+
+@DATA(
+  player_name<string>    = "Player"
+  level<int>             = 1
+  experience<int>        = 0
+  health<int>            = 100
+  max_health<int>        = 100
+  currency<int>          = 0
+  difficulty<enum>       = GameDifficulty.NORMAL
+  play_time_seconds<int> = 0
+  last_saved             = 2025-01-01
+
+  position: x = 0.0, y = 0.0, z = 0.0
+  flags: tutorial_complete = false, intro_seen = false
+)
