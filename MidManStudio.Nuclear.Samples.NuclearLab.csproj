@@ -60,12 +60,19 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Tools/Unity.SourceGenerators/Unity.Properties.SourceGenerator.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabBlast.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabTab.cs" />
+    <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabStage.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabDraw.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclideReport.cs" />
+    <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/FissionShow.cs" />
+    <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabShape.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclideTab.cs" />
+    <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/FissionShowPlan.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabQueue.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/DecayLab.cs" />
+    <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/FissionFrame.cs" />
+    <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabRandom.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/NuclearLabStyles.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/FissionLab.cs" />
     <Compile Include="Assets/Samples/Nuclear - Event-Level Nuclear Physics/0.1.0/Nuclear Lab/DecayTab.cs" />
@@ -454,6 +461,10 @@
     </Reference>
     <Reference Include="log4netPlastic">
       <HintPath>Library/PackageCache/com.unity.collab-proxy@2.2.0/Lib/Editor/PlasticSCM/log4netPlastic.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MidManStudio.Mdix.Core">
+      <HintPath>Library/PackageCache/com.midmanstudio.mdix@9aa652aa9b/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.IonicZip">

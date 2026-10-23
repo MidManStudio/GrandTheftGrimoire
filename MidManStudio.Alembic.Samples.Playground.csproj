@@ -444,6 +444,10 @@
       <HintPath>Library/PackageCache/com.unity.collab-proxy@2.2.0/Lib/Editor/PlasticSCM/log4netPlastic.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MidManStudio.Mdix.Core">
+      <HintPath>Library/PackageCache/com.midmanstudio.mdix@9aa652aa9b/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.VisualScripting.IonicZip">
       <HintPath>Library/PackageCache/com.unity.visualscripting@1.9.1/Editor/VisualScripting.Core/Dependencies/DotNetZip/Unity.VisualScripting.IonicZip.dll</HintPath>
       <Private>False</Private>

@@ -48,11 +48,11 @@
       "hash": "37eec982fd91e50225a1a80bd70bb3c702697841"
     },
     "com.midmanstudio.mdix": {
-      "version": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#d658d0d1be9f73b450222c3dfc3a660b04a0ed9c",
+      "version": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#9aa652aa9bd0487aad2182cd43e37c8ce6859cad",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "d658d0d1be9f73b450222c3dfc3a660b04a0ed9c"
+      "hash": "9aa652aa9bd0487aad2182cd43e37c8ce6859cad"
     },
     "com.midmanstudio.nuclear": {
       "version": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.nuclear#756eefe3347b72e3f1afc6d01d3039e7bcb10bda",
@@ -62,13 +62,13 @@
       "hash": "756eefe3347b72e3f1afc6d01d3039e7bcb10bda"
     },
     "com.midmanstudio.questly": {
-      "version": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.questly#37eec982fd91e50225a1a80bd70bb3c702697841",
+      "version": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.questly#b96cf58e88d2186e8a119170fb063b6330f23d98",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "com.midmanstudio.mdix": "1.0.0"
       },
-      "hash": "37eec982fd91e50225a1a80bd70bb3c702697841"
+      "hash": "b96cf58e88d2186e8a119170fb063b6330f23d98"
     },
     "com.unity.2d.sprite": {
       "version": "1.0.0",
