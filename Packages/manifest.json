@@ -2,7 +2,7 @@
   "dependencies": {
     "com.unity.cinemachine": "2.9.7",
 
-    "com.midmanstudio.mdix": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#9aa652aa9bd0487aad2182cd43e37c8ce6859cad",
+    "com.midmanstudio.mdix": "https://github.com/Mid-D-Man/DixScript-Rust.git?path=com.midmanstudio.mdix#508de49ab04cce9bf22484ea03dd8a5ef606d8fa",
     "com.midmanstudio.alembic": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.alembic#37eec982fd91e50225a1a80bd70bb3c702697841",
   "com.midmanstudio.nuclear": "https://github.com/MidManStudio/unity-chem-sim.git?path=packages/com.midmanstudio.nuclear#756eefe3347b72e3f1afc6d01d3039e7bcb10bda",
 
@@ -69,4 +69,4 @@
     "com.unity.physics": "1.3.10"
 
   }
-}
+  }
