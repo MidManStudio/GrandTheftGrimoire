@@ -98,6 +98,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudMath.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/ManagedChemistryTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Native/NPCNativeLib.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/IManagedItemList.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellPayload.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Presentation/FireballPresentationSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Native/NPCNativeTypes.cs" />
@@ -120,12 +121,14 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildGrid.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheat.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemDrag.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Inventory/ManagedInventoryCatalog.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemInfo.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildStock.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Flags/IManagedFlagSource.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDefinition.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudFeed.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellFlight.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/IManagedItemSlots.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Favor/ManagedFavorMath.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Quests/ManagedQuestHost.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselCharging.cs" />
@@ -166,11 +169,13 @@
     <Compile Include="Assets/MidManStudio/Gtg/Data/EnemyDatabase.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcShots.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcShooter.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Inventory/ManagedInventoryLink.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcThreatSource.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheatManager.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Rendering/ManagedIcosphere.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedUnityBuildProbe.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Inventory/ManagedInventoryBag.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildMode.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBoxMesh.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />
@@ -198,6 +203,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/ChemistryRecipe.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Missions/ManagedMissionBoard.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellCaster.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Inventory/ManagedInventoryHost.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Presentation/SpellVfxMaterials.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemCatalog.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedColliders.cs" />
@@ -553,7 +559,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="MidManStudio.Mdix.Core">
-      <HintPath>Library/PackageCache/com.midmanstudio.mdix@9aa652aa9b/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
+      <HintPath>Library/PackageCache/com.midmanstudio.mdix@508de49ab0/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.Antlr3.Runtime">
