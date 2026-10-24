@@ -28,8 +28,9 @@ Files are in `Assets/MidManStudio/Gtg/Camera/Presentation/`.
 
 ### `CharacterCameraBridge.cs`
 
-A `MonoBehaviour` that runs in `LateUpdate` at execution order 100, before the
-Cinemachine Brain at 200. Each frame it reads the character's `LocalTransform`,
+A `MonoBehaviour` that runs in `LateUpdate` at execution order 100, the same order
+as the Cinemachine Brain (100 in the 2.9.7 package, so the two run in no fixed
+order; the Managed rig is at 50 for that reason). Each frame it reads the character's `LocalTransform`,
 `CharacterLook` and `CharacterMotor` from the default world and does three
 things.
 
@@ -70,7 +71,10 @@ Entered in the Editor.
   from the target, which the bridge rotates with yaw and pitch.
 - First person camera: a Virtual Camera with Follow set to the camera target,
   Body set to Hard Lock To Target, and Aim set to Same As Follow Target.
-- The Brain on the main camera gets a default blend of Ease In Out, 0.25 s.
+- The Brain on the main camera gets a default blend of Ease In Out, 0.25 s, and Update Method
+  Late Update, because every target moves in `Update` or `LateUpdate`.
+- Do not use POV or Orbital Transposer as the Aim of either camera. They turn the view from their
+  own input and ignore the Follow target.
 
 ## Known gaps
 

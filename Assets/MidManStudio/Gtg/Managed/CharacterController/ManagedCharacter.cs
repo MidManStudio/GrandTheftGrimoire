@@ -84,6 +84,25 @@ namespace MidManStudio.Gtg.Managed.CharacterController
             return (_features & feature) != 0;
         }
 
+        /// <summary>
+        /// World position of the bottom of the capsule. It does not depend on where the pivot sits,
+        /// at the feet or at the middle, and it is the pivot itself when there is no controller.
+        /// </summary>
+        public Vector3 FeetPosition
+        {
+            get
+            {
+                UnityEngine.CharacterController capsule =
+                    _controller != null ? _controller : GetComponent<UnityEngine.CharacterController>();
+                if (capsule == null)
+                {
+                    return transform.position;
+                }
+
+                return transform.TransformPoint(capsule.center + Vector3.down * (capsule.height * 0.5f));
+            }
+        }
+
         // Shapes the capsule to a 2 m tall character with the pivot at the feet.
         private void Reset()
         {

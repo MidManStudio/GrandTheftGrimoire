@@ -93,8 +93,13 @@ missing script. Delete it, or switch the define back.
 2. Create a second empty GameObject. Add `ManagedCameraRig` and
    `ManagedChemicalHazardField`.
 3. Press Play. With no camera assigned, the rig drives the main camera. A Cinemachine
-   setup assigns its two camera objects on the rig and points the Follow target at
-   the rig's `GTG Camera Target`.
+   setup assigns its two camera objects on the rig. When play starts the rig sets Follow of
+   both to its camera target, which carries the yaw and the pitch: the object assigned as
+   Camera Target, or the `GTG Camera Target` it creates when none is. The third person camera
+   needs Body 3rd Person Follow and Aim Same As Follow Target (or Do Nothing). The first person camera needs
+   Body Hard Lock To Target and Aim Same As Follow Target. POV and Orbital Transposer turn the view
+   from their own input, so the camera stops matching the character, and the rig warns about
+   them. On the Brain set Update Method to Late Update and the default blend to 0.25 s.
 4. Delete the old SubScene, `CharacterAuthoring` and `CharacterCameraBridge` objects.
 
 Controls: move with WASD or the arrow keys, look with the mouse, the right stick or
@@ -311,6 +316,10 @@ frame it reads the input and runs look, walk, jump and gravity, then calls `Move
 - `MoveSpeedScale` multiplies the walking speed and is 1 by default. Whatever wants to
   change how fast the character walks sets it, a cheat today and an effect later, and
   nothing else in the character changes. A negative value counts as 0.
+- `FeetPosition` is the bottom of the capsule in world space, from the controller's center and
+  height. It is the same for a pivot at the feet and for a pivot at the middle, which a capsule
+  primitive has, and it is the pivot itself when there is no controller. The rig measures the eye
+  from it.
 
 ### `ManagedSpellTypes.cs`
 
@@ -731,7 +740,22 @@ and draws the debug overlay with the module toggles and the selected spell.
 - With no camera objects assigned, the rig drives the main camera itself, and in
   third person it pulls the camera in front of walls with a linecast. This keeps the
   first test free of Cinemachine wiring.
-- Execution order is 100 and the work is in `LateUpdate`, after the character.
+- Execution order is 50 and the work is in `LateUpdate`, after the character, which is at -50
+  and works in `Update`. The Cinemachine Brain is at 100 (the `executionOrder` in the `.meta` of
+  `CinemachineBrain.cs`, read in the 2.9.7 package). Two scripts with the same order run in no
+  fixed order, and the rig was at 100 too, so on some frames the Brain read the target before
+  the rig had moved it: the camera was a frame behind the character, and under Smart Update the
+  Brain could class the target as moved in `FixedUpdate` and update the camera at the physics rate.
+  At 50 the rig always runs first.
+- The eye is `FeetPosition` plus `Eye Height` (1.6 by default), so the same value is right for a
+  pivot at the feet and for a pivot at the middle of the capsule. It used to be the pivot plus
+  the eye height, which put the eye 0.6 m above the head of a capsule primitive.
+- `Wire Cameras` (on by default) sets Follow of the two assigned camera objects to the camera
+  target in `Start`, through `ManagedCameraWiring`. A camera that followed something else gets one
+  warning that names the old target. The reason: the camera gets its yaw and pitch from the Follow
+  target, and a camera that followed the character itself got the yaw only, so looking up and down
+  did not move it. A camera that cannot be wired, because nothing on it has a Follow property, gets
+  a warning too. Turn the field off to keep the Follow of the scene.
 - The overlay drops the ECS world, physics and command buffer lines, because there
   is no world.
 - The crosshair is a small white cross at the screen center. It marks the point that
@@ -747,6 +771,27 @@ and draws the debug overlay with the module toggles and the selected spell.
   panel, the shop panel, the HUD and build mode hold blocks. The rig knows nothing about them. The
   count is cleared at `SubsystemRegistration`, because static state survives a play
   session when domain reload is off.
+
+### `ManagedCameraWiring.cs`
+
+**What it does:** Two helpers for the rig. `PointFollow` sets the Follow target of a virtual
+camera and says what it was. `FindSelfRotating` lists the parts of a camera that turn the view
+from their own input.
+
+**Decisions:**
+- It uses reflection and does not reference Cinemachine, in line with the rule in `camera.md`
+  that the scripts compile with the installed version and later ones. `PointFollow` looks under
+  the camera object, inactive children included (the first person camera is switched off in third
+  person), for the first component with a public readable and writable `Transform` property named
+  `Follow`. In 2.9.7 that is `CinemachineVirtualCameraBase.Follow`, which is abstract and public
+  (read in the package source).
+- The property is written only when it differs from the target, so a scene that is set up right
+  causes no write and no message.
+- `FindSelfRotating` matches the type names `CinemachinePOV` and `CinemachineOrbitalTransposer`.
+  Both read their own input axes and set the camera rotation, so with either the camera does not
+  follow the character. Composer and Hard Look At need a LookAt target and do nothing without one,
+  so they are not listed.
+- Internal, because only the rig calls it. The harness compiles it with the rest of `Managed/`.
 
 ### `ManagedCursorBlock.cs`
 
@@ -2132,7 +2177,8 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   stand-ins for `UnityEngine`, uGUI, TextMeshPro and the Input System in `building-test/`. Then
   it runs the checks in that folder: 803 before the item checks were added and not counted again
   since, covering building, the camera
-  rig's cursor hook, the cursor block, the HUD and the bottom group, the Crown heat map, the heat
+  rig's cursor hook, the cursor block, the rig's eye point, execution order and camera wiring
+  (`TestsRig.cs`), the HUD and the bottom group, the Crown heat map, the heat
   and mission sources, the mission tracker and board, how the feed and the HUD read them, and the
   item seams (`TestsItems.cs`: the slot reader of the plain bag, the item lists of the two
   catalogs, the player bag taking another bag, and the HUD reading it). It
@@ -2629,6 +2675,15 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   git installed on the machine that opens the project.
 - Earlier entries above (Vessels, Currency and cheats, Shop) say the packages are not in the
   manifest. That was true when they were written and is no longer.
+- Moved on 2026-10-23: the mdix pin went `d3333a9`, `9aa652a`, `508de49`, `8f8c87d` and then `74ae773`, all set by
+  Su in the manifest. Read here: `508de49` against the `9aa652a` I had read before. It adds the encryption
+  support (`MdixKeys`, `MdixEncAsset`, the editor importers for `.mdix.enc` and `.mdix.key`, a build
+  guard and icons). Its `Core` DLL is byte-identical to the `9aa652a` one (sha256
+  `6469b7f7159318e11e48efabeda95cfd4aad188fcdd6cfa2aa7a5fe58f98ad21`), and every `Core` call that the new runtime C#
+  makes exists in it. `74ae773` against `508de49`: one file, `Editor/MdixEditorWindow.cs`, 31 lines of
+  scroll and layout settings for the code field. `8f8c87d` was not read. The lock file lagged
+  the manifest (it held `8f8c87d`) and is set to `74ae773` again. Not verified in Unity: that the package compiles, and
+  how the editor window looks.
 - Edits to existing files: `Packages/manifest.json`, `Packages/packages-lock.json`, `managed.md`
   and `GTG_REPO_CONVENTIONS.md` (new section 6).
 
@@ -2869,3 +2924,50 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   `building-test/BuildingTest.csproj`, `building-test/Tests.cs`, `packages-test/PackagesTest.csproj`,
   `packages-test/fetch_packages.py`, `packages-test/Tests.cs`, `packages-test/UnityStandIns.cs`,
   `managed-packages-ci.yml`, `managed.md` and `GTG_REPO_CONVENTIONS.md` (section 6).
+
+### Camera rotation (`Camera/`, `CharacterController/`, `Assets/SamlpleScene.unity`, `building-test/`)
+
+- Reported: rotating the player looked wrong, as if the view did not follow the player's rotation, and
+  the question whether it was the code or the scene. Nothing was run in Unity for the answer. The causes
+  below come from reading the scene file, the character, the rig and the Cinemachine 2.9.7 source, so
+  the first run is the check.
+- The code was mostly right. `ManagedCharacter` turns its root to the yaw, the rig moves a camera target
+  to the eye with the yaw and the pitch, and the pitch is only stored. The scene did not use that target.
+- Scene, found in `SamlpleScene.unity`:
+  - `Third_Person_Cam` and `First_Person_Cam` both had Follow set to the Player, not to `Cam_Target`. The player
+    has a yaw and no pitch, so the third person camera got the yaw of the view and never its pitch.
+    Looking up and down moved the aim of the spells but not the camera.
+  - `First_Person_Cam` was a copy of the third person camera with its Aim replaced by POV. POV turns the
+    camera from the legacy `Mouse X` and `Mouse Y` axes at its own speed and ignores the Follow target, so the
+    first person view and the character turned by different amounts and drifted apart. Its Body was 3rd
+    Person Follow at 2 m, so it was not a first person camera either.
+  - The Brain had Update Method Smart Update and a default blend of 2 s. `camera.md` prescribes 0.25 s.
+- Code:
+  - Execution order. The rig and the Cinemachine Brain were both at 100. See `ManagedCameraRig.cs`. The
+    rig is at 50 now. `camera.md` said the Brain was at 200, which is not so in 2.9.7.
+  - Eye height. The player is a capsule primitive with its pivot at the middle, and the rig added 1.6 to
+    the pivot, which puts the eye 0.6 m above the head once the cameras follow the target. `ManagedCharacter.FeetPosition`
+    is new and the eye is measured from it.
+  - Wiring. `ManagedCameraWiring.cs` is new and the rig points assigned cameras at its target when play starts, so
+    a scene cannot get this wrong again, and warns about POV and Orbital Transposer.
+- Scene change, made in the file and not in Unity: Follow of both cameras is `Cam_Target`; the first person camera has
+  Hard Lock To Target as Body and Same As Follow Target as Aim, the two blocks replaced with the same
+  serialized form that Unity wrote for the third person camera's Same As Follow Target; the Brain has Late
+  Update and a 0.25 s blend. The script guids are those of the 2.9.7 package. Unity may rewrite the
+  blocks when it saves the scene.
+- Checked by reading: the 2.9.7 sources and `.meta` files for the guids, the pipeline stage of each
+  component, the Follow property, the Brain order, and that 3rd Person Follow takes the orientation of the Follow target. The
+  checks in `TestsRig.cs` assert the feet position for both pivots, the eye point and its rotation, the order
+  below 100 and above -50, the wiring of an active and an inactive camera, the quiet case, the switched-off
+  case, the camera with no Follow property, and the two helpers.
+- Not verified: nothing was compiled or run. The sandbox has no .NET SDK, so the new C# was parsed with
+  a C# grammar only, `building-test/` has not run on it, and the scene has not been opened in Unity.
+- Known limits, not changed: the 3rd Person Follow body has `Camera Collision Filter` at Nothing, so the third person
+  camera passes through walls. The visible body is still the capsule on the Player, which looks the same from every side.
+  No model is turned toward the direction of movement, and there is no body facing code, so a model placed under the Player turns with the
+  view, at once. The rig collects the renderers to hide in first person once, so a renderer added to the player
+  later is not hidden unless the list is filled by hand. `CharacterCameraBridge` of the ECS stack is at 100 like the Brain
+  and was not touched.
+- Edits to existing files: `ManagedCameraRig.cs`, `ManagedCharacter.cs`, `SamlpleScene.unity`,
+  `Packages/packages-lock.json`, `building-test/UnityStubs.cs`, `building-test/Tests.cs`, `managed.md` and `camera.md`.
+  New: `ManagedCameraWiring.cs` and `building-test/TestsRig.cs`.

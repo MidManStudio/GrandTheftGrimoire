@@ -113,6 +113,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             PanelTests();
             UiHostTests();
             ModeTests();
+            RigTests();
             ItemTests();
             HudTests();
             FeederTests();

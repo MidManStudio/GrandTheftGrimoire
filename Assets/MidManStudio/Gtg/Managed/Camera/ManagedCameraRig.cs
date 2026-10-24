@@ -16,12 +16,12 @@ namespace MidManStudio.Gtg.Managed.Camera
     /// <summary>
     /// Camera and cursor owner for the managed character. Switches between a third person
     /// and a first person view, captures the cursor and draws a debug overlay with the
-    /// module toggles and a crosshair at the screen center. With Cinemachine cameras assigned it only moves the follow target
-    /// and switches the cameras on and off. With none assigned it drives the main camera
+    /// module toggles and a crosshair at the screen center. With Cinemachine cameras assigned it only moves the follow target,
+    /// points the cameras at it and switches them on and off. With none assigned it drives the main camera
     /// itself. Inside MidManStudio.Gtg namespaces write UnityEngine.Camera in full, because
     /// the simple name Camera resolves to a namespace.
     /// </summary>
-    [DefaultExecutionOrder(100)]
+    [DefaultExecutionOrder(50)]
     [DisallowMultipleComponent]
     public sealed class ManagedCameraRig : MonoBehaviour
     {
@@ -36,6 +36,7 @@ namespace MidManStudio.Gtg.Managed.Camera
         [SerializeField] private Renderer[] _bodyRenderers;
 
         [Header("Offsets")]
+        [Tooltip("Height of the eye above the feet, whatever height the pivot of the character is at.")]
         [SerializeField] private float _eyeHeight = 1.6f;
         [Tooltip("Used only by the built-in camera.")]
         [SerializeField] private float _thirdPersonDistance = 3.5f;
@@ -45,6 +46,8 @@ namespace MidManStudio.Gtg.Managed.Camera
         [SerializeField] private bool _lockCursorOnStart = true;
         [SerializeField] private bool _showDebugOverlay = true;
         [SerializeField] private bool _showCrosshair = true;
+        [Tooltip("Sets Follow of the assigned cameras to the camera target when the scene starts. A camera that follows anything else does not pitch with the view.")]
+        [SerializeField] private bool _wireCameras = true;
 
         private const float WallPadding = 0.15f;
 
@@ -101,6 +104,7 @@ namespace MidManStudio.Gtg.Managed.Camera
         private void Start()
         {
             _firstPerson = _startInFirstPerson;
+            WireCameras();
             FindPlayer();
             ApplyMode();
             if (_lockCursorOnStart)
@@ -129,7 +133,8 @@ namespace MidManStudio.Gtg.Managed.Camera
         }
 
         // Runs after the character, so the click that recaptures the cursor
-        // is not seen as a fire press this frame.
+        // is not seen as a fire press this frame. Runs before the Cinemachine Brain, which is
+        // at order 100, so the cameras read the target of this frame and not of the last one.
         private void LateUpdate()
         {
             if (_player == null && Time.frameCount % 30 == 0)
@@ -139,7 +144,7 @@ namespace MidManStudio.Gtg.Managed.Camera
 
             if (_player != null)
             {
-                Vector3 eye = _player.transform.position + Vector3.up * _eyeHeight;
+                Vector3 eye = _player.FeetPosition + Vector3.up * _eyeHeight;
                 Quaternion aim = Quaternion.Euler(_player.Pitch, _player.Yaw, 0f);
                 _cameraTarget.SetPositionAndRotation(eye, aim);
 
@@ -172,6 +177,49 @@ namespace MidManStudio.Gtg.Managed.Camera
             }
 
             _builtInCamera.transform.SetPositionAndRotation(position, aim);
+        }
+
+        private void WireCameras()
+        {
+            if (!_wireCameras)
+            {
+                return;
+            }
+
+            WireCamera(_thirdPersonCamera);
+            WireCamera(_firstPersonCamera);
+        }
+
+        private void WireCamera(GameObject cameraObject)
+        {
+            if (cameraObject == null)
+            {
+                return;
+            }
+
+            Transform previous;
+            if (!ManagedCameraWiring.PointFollow(cameraObject, _cameraTarget, out previous))
+            {
+                Debug.LogWarning("[GTG Camera] " + cameraObject.name
+                    + " has no component with a Follow target, so the rig cannot drive it.", cameraObject);
+                return;
+            }
+
+            if (previous != _cameraTarget)
+            {
+                Debug.LogWarning("[GTG Camera] " + cameraObject.name + " followed "
+                    + (previous != null ? previous.name : "nothing")
+                    + " and now follows the camera target, which carries the yaw and the pitch."
+                    + " Set Follow to the target in the Inspector to stop this message.", cameraObject);
+            }
+
+            string selfRotating = ManagedCameraWiring.FindSelfRotating(cameraObject);
+            if (selfRotating.Length > 0)
+            {
+                Debug.LogWarning("[GTG Camera] " + cameraObject.name + " has " + selfRotating
+                    + ", which turns the view from its own input, so it will not match the character."
+                    + " Use Same As Follow Target as the Aim.", cameraObject);
+            }
         }
 
         private void FindPlayer()

@@ -12,7 +12,7 @@ namespace UnityEngine
     [AttributeUsage(AttributeTargets.Field)] public sealed class HeaderAttribute : Attribute { public HeaderAttribute(string h) { } }
     [AttributeUsage(AttributeTargets.Field)] public sealed class TooltipAttribute : Attribute { public TooltipAttribute(string t) { } }
     [AttributeUsage(AttributeTargets.Field)] public sealed class RangeAttribute : Attribute { public RangeAttribute(float a, float b) { } }
-    [AttributeUsage(AttributeTargets.Class)] public sealed class DefaultExecutionOrderAttribute : Attribute { public DefaultExecutionOrderAttribute(int o) { } }
+    [AttributeUsage(AttributeTargets.Class)] public sealed class DefaultExecutionOrderAttribute : Attribute { public int order { get; private set; } public DefaultExecutionOrderAttribute(int o) { order = o; } }
     [AttributeUsage(AttributeTargets.Class)] public sealed class DisallowMultipleComponentAttribute : Attribute { }
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)] public sealed class RequireComponentAttribute : Attribute { public RequireComponentAttribute(Type t) { } }
 
@@ -365,6 +365,18 @@ namespace UnityEngine
         }
         public T GetComponentInChildren<T>() where T : class { return GetComponent<T>(); }
         public T[] GetComponentsInChildren<T>() where T : class { var r = new List<T>(); var c = GetComponent<T>(); if (c != null) r.Add(c); return r.ToArray(); }
+        public T[] GetComponentsInChildren<T>(bool includeInactive) where T : class
+        {
+            var r = new List<T>();
+            AddComponentsBelow(this, includeInactive, r);
+            return r.ToArray();
+        }
+        private static void AddComponentsBelow<T>(GameObject go, bool includeInactive, List<T> into) where T : class
+        {
+            if (!includeInactive && !go._self) return;
+            foreach (Component c in go.Components) if (c is T && !c.Destroyed) into.Add((T)(object)c);
+            foreach (Transform ch in go.transform.Children) AddComponentsBelow(ch.gameObject, includeInactive, into);
+        }
         internal void DestroyRecursive()
         {
             foreach (Transform ch in new List<Transform>(transform.Children)) ch.gameObject.DestroyRecursive();
