@@ -358,6 +358,9 @@ GameObject:
   - component: {fileID: 664780202}
   - component: {fileID: 664780208}
   - component: {fileID: 664780207}
+  - component: {fileID: 664780209}
+  - component: {fileID: 664780210}
+  - component: {fileID: 664780211}
   m_Layer: 7
   m_Name: Player
   m_TagString: Untagged
@@ -583,6 +586,60 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _maxHealth: 100
   _invulnerable: 0
+--- !u!114 &664780209
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 664780199}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8c0c48d9a7ad41279adc2d6fa3f0c711, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _weapon:
+    ItemId: 1
+    DisplayName: Iron Sword
+    Damage: 25
+    Reach: 2.2
+    ArcDegrees: 100
+    HitDelaySeconds: 0.25
+    SwingSeconds: 0.6
+    OriginHeight: 1.1
+  _hitMask:
+    serializedVersion: 2
+    m_Bits: 832
+  _equipOnStart: 0
+  _logHits: 1
+--- !u!114 &664780210
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 664780199}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ae514d6e7904502953b3a73b89ad788, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &664780211
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 664780199}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dceaf7b0503245acbc71b46e3734ecfe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _body: {fileID: 0}
+  _turnDegreesPerSecond: 720
+  _aimHoldSeconds: 0.6
+  _moveDeadZone: 0.1
 --- !u!1 &768523242
 GameObject:
   m_ObjectHideFlags: 0

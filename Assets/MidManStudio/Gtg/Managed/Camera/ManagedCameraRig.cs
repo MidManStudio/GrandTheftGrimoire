@@ -71,6 +71,9 @@ namespace MidManStudio.Gtg.Managed.Camera
             ManagedCursorBlock.Reset();
         }
 
+        /// <summary>True while the first person view is on. Body facing reads it.</summary>
+        public bool IsFirstPerson { get { return _firstPerson; } }
+
         /// <summary>Public so a UI Button can call it from its onClick list.</summary>
         public void ToggleFirstPerson()
         {

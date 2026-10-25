@@ -198,6 +198,25 @@ namespace UnityEngine
         public static float Acos(float v) { return (float)Math.Acos(v); }
         public static float Atan2(float y, float x) { return (float)Math.Atan2(y, x); }
         public static float Pow(float a, float b) { return (float)Math.Pow(a, b); }
+        public static float Repeat(float t, float length) { return Clamp(t - Floor(t / length) * length, 0f, length); }
+        public static float DeltaAngle(float current, float target)
+        {
+            float delta = Repeat(target - current, 360f);
+            if (delta > 180f) delta -= 360f;
+            return delta;
+        }
+        public static float MoveTowards(float current, float target, float maxDelta)
+        {
+            if (Math.Abs(target - current) <= maxDelta) return target;
+            return current + Math.Sign(target - current) * maxDelta;
+        }
+        public static float MoveTowardsAngle(float current, float target, float maxDelta)
+        {
+            float delta = DeltaAngle(current, target);
+            if (-maxDelta < delta && delta < maxDelta) return target;
+            target = current + delta;
+            return MoveTowards(current, target, maxDelta);
+        }
         public static float Floor(float v) { return (float)Math.Floor(v); }
         public static float Ceil(float v) { return (float)Math.Ceiling(v); }
         public static int FloorToInt(float v) { return (int)Math.Floor(v); }
@@ -296,6 +315,11 @@ namespace UnityEngine
             return false;
         }
         internal IEnumerable<Transform> Children { get { return _children; } }
+        public Transform Find(string childName)
+        {
+            foreach (Transform ch in _children) if (ch.gameObject.name == childName) return ch;
+            return null;
+        }
         public Vector3 eulerAngles { get { return Vector3.zero; } }
         public Vector3 localPosition;
         public Vector3 localScale = Vector3.one;
@@ -660,6 +684,7 @@ namespace UnityEngine
         public static void LogError(object m) { Errors.Add(m.ToString()); }
         public static readonly List<string> Logs = new List<string>();
         public static void Log(object m) { Logs.Add(m.ToString()); }
+        public static void Log(object m, Object ctx) { Logs.Add(m.ToString()); }
     }
     public static class Application { public static bool isPlaying = true; }
     public enum CursorLockMode { None, Locked, Confined }
