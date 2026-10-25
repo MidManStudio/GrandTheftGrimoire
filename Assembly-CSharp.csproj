@@ -188,6 +188,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDevSession.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildPanel.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Health/IManagedDamageable.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/ManagedCameraWiring.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemSamples.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterInputSystem.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemDatabaseCatalog.cs" />
@@ -559,7 +560,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="MidManStudio.Mdix.Core">
-      <HintPath>Library/PackageCache/com.midmanstudio.mdix@8f8c87df1b/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
+      <HintPath>Library/PackageCache/com.midmanstudio.mdix@74ae773468/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.Antlr3.Runtime">
