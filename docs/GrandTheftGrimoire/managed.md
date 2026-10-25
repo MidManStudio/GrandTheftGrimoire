@@ -101,11 +101,23 @@ missing script. Delete it, or switch the define back.
    from their own input, so the camera stops matching the character, and the rig warns about
    them. On the Brain set Update Method to Late Update and the default blend to 0.25 s.
 4. Delete the old SubScene, `CharacterAuthoring` and `CharacterCameraBridge` objects.
+5. For melee, add `ManagedMelee`, `ManagedMeleeEquipBridge` and `ManagedBodyFacing` to the same GameObject
+   as `ManagedCharacter`. The Player of `SamlpleScene.unity` has them. Equipping from the quick slots or the
+   wheel needs a `ManagedHud` in the scene. Body facing turns a child of the player, so it does nothing, and
+   says so once in the Console, until the character model is a child assigned as its Body.
 
 Controls: move with WASD or the arrow keys, look with the mouse, the right stick or
 the keys J and L (turn) and I and K (up and down), jump with Space, cast with the
 left mouse button, F or the right trigger. Pick a spell with 1, 2 or 3, Tab, or
 the d-pad. V switches the view, Escape frees the cursor.
+
+Melee: the Iron Sword is item 1. Use the quick slot that holds it (key 5 after the dev key `\`
+stocked the bag) or pick the wheel section that shows its icon, and it is in hand. While it is in
+hand the cast button swings it and casts nothing. The swing hits 0.25 s after the press, in a
+100 degree cone up to 2.2 m in front of the chest, along the direction the crosshair points at that
+moment. Using the quick slot again puts the sword away, and so does picking a spell with 1, 2, 3, Tab
+or the d-pad. In third person the body turns toward the way the character walks and faces the aim for
+0.6 s after a cast or a swing.
 
 Shots leave the `GTG Shot Point` child of the character and fly to whatever the
 screen center looks at. A white crosshair marks that point. Move the shot point in
@@ -217,6 +229,8 @@ the health and SP bars and the quick slots, and shows them again when it closes.
 | Health | backlog | done, `ManagedHealth` |
 | NPC | decision system only, nothing feeds it and nothing reads it | brain, sight, director and actor done: patrol, chase and melee, retreat |
 | Fireball damage | backlog | done, `ManagedSpellDamage` |
+| Melee weapon | backlog | done, one fixed weapon, the Iron Sword: `ManagedMelee` |
+| Body facing | backlog | done, `ManagedBodyFacing`; idle until a model is a child of the player |
 
 The ECS backlog items need the ECS packages installed, so they are ported together.
 The arrow keys are the one ECS edit since the split, two lines per axis in
@@ -247,6 +261,8 @@ the arrows pointing one way, and put a new link in this table when it is added.
 | `Quests` | `Missions`, `Flags`; the Questly runtime and, in `ManagedQuestHost.cs` only, the mdix package, both from `Packages/manifest.json`. Nothing reads from `Quests` |
 | `Cheats` | `Camera`, `CharacterController`, `Chemistry`, `Economy`, `Health`, `Magic`, `NPC` |
 | `Building` | `Camera` (cursor block), `CharacterController` |
+| `Melee` | `CharacterController`, `Health`; `Hud` in `ManagedMeleeEquipBridge.cs` only |
+| `Facing` | `CharacterController`, `Camera` (the view flag of the rig) |
 | `Hud` | `Camera` (cursor block), `Items` (quick slots and bag), `Missions` (the empty panel text in `ManagedHud.cs`); `Building`, `CharacterController`, `Economy`, `Health`, `Magic` and `Missions` in `ManagedHudFeed.cs` only. Never `Crown` |
 
 The shop reaches all four of its neighbours through small interfaces:
@@ -320,6 +336,10 @@ frame it reads the input and runs look, walk, jump and gravity, then calls `Move
   height. It is the same for a pivot at the feet and for a pivot at the middle, which a capsule
   primitive has, and it is the pivot itself when there is no controller. The rig measures the eye
   from it.
+- `FireWasPressed` is true for the frame the fire button was pressed. `ConsumeFire()` takes the press
+  out of `Input` and returns whether there was one. Melee runs after the character and before the
+  caster and takes the press while a weapon is in hand, so the caster reads no press. `FireWasPressed`
+  stays true after the take, so body facing still sees the press.
 
 ### `ManagedSpellTypes.cs`
 
@@ -756,6 +776,8 @@ and draws the debug overlay with the module toggles and the selected spell.
   target, and a camera that followed the character itself got the yaw only, so looking up and down
   did not move it. A camera that cannot be wired, because nothing on it has a Follow property, gets
   a warning too. Turn the field off to keep the Follow of the scene.
+- `IsFirstPerson` is true while the first person view is on. Body facing reads it, and nothing in
+  the rig depends on it.
 - The overlay drops the ECS world, physics and command buffer lines, because there
   is no world.
 - The crosshair is a small white cross at the screen center. It marks the point that
@@ -814,6 +836,127 @@ camera rig does not capture the cursor then.
 - The holders today are the cheat panel, the shop panel, the HUD wheel, the HUD while the
   pointer is over a clickable piece, and build mode while the tray is open. The rig reads
   `Active` and knows no holder.
+
+### `ManagedMeleeWeapon.cs`
+
+**What it does:** The numbers of one melee weapon, as a serializable class: item id, name, damage, reach,
+cone width, hit delay, swing time and the height of the chest above the feet. The defaults are the Iron Sword,
+item 1 of `Assets/inventory_items.mdix`.
+
+**Decisions:**
+- One fixed weapon first (owner answer). The numbers are placeholders, set in the Inspector of
+  `ManagedMelee`: 25 damage, 2.2 m reach, a 100 degree cone, the hit 0.25 s after the press, a swing of 0.6 s
+  and the cone starting 1.1 m above the feet. They sit in the range of the NPC melee (10 damage, 1.8 m reach) and
+  the spells (30 and 40 damage).
+- Several weapons, and numbers read from the item table, are not built. The weapon is a plain class, so a list
+  of them or one filled from an item can replace the single field later. Stamina is not modelled, because the
+  stack has none.
+- A negative hit delay reads as 0, and a swing time below the hit delay reads as the hit delay.
+
+### `ManagedMeleeSwing.cs`
+
+**What it does:** The clock of one swing. It starts, passes its hit moment once and ends. Plain C#, no Unity.
+
+**Decisions:**
+- `Tick` returns true on the one step that passes the hit moment, whatever the step size, so a long frame
+  neither skips the hit nor lands it twice. The swing ends on the step that passes its length, which can be
+  the same step.
+- `Start` is refused while a swing is under way. `Cancel` ends it with no hit. A step of zero or less does
+  nothing.
+
+### `ManagedMeleeStrike.cs`
+
+**What it does:** The hit check of one swing. It looks at everything within reach of the chest and hurts, once
+each, the `IManagedDamageable` whose nearest point is inside the cone.
+
+**Decisions:**
+- A timed cone check at the hit moment (owner answer), not a weapon sweep over the swing.
+- The cone is flat on the ground and centered on the aim yaw. Reach is measured in 3D. Aiming up or down
+  does not move the cone, and a target above or below is hit when it is within reach and in front.
+- Reach and angle use the nearest point of the collider bounds, as `ManagedSpellDamage` does. A big collider
+  counts when any part of it inside the reach is in the cone, which is generous at close range. A point
+  straight above or below the origin counts as inside.
+- A body with several colliders is hurt once. The source and everything under it is skipped. A target that is
+  already dead is not counted. Trigger colliders are ignored.
+- There is no line of sight check, so a swing hurts a target behind a thin wall, as the spells do.
+- The overlap buffer holds 32 colliders, in a static array, so a swing allocates nothing. A crowd larger than
+  that is not fully hurt.
+
+### `ManagedMelee.cs`
+
+**What it does:** Melee of the player. While the weapon is in hand, a fire press starts a swing and no spell is
+cast. At the hit moment the cone is checked and what is inside is hurt. It raises `EquippedChanged`,
+`SwingStarted` and `Struck(hits)`.
+
+**Decisions:**
+- Equip, then the fire button swings (owner answer). Fire is the cast input: the left mouse button while the
+  cursor is locked, F or the right trigger.
+- Execution order is -45, after the character (-50), which reads the input, and before the caster (-40). While the
+  weapon is in hand and the Cast module is on, it takes the press with `ManagedCharacter.ConsumeFire()`, so the
+  caster casts nothing. A press during a swing is taken too and does not restart it.
+- The Cast module gates melee as well. Build mode clears it, so the click that places a piece does not swing.
+  Turning it off during a swing ends the swing and leaves the weapon in hand.
+- The cone follows the aim yaw at the hit moment, not at the press and not the body yaw. A player who turns during
+  the swing hits where the crosshair points when the hit lands.
+- Picking a spell (1, 2, 3, Tab or the d-pad) puts the weapon away and leaves that frame's press for the caster.
+- `Equip`, `Unequip`, `Toggle` and `SetEquipped` are the way in. `Equip On Start` puts the weapon in hand with no HUD.
+  `Log Hits` turns off the `[GTG Melee]` lines for equipping and for each swing.
+- There is no animation, sound, hit effect, knockback, damage falloff or stamina. `Struck` is the seam for them.
+
+### `ManagedMeleeEquipBridge.cs`
+
+**What it does:** Ties the HUD to `ManagedMelee`. Using the quick slot that holds the weapon item toggles it.
+Picking a wheel section puts the weapon in hand when the section shows the weapon icon, and puts it away for
+any other section.
+
+**Decisions:**
+- `ManagedHud.QuickSlotUsed` is raised only when the bag holds the item, so a sword the player does not carry
+  cannot be equipped from a slot. A wheel pick is not checked against the bag, because the wheel holds plain
+  entries.
+- A wheel section is the weapon when its icon key is `ManagedHudSprites.ItemIconKey` of the weapon item id,
+  `item_1` for the Iron Sword.
+- Picking the section that is already active raises no event, which is the rule of the wheel. After a spell key
+  puts the sword away, the sword section is still the active one, and picking it again does nothing until another
+  section was picked. The quick slot has no such limit.
+- The HUD is found with `FindFirstObjectByType`, again every 30 frames while there is none, so the order of the
+  scene objects does not matter. The events are unhooked when the bridge is destroyed.
+- Nothing fills the wheel yet except the dev key. `\` puts the sword in quick slot 1 (key 5) and in wheel
+  section 2.
+
+### `ManagedBodyTurn.cs`
+
+**What it does:** The yaw math of body facing: the world yaw of a local move direction, the yaw the body turns toward
+and one turn step. Static, no scene.
+
+**Decisions:**
+- Yaw is measured from the world forward axis toward the world right axis, like the yaw of the character. Moving
+  forward gives the aim yaw, right gives 90 degrees more, back gives 180.
+- A move no longer than the dead zone keeps the current body yaw, so a body at rest stays where it is.
+- A step turns the short way round, at most the speed times the time. A speed or a time of zero or less leaves
+  the yaw as it is.
+
+### `ManagedBodyFacing.cs`
+
+**What it does:** Turns a child of the character apart from the aim. The root carries the aim yaw and the camera
+follows it, so the body is a child that turns on its own.
+
+**Decisions:**
+- Turn to movement (owner answer). In third person the body turns toward the way the character walks, at 720
+  degrees per second, and walking backward turns it around. At rest it keeps its yaw.
+- It faces the aim at once in first person, where only its shadow is seen, and for 0.6 s after a fire press while the
+  Cast module is on, so a cast or a swing goes where the body faces. The signal is `ManagedCharacter.FireWasPressed`,
+  because melee takes the press. The component knows neither melee nor the caster.
+- The body is the `Body` field. Empty, it is the child `BodyView` that `ManagedCharacter` adds to a character with no
+  renderer. With neither it logs one line and switches itself off. The character root is refused with a warning,
+  because turning it would turn the aim.
+- The Player of the sample scene is a capsule with its renderer on the root, so there is nothing to turn and facing
+  is idle there. A capsule looks the same from every side. When the character model exists, make it a child and
+  assign it as Body.
+- The body gets the world rotation of that yaw, so a model must face +Z at zero rotation. A model that does not goes under
+  an unrotated child, and the child is the Body.
+- Nothing reads the body yaw. The aim, the camera and the shot point stay on the root.
+- Execution order is -35, after the caster, so it sees the press of this frame. The rig is found with
+  `FindFirstObjectByType`, again every 30 frames while missing, and with no rig the view counts as third person.
 
 ### `IManagedCheatHost.cs`
 
@@ -1836,7 +1979,7 @@ creates a hazard, grows it, expires it and draws it through one `ManagedSphereBa
 **What it does:** One-method contract for anything that can take damage: `IsAlive` and `TakeDamage(amount, source)`.
 
 **Decisions:**
-- Spells, melee and hazards call the interface, so none of them needs to know whether the target is an NPC or the player. Nothing calls it yet, because the fireball and the hazards do not deal damage in this repo today.
+- Spells, melee and hazards call the interface, so none of them needs to know whether the target is an NPC or the player. The spell damage, the NPC melee and shots, and the melee of the player call it. The chemical hazards do not.
 
 ### `ManagedHealth.cs`
 
@@ -2178,7 +2321,7 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   it runs the checks in that folder: 803 before the item checks were added and not counted again
   since, covering building, the camera
   rig's cursor hook, the cursor block, the rig's eye point, execution order and camera wiring
-  (`TestsRig.cs`), the HUD and the bottom group, the Crown heat map, the heat
+  (`TestsRig.cs`), melee, the equip bridge and body facing (`TestsMelee.cs`), the HUD and the bottom group, the Crown heat map, the heat
   and mission sources, the mission tracker and board, how the feed and the HUD read them, and the
   item seams (`TestsItems.cs`: the slot reader of the plain bag, the item lists of the two
   catalogs, the player bag taking another bag, and the HUD reading it). It
@@ -2964,10 +3107,42 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   a C# grammar only, `building-test/` has not run on it, and the scene has not been opened in Unity.
 - Known limits, not changed: the 3rd Person Follow body has `Camera Collision Filter` at Nothing, so the third person
   camera passes through walls. The visible body is still the capsule on the Player, which looks the same from every side.
-  No model is turned toward the direction of movement, and there is no body facing code, so a model placed under the Player turns with the
-  view, at once. The rig collects the renderers to hide in first person once, so a renderer added to the player
+  At the time of this change no model was turned toward the direction of movement, so a model placed under the Player turned with the
+  view, at once. Body facing came afterwards, see the next entry. The rig collects the renderers to hide in first person once, so a renderer added to the player
   later is not hidden unless the list is filled by hand. `CharacterCameraBridge` of the ECS stack is at 100 like the Brain
   and was not touched.
 - Edits to existing files: `ManagedCameraRig.cs`, `ManagedCharacter.cs`, `SamlpleScene.unity`,
   `Packages/packages-lock.json`, `building-test/UnityStubs.cs`, `building-test/Tests.cs`, `managed.md` and `camera.md`.
   New: `ManagedCameraWiring.cs` and `building-test/TestsRig.cs`.
+
+### Melee and body facing (`Melee/`, `Facing/`, `CharacterController/`, `Camera/`, `Assets/SamlpleScene.unity`, `building-test/`)
+
+- Requested: melee weapons first, and the body facing that the camera fix left open. The owner chose, from four questions:
+  the body turns to the movement in third person, a weapon is equipped and the fire button swings it, a timed cone check
+  finds the targets, and one fixed weapon comes first.
+- Added: `ManagedMelee`, `ManagedMeleeWeapon`, `ManagedMeleeSwing`, `ManagedMeleeStrike` and `ManagedMeleeEquipBridge` in `Melee/`,
+  and `ManagedBodyFacing` and `ManagedBodyTurn` in `Facing/`. Two small additions to existing code: `ManagedCharacter.FireWasPressed` and
+  `ConsumeFire()`, and `ManagedCameraRig.IsFirstPerson`. The spell caster was not touched. It stays quiet during melee because melee
+  takes the press before it runs.
+- Scene change, made in the file and not in Unity: the Player has the three components, the weapon numbers as listed under
+  `ManagedMeleeWeapon.cs`, and a hit mask of Ground, Wall and Npc (the same 832 as the caster). The script guids are chosen in the
+  `.meta` files of the drop: Melee `8c0c48d9a7ad41279adc2d6fa3f0c711`, EquipBridge `2ae514d6e7904502953b3a73b89ad788`, BodyFacing
+  `dceaf7b0503245acbc71b46e3734ecfe`. Unity may rewrite the blocks when it saves the scene.
+- Checked by reading and with new checks in `TestsMelee.cs`: the swing clock (one hit per swing, one step past the end, a cancel), the cone
+  at its edges and with a flat forward, the strike (in front, behind, side, out of reach, a higher target, a second layer, a body with two
+  colliders, the source, a dead target, no weapon, no damage, no reach), `FireWasPressed` and `ConsumeFire` through the real input read, the
+  component (the press left alone with the weapon away, taken with it in hand and during a swing, the cone at the hit moment, unequipping
+  during a swing, a spell key, Cast off, equip on start), the bridge (quick slot, wheel, another item, destroy, a HUD that appears later)
+  and the facing (turn to movement, rest, the hold after a fire press, Cast off, Move off, first person, third person, no body, the root as
+  body, and the math). `UnityStubs.cs` gained `Mathf.Repeat`, `DeltaAngle`, `MoveTowards` and `MoveTowardsAngle`, `Debug.Log` with a context
+  and `Transform.Find`.
+- Not verified: nothing was compiled or run. The sandbox has no .NET SDK, so the new C# was parsed with a C# grammar and checked for duplicate
+  types only, and `building-test/` has not run on it. The scene was not opened in Unity, and the swing has not been seen in play.
+- Known limits: no animation, sound, hit effect, knockback or stamina. The weapon numbers are placeholders and are not read from the item
+  table. There is one weapon. The strike ignores walls and its buffer holds 32 colliders. Quick slots other than the sword's do nothing when used.
+  The wheel entries of spells put the sword away but do not pick a spell, because nothing links the wheel to the caster. Body facing is idle
+  in the sample scene until a model is a child of the player. Hitting with the aim yaw means a swing aimed down at a target far below can only hit
+  what is within reach in 3D.
+- Edits to existing files: `ManagedCharacter.cs`, `ManagedCameraRig.cs`, `SamlpleScene.unity`, `building-test/UnityStubs.cs`,
+  `building-test/Tests.cs` and `managed.md`. New: the seven scripts above with their `.meta` files, the two folder `.meta` files and
+  `building-test/TestsMelee.cs`.

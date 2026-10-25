@@ -69,6 +69,12 @@ namespace MidManStudio.Gtg.Managed.CharacterController
         public float VerticalVelocity { get { return _verticalVelocity; } }
         public ManagedCharacterInputFrame Input { get { return _input; } }
 
+        /// <summary>
+        /// True for the frame the fire button was pressed, even after a module took the press with
+        /// <see cref="ConsumeFire"/>. Body facing reads it to turn toward the aim.
+        /// </summary>
+        public bool FireWasPressed { get; private set; }
+
         /// <summary>Multiplies walking speed. 1 is normal. Something that wants to change how fast the character walks, a cheat or an effect, sets it.</summary>
         public float MoveSpeedScale { get; set; } = 1f;
 
@@ -82,6 +88,18 @@ namespace MidManStudio.Gtg.Managed.CharacterController
         public bool Has(ManagedCharacterFeature feature)
         {
             return (_features & feature) != 0;
+        }
+
+        /// <summary>
+        /// Takes this frame's fire press, so a module that runs after the caller does not see it in
+        /// <see cref="Input"/>. Returns whether there was a press. Melee takes the press while a
+        /// weapon is held, which keeps the spell caster quiet.
+        /// </summary>
+        public bool ConsumeFire()
+        {
+            bool had = _input.FirePressed;
+            _input.FirePressed = false;
+            return had;
         }
 
         /// <summary>
@@ -134,6 +152,7 @@ namespace MidManStudio.Gtg.Managed.CharacterController
             float dt = Time.deltaTime;
             _input = ManagedCharacterInput.Read(
                 dt, _mouseDegreesPerPixel, _stickDegreesPerSecond, _keyboardLookDegreesPerSecond);
+            FireWasPressed = _input.FirePressed;
 
             ApplyLook();
             _timeSinceGrounded = _grounded ? 0f : _timeSinceGrounded + dt;

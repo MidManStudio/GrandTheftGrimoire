@@ -117,6 +117,9 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             ItemTests();
             HudTests();
             FeederTests();
+            MeleeTests();
+            MeleeBridgeTests();
+            FacingTests();
             Console.WriteLine(_checks + " checks, " + _failures + " failed");
             return _failures == 0 ? 0 : 1;
         }
