@@ -133,6 +133,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             World w = NewWorld(true);
             ManagedPlayerItemBag hudBag;
             ManagedHud hud = NewHud(w, out hudBag);
+            HudFrame(hud, 1f);
             Check(hud.UseQuickSlot(0), "the quick slot is used against the plain bag, which carries three potions");
 
             FakeSlots other = new FakeSlots();

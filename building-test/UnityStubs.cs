@@ -272,6 +272,8 @@ namespace UnityEngine
     public class Component : Object
     {
         public GameObject gameObject;
+        // A component reports the name of its GameObject, as in Unity.
+        public new string name { get { return gameObject != null ? gameObject.name : base.name; } set { base.name = value; } }
         public Transform transform { get { return gameObject.transform; } }
         public T GetComponent<T>() where T : class
         {
