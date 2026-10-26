@@ -37,6 +37,13 @@
    dat = 13,flying = 12,
    alo = "sone"
    bigobj = {obj = {son =0,ss = false}}
+  aTe = t:(12,"2233",false)
+  kik = b:("")
+ lll = r:("")
+  testArray::
+ 1,2,3,4,5
+
+
   items::
     createItem(1, "Iron Sword",    ItemType.WEAPON,     Rarity.COMMON,    50),
     createItem(2, "Health Potion", ItemType.CONSUMABLE, Rarity.COMMON,    25),

@@ -60,9 +60,25 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/2022.3.13f1/Unity.app/Contents/Tools/Unity.SourceGenerators/Unity.Properties.SourceGenerator.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/Editor/ManagedChemistryLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Crown/Editor/ManagedCrownLab.cs" />
     <Compile Include="Assets/TutorialInfo/Scripts/Editor/ReadmeEditor.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/Editor/ManagedBuildingLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Lab/Editor/ManagedLabArena.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Lab/Editor/GtgLabKit.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/Editor/ManagedMagicLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/Editor/ManagedNpcLab.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/Editor/ManagedNpcDebugView.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/Editor/ManagedCameraLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Health/Editor/ManagedHealthLab.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/Editor/ManagedNpcDebuggerWindow.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/Editor/ManagedEconomyLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/Editor/ManagedItemsLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Melee/Editor/ManagedMeleeLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/CharacterController/Editor/ManagedPlayerLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Facing/Editor/ManagedFacingLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Favor/Editor/ManagedFavorLab.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Facing/Editor/ManagedModelReport.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
@@ -446,7 +462,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="MidManStudio.Mdix.Core">
-      <HintPath>Library/PackageCache/com.midmanstudio.mdix@74ae773468/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
+      <HintPath>Library/PackageCache/com.midmanstudio.mdix@ab110744b8/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.IonicZip">
