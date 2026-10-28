@@ -14,6 +14,7 @@ namespace UnityEngine
     [AttributeUsage(AttributeTargets.Field)] public sealed class RangeAttribute : Attribute { public RangeAttribute(float a, float b) { } }
     [AttributeUsage(AttributeTargets.Class)] public sealed class DefaultExecutionOrderAttribute : Attribute { public int order { get; private set; } public DefaultExecutionOrderAttribute(int o) { order = o; } }
     [AttributeUsage(AttributeTargets.Class)] public sealed class DisallowMultipleComponentAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Class)] public sealed class ExecuteAlwaysAttribute : Attribute { }
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)] public sealed class RequireComponentAttribute : Attribute { public RequireComponentAttribute(Type t) { } }
 
     // ---- math ------------------------------------------------------------------------------------------------
@@ -585,26 +586,35 @@ namespace UnityEngine
         public bool enableInstancing;
         public Color color { get { Color c; return Colors.TryGetValue("_Color", out c) ? c : Color.white; } set { Colors["_Color"] = value; } }
         public readonly Dictionary<string, Color> Colors = new Dictionary<string, Color>();
+        public readonly Dictionary<string, float> Floats = new Dictionary<string, float>();
         public static HashSet<string> LitProps = new HashSet<string> { "_BaseColor" };
         public Material(Shader s) { shader = s; }
         public Material(Material m) { shader = m.shader; foreach (var kv in m.Colors) Colors[kv.Key] = kv.Value; }
         public bool HasProperty(string p) { return LitProps.Contains(p) || p == "_Color"; }
         public void SetColor(string p, Color c) { Colors[p] = c; }
+        public void SetFloat(string p, float v) { Floats[p] = v; }
     }
     public class Mesh : Object
     {
         public Vector3[] vertices, normals; public int[] triangles; public Color32[] colors32;
         public Bounds bounds;
         public Rendering.IndexFormat indexFormat;
+        public readonly Vector2[][] UvChannels = new Vector2[8][];
+        public int subMeshCount = 1;
         public void RecalculateBounds() { }
         public void MarkDynamic() { }
         public void Clear() { vertices = null; triangles = null; colors32 = null; }
         public void SetVertices(Vector3[] inVertices, int start, int length) { vertices = new Vector3[length]; Array.Copy(inVertices, start, vertices, 0, length); }
+        public void SetUVs(int channel, Vector2[] uvs) { UvChannels[channel] = uvs; }
         public void SetColors(Color32[] inColors, int start, int length) { colors32 = new Color32[length]; Array.Copy(inColors, start, colors32, 0, length); }
         public void SetTriangles(int[] inTriangles, int start, int length, int submesh) { triangles = new int[length]; Array.Copy(inTriangles, start, triangles, 0, length); }
     }
     public class MaterialPropertyBlock
     {
+        public readonly Dictionary<int, float> Floats = new Dictionary<int, float>();
+        public void SetFloat(int nameID, float value) { Floats[nameID] = value; }
+        public void SetFloat(string name, float value) { Floats[Shader.PropertyToID(name)] = value; }
+        public float GetFloat(int nameID) { float v; return Floats.TryGetValue(nameID, out v) ? v : 0f; }
         public void SetVectorArray(int nameID, Vector4[] values) { }
         public void SetVectorArray(string name, Vector4[] values) { }
     }
@@ -660,7 +670,7 @@ namespace UnityEngine
         }
     }
 
-    public struct DrawCall { public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; }
+    public struct DrawCall { public Dictionary<int, float> Floats; public int Submesh; public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; }
     public static class Graphics
     {
         public static readonly List<DrawCall> Calls = new List<DrawCall>();
@@ -674,6 +684,15 @@ namespace UnityEngine
         public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer)
         {
             Calls.Add(new DrawCall { Kind = "mesh", Count = 1, Layer = layer, Mesh = mesh, Material = material, First = matrix });
+        }
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer, Camera camera, int submeshIndex,
+            MaterialPropertyBlock properties, Rendering.ShadowCastingMode castShadows, bool receiveShadows)
+        {
+            Calls.Add(new DrawCall
+            {
+                Kind = "mesh", Count = 1, Layer = layer, Mesh = mesh, Material = material, First = matrix, Submesh = submeshIndex,
+                Floats = properties != null ? new Dictionary<int, float>(properties.Floats) : null
+            });
         }
     }
 

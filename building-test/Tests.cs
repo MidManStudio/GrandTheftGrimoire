@@ -120,6 +120,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             MeleeTests();
             MeleeBridgeTests();
             FacingTests();
+            GlyphTests();
             Console.WriteLine(_checks + " checks, " + _failures + " failed");
             return _failures == 0 ? 0 : 1;
         }
