@@ -109,6 +109,7 @@ namespace UnityEngine
             axis = axis.normalized; double h = angle * Math.PI / 360.0; float s = (float)Math.Sin(h);
             return new Quaternion(axis.x * s, axis.y * s, axis.z * s, (float)Math.Cos(h));
         }
+        public static Quaternion LookRotation(Vector3 forward) { return LookRotation(forward, Vector3.up); }
         public static Quaternion LookRotation(Vector3 forward, Vector3 up)
         {
             Vector3 f = forward.normalized; Vector3 r = Vector3.Cross(up, f).normalized; Vector3 u = Vector3.Cross(f, r);
@@ -617,6 +618,8 @@ namespace UnityEngine
         public bool HasProperty(string p) { return LitProps.Contains(p) || p == "_Color"; }
         public void SetColor(string p, Color c) { Colors[p] = c; }
         public void SetFloat(string p, float v) { Floats[p] = v; }
+        public readonly Dictionary<string, Texture> Textures = new Dictionary<string, Texture>();
+        public void SetTexture(string p, Texture t) { Textures[p] = t; }
     }
     public class Mesh : Object
     {
@@ -642,8 +645,12 @@ namespace UnityEngine
         public readonly Dictionary<int, float[]> FloatArrays = new Dictionary<int, float[]>();
         public void SetFloatArray(int nameID, float[] values) { FloatArrays[nameID] = values; }
         public void SetFloatArray(string name, float[] values) { FloatArrays[Shader.PropertyToID(name)] = values; }
-        public void SetVectorArray(int nameID, Vector4[] values) { }
-        public void SetVectorArray(string name, Vector4[] values) { }
+        public readonly Dictionary<int, Vector4> Vectors = new Dictionary<int, Vector4>();
+        public void SetVector(int nameID, Vector4 value) { Vectors[nameID] = value; }
+        public void SetVector(string name, Vector4 value) { Vectors[Shader.PropertyToID(name)] = value; }
+        public readonly Dictionary<int, Vector4[]> VectorArrays = new Dictionary<int, Vector4[]>();
+        public void SetVectorArray(int nameID, Vector4[] values) { VectorArrays[nameID] = values; }
+        public void SetVectorArray(string name, Vector4[] values) { VectorArrays[Shader.PropertyToID(name)] = values; }
     }
     public class Camera : Component
     {
@@ -665,8 +672,10 @@ namespace UnityEngine
         public static Texture2D whiteTexture = new Texture2D();
         public Texture2D() { width = 1; height = 1; }
         public Texture2D(int width, int height, TextureFormat format, bool mipChain) { this.width = width; this.height = height; }
-        public void SetPixels32(Color32[] colors) { }
-        public void Apply() { }
+        public Color32[] Pixels;
+        public int Applied;
+        public void SetPixels32(Color32[] colors) { Pixels = (Color32[])colors.Clone(); }
+        public void Apply() { Applied++; }
     }
     public class Font : Object { public static Font CreateDynamicFontFromOSFont(string fontname, int size) { return new Font { name = fontname }; } }
     public enum FilterMode { Point, Bilinear, Trilinear }
@@ -697,7 +706,7 @@ namespace UnityEngine
         }
     }
 
-    public struct DrawCall { public Dictionary<int, float> Floats; public int Submesh; public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; public Matrix4x4[] Snapshot; public Dictionary<int, float[]> FloatArrays; }
+    public struct DrawCall { public Dictionary<int, float> Floats; public int Submesh; public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; public Matrix4x4[] Snapshot; public Dictionary<int, float[]> FloatArrays; public Dictionary<int, Vector4> Vectors; public Dictionary<int, Vector4[]> VectorArrays; }
     public static class Graphics
     {
         public static readonly List<DrawCall> Calls = new List<DrawCall>();
@@ -708,12 +717,15 @@ namespace UnityEngine
             if (count > matrices.Length) throw new ArgumentException("count exceeds matrices.Length");
             // Source is the caller's array itself, Snapshot a copy and FloatArrays copies, as Unity reads them at the call and the caller may refill them for the next batch.
             Dictionary<int, float[]> arrays = null;
+            Dictionary<int, Vector4[]> vectorArrays = null;
             if (block != null)
             {
                 arrays = new Dictionary<int, float[]>();
                 foreach (var kv in block.FloatArrays) arrays[kv.Key] = (float[])kv.Value.Clone();
+                vectorArrays = new Dictionary<int, Vector4[]>();
+                foreach (var kv in block.VectorArrays) vectorArrays[kv.Key] = (Vector4[])kv.Value.Clone();
             }
-            Calls.Add(new DrawCall { Kind = "instanced", Count = count, Layer = layer, Mesh = mesh, Material = material, First = count > 0 ? matrices[0] : default(Matrix4x4), Source = matrices, Snapshot = (Matrix4x4[])matrices.Clone(), FloatArrays = arrays });
+            Calls.Add(new DrawCall { Kind = "instanced", Count = count, Layer = layer, Mesh = mesh, Material = material, First = count > 0 ? matrices[0] : default(Matrix4x4), Source = matrices, Snapshot = (Matrix4x4[])matrices.Clone(), FloatArrays = arrays, VectorArrays = vectorArrays });
         }
         public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer)
         {
@@ -725,7 +737,8 @@ namespace UnityEngine
             Calls.Add(new DrawCall
             {
                 Kind = "mesh", Count = 1, Layer = layer, Mesh = mesh, Material = material, First = matrix, Submesh = submeshIndex,
-                Floats = properties != null ? new Dictionary<int, float>(properties.Floats) : null
+                Floats = properties != null ? new Dictionary<int, float>(properties.Floats) : null,
+                Vectors = properties != null ? new Dictionary<int, Vector4>(properties.Vectors) : null
             });
         }
     }
@@ -779,6 +792,7 @@ namespace UnityEngine
 namespace UnityEngine.Rendering
 {
     public enum ShadowCastingMode { Off, On, TwoSided, ShadowsOnly }
+    public enum BlendMode { Zero = 0, One = 1, DstColor = 2, SrcColor = 3, OneMinusDstColor = 4, SrcAlpha = 5, OneMinusSrcColor = 6, DstAlpha = 7, OneMinusDstAlpha = 8, SrcAlphaSaturate = 9, OneMinusSrcAlpha = 10 }
     public enum IndexFormat { UInt16, UInt32 }
 }
 

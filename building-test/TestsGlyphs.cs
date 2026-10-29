@@ -23,6 +23,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             GlyphRendererTests();
             GlyphMoleculeTests();
             GlyphCastingTests();
+            PlasmaTests();
         }
 
         private static void GlyphRevealTests()
