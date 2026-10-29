@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- CI-only harness: compiles the Managed NPC code without Unity, against UnityStubs.cs. Never part of the game
+       build, and Unity does not see this directory. LangVersion 9 matches Unity 2022.3, so a newer language
+       feature in the game code fails here instead of in the Editor. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <UseAppHost>false</UseAppHost>
+    <RootNamespace>MidManStudio.Gtg.Managed.NPC.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs;Tests.cs;TestsCombat.cs;TestsCrown.cs;TestsRanged.cs;TestsFavor.cs;UnityStubs.cs;EditorStubs.cs;CasterStub.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Health/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Crown/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Favor/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/NPC/Editor/*.cs" Exclude="../../../Assets/MidManStudio/Gtg/Managed/NPC/Editor/ManagedNpcLab.cs" />
+    <!-- Only the spell files that have no camera or rendering dependency. The caster itself is stubbed. -->
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellTypes.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDefinition.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellFlight.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellPayload.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellModifiers.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedVesselTypes.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDamage.cs" />
+    <!-- The heat source interface of the HUD, which ManagedCrownHudHeat implements. It has no other dependency. -->
+    <Compile Include="../../../Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudHeatSource.cs" />
+    <!-- Shared with the ECS stack, no ECS dependency. -->
+    <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Native/*.cs" />
+    <Compile Include="../../../Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />
+  </ItemGroup>
+</Project>
