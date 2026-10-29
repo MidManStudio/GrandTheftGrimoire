@@ -19,6 +19,13 @@ namespace MidManStudio.Gtg.Managed.Magic
         public float CooldownSeconds;
 
         /// <summary>
+        /// Seconds from the fire press until the shot leaves the hand. The player's caster draws the vessel at the press,
+        /// holds the cast for this long while the glyph draws on, then fires toward the crosshair. Zero fires at once.
+        /// Cooldown starts at the press, so it counts this time too.
+        /// </summary>
+        public float CastSeconds;
+
+        /// <summary>
         /// Speed of the shot. A powered shot holds this speed for its whole flight. An
         /// unpowered shot, a thrown one, leaves at this speed and then follows gravity and drag.
         /// </summary>
@@ -94,6 +101,7 @@ namespace MidManStudio.Gtg.Managed.Magic
             Kind = ManagedSpellKind.Fireball,
             DisplayName = "Fireball",
             CooldownSeconds = 0.4f,
+            CastSeconds = 0.5f,
             Speed = 25f,
             LifetimeSeconds = 3f,
             SweepRadius = 0.15f,
@@ -109,6 +117,7 @@ namespace MidManStudio.Gtg.Managed.Magic
             Kind = ManagedSpellKind.Ice,
             DisplayName = "Ice",
             CooldownSeconds = 0.6f,
+            CastSeconds = 0.5f,
             Speed = 18f,
             LifetimeSeconds = 3.5f,
             SweepRadius = 0.15f,
@@ -125,6 +134,7 @@ namespace MidManStudio.Gtg.Managed.Magic
             Kind = ManagedSpellKind.Seeker,
             DisplayName = "Seeker",
             CooldownSeconds = 0.8f,
+            CastSeconds = 0.6f,
             Speed = 20f,
             LifetimeSeconds = 3.5f,
             SweepRadius = 0.15f,

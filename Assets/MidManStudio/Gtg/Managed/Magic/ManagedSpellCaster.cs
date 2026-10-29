@@ -20,8 +20,10 @@ namespace MidManStudio.Gtg.Managed.Magic
     /// <see cref="Impact"/>. Flight state lives in <see cref="ManagedSpellFlight"/> and vessel
     /// state in <see cref="ManagedVesselBelt"/>. A steered spell takes a lock at the cast from
     /// <see cref="ManagedSpellSeeker"/> and turns toward it every step. Shots are drawn through
-    /// one <see cref="ManagedSphereBatch"/>, with no GameObject per shot. Put it on the same
-    /// GameObject as ManagedCharacter.
+    /// one <see cref="ManagedSphereBatch"/>, with no GameObject per shot. A spell with a
+    /// <see cref="ManagedSpellDefinition.CastSeconds"/> above zero winds up first: the press draws
+    /// the vessel, the shot leaves when the wind-up ends, and <see cref="ReadCastStatus"/> says how
+    /// far along it is so a glyph can draw on. Put it on the same GameObject as ManagedCharacter.
     /// </summary>
     [DefaultExecutionOrder(-40)]
     [DisallowMultipleComponent]
@@ -78,6 +80,7 @@ namespace MidManStudio.Gtg.Managed.Magic
         private readonly ManagedSpellSeeker _seeker = new ManagedSpellSeeker(16);
         private readonly Collider[] _overlaps = new Collider[OverlapBufferSize];
         private readonly ManagedSpellModifiers _modifiers = new ManagedSpellModifiers();
+        private readonly ManagedSpellWindup _windup = new ManagedSpellWindup();
         private ManagedVesselBelt _belt;
         private ManagedPlayerWallet _wallet;
         private ManagedCharacter _character;
@@ -122,6 +125,38 @@ namespace MidManStudio.Gtg.Managed.Magic
         }
 
         public int ShotCount { get { return _flight.Count; } }
+
+        /// <summary>True from the press of a spell with a cast time until its shot leaves.</summary>
+        public bool IsWindingUp
+        {
+            get { return _windup.Active; }
+        }
+
+        /// <summary>
+        /// The wind-up in progress, or one with Active false. Origin is the shot point and Direction is where the
+        /// crosshair aims now, so a glyph drawn there follows the hand and the aim. It casts one ray while a wind-up
+        /// runs. Read it once a frame, after the character has moved.
+        /// </summary>
+        public ManagedCastStatus ReadCastStatus()
+        {
+            if (!_windup.Active)
+            {
+                return default(ManagedCastStatus);
+            }
+
+            Vector3 origin = _shotPoint.position;
+            Vector3 aimPoint;
+            Vector3 direction = ComputeAimDirection(origin, out aimPoint);
+            return new ManagedCastStatus
+            {
+                Active = true,
+                Kind = _windup.Spell.Kind,
+                Charge = _windup.Charge,
+                Seconds = _windup.Duration,
+                Origin = origin,
+                Direction = direction,
+            };
+        }
 
         /// <summary>
         /// Raises <see cref="Impact"/> for a shot that this class did not fly itself, such as the spell of an NPC
@@ -218,6 +253,12 @@ namespace MidManStudio.Gtg.Managed.Magic
             _belt.Refill();
         }
 
+        private void OnDisable()
+        {
+            // A wind-up does not outlive the component. The vessel it drew is not given back.
+            _windup.Clear();
+        }
+
         private void OnDestroy()
         {
             if (_batch != null)
@@ -240,7 +281,14 @@ namespace MidManStudio.Gtg.Managed.Magic
                 UseCrystal();
             }
 
-            if (_character.Has(ManagedCharacterFeature.Cast)
+            if (_windup.Active)
+            {
+                if (_windup.Tick(dt))
+                {
+                    FinishWindup();
+                }
+            }
+            else if (_character.Has(ManagedCharacterFeature.Cast)
                 && _character.Input.FirePressed
                 && _cooldownRemaining <= 0f)
             {
@@ -348,14 +396,39 @@ namespace MidManStudio.Gtg.Managed.Magic
             {
                 Debug.Log(
                     "[GTG Magic] " + spell.DisplayName + " cast with " + draw.Sp.ToString("F0") +
-                    " of " + draw.Capacity.ToString("F0") + " SP");
+                    " of " + draw.Capacity.ToString("F0") + " SP" +
+                    (spell.CastSeconds > 0f ? ", winding up for " + spell.CastSeconds.ToString("F2") + " s" : string.Empty));
             }
 
+            float cooldown = spell.CooldownSeconds * Mathf.Max(0f, _modifiers.CooldownScale);
+            if (spell.CastSeconds > 0f)
+            {
+                // The vessel is drawn now, so what the player sees charge is what flies. The shot leaves when the wind-up ends,
+                // toward wherever the crosshair is then.
+                _windup.Begin(spell, draw, spell.CastSeconds);
+                _cooldownRemaining = spell.CastSeconds + cooldown;
+                return;
+            }
+
+            _cooldownRemaining = cooldown;
+            Launch(spell, draw);
+        }
+
+        private void FinishWindup()
+        {
+            ManagedSpellDefinition spell = _windup.Spell;
+            ManagedVesselDraw draw = _windup.Draw;
+            _windup.Clear();
+            Launch(spell, draw);
+        }
+
+        // Sends the shot from the shot point toward the crosshair.
+        private void Launch(ManagedSpellDefinition spell, ManagedVesselDraw draw)
+        {
             Vector3 origin = _shotPoint.position;
             Vector3 aimPoint;
             Vector3 direction = ComputeAimDirection(origin, out aimPoint);
             int payload = ManagedSpellPayloads.IdFor(spell.Kind);
-            _cooldownRemaining = spell.CooldownSeconds * Mathf.Max(0f, _modifiers.CooldownScale);
 
             // A shot point inside a wall would sweep from the wrong side, so it explodes at once.
             if (IsBlockedAt(origin, spell.SweepRadius))

@@ -104,6 +104,21 @@ namespace UnityEngine
             double h = deg * Math.PI / 360.0; float s = (float)Math.Sin(h), c = (float)Math.Cos(h);
             return axis == 0 ? new Quaternion(s, 0, 0, c) : axis == 1 ? new Quaternion(0, s, 0, c) : new Quaternion(0, 0, s, c);
         }
+        public static Quaternion AngleAxis(float angle, Vector3 axis)
+        {
+            axis = axis.normalized; double h = angle * Math.PI / 360.0; float s = (float)Math.Sin(h);
+            return new Quaternion(axis.x * s, axis.y * s, axis.z * s, (float)Math.Cos(h));
+        }
+        public static Quaternion LookRotation(Vector3 forward, Vector3 up)
+        {
+            Vector3 f = forward.normalized; Vector3 r = Vector3.Cross(up, f).normalized; Vector3 u = Vector3.Cross(f, r);
+            float m00 = r.x, m01 = u.x, m02 = f.x, m10 = r.y, m11 = u.y, m12 = f.y, m20 = r.z, m21 = u.z, m22 = f.z;
+            float tr = m00 + m11 + m22;
+            if (tr > 0f) { float k = (float)Math.Sqrt(tr + 1f) * 2f; return new Quaternion((m21 - m12) / k, (m02 - m20) / k, (m10 - m01) / k, 0.25f * k); }
+            if (m00 > m11 && m00 > m22) { float k = (float)Math.Sqrt(1f + m00 - m11 - m22) * 2f; return new Quaternion(0.25f * k, (m01 + m10) / k, (m02 + m20) / k, (m21 - m12) / k); }
+            if (m11 > m22) { float k = (float)Math.Sqrt(1f + m11 - m00 - m22) * 2f; return new Quaternion((m01 + m10) / k, 0.25f * k, (m12 + m21) / k, (m02 - m20) / k); }
+            { float k = (float)Math.Sqrt(1f + m22 - m00 - m11) * 2f; return new Quaternion((m02 + m20) / k, (m12 + m21) / k, 0.25f * k, (m10 - m01) / k); }
+        }
         // Unity applies z, then x, then y.
         public static Quaternion Euler(float x, float y, float z) { return Axis(y, 1) * Axis(x, 0) * Axis(z, 2); }
     }
@@ -136,6 +151,15 @@ namespace UnityEngine
             for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) { float s = 0; for (int k = 0; k < 4; k++) s += A[i * 4 + k] * B[k * 4 + j]; R[i * 4 + j] = s; }
             r.FromArray(R); return r;
         }
+        public static bool operator ==(Matrix4x4 a, Matrix4x4 b)
+        {
+            float[] A = a.ToArray(), B = b.ToArray();
+            for (int i = 0; i < 16; i++) if (A[i] != B[i]) return false;
+            return true;
+        }
+        public static bool operator !=(Matrix4x4 a, Matrix4x4 b) { return !(a == b); }
+        public override bool Equals(object obj) { return obj is Matrix4x4 && this == (Matrix4x4)obj; }
+        public override int GetHashCode() { return m00.GetHashCode() ^ (m13.GetHashCode() << 1) ^ (m23.GetHashCode() << 2); }
         public Vector3 MultiplyPoint3x4(Vector3 p)
         {
             return new Vector3(m00 * p.x + m01 * p.y + m02 * p.z + m03, m10 * p.x + m11 * p.y + m12 * p.z + m13, m20 * p.x + m21 * p.y + m22 * p.z + m23);
@@ -615,6 +639,9 @@ namespace UnityEngine
         public void SetFloat(int nameID, float value) { Floats[nameID] = value; }
         public void SetFloat(string name, float value) { Floats[Shader.PropertyToID(name)] = value; }
         public float GetFloat(int nameID) { float v; return Floats.TryGetValue(nameID, out v) ? v : 0f; }
+        public readonly Dictionary<int, float[]> FloatArrays = new Dictionary<int, float[]>();
+        public void SetFloatArray(int nameID, float[] values) { FloatArrays[nameID] = values; }
+        public void SetFloatArray(string name, float[] values) { FloatArrays[Shader.PropertyToID(name)] = values; }
         public void SetVectorArray(int nameID, Vector4[] values) { }
         public void SetVectorArray(string name, Vector4[] values) { }
     }
@@ -670,7 +697,7 @@ namespace UnityEngine
         }
     }
 
-    public struct DrawCall { public Dictionary<int, float> Floats; public int Submesh; public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; }
+    public struct DrawCall { public Dictionary<int, float> Floats; public int Submesh; public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; public Matrix4x4[] Snapshot; public Dictionary<int, float[]> FloatArrays; }
     public static class Graphics
     {
         public static readonly List<DrawCall> Calls = new List<DrawCall>();
@@ -679,7 +706,14 @@ namespace UnityEngine
         {
             if (count < 0 || count > 1023) throw new ArgumentException("Instance count must be between 0 and 1023");
             if (count > matrices.Length) throw new ArgumentException("count exceeds matrices.Length");
-            Calls.Add(new DrawCall { Kind = "instanced", Count = count, Layer = layer, Mesh = mesh, Material = material, First = count > 0 ? matrices[0] : default(Matrix4x4), Source = matrices });
+            // Source is the caller's array itself, Snapshot a copy and FloatArrays copies, as Unity reads them at the call and the caller may refill them for the next batch.
+            Dictionary<int, float[]> arrays = null;
+            if (block != null)
+            {
+                arrays = new Dictionary<int, float[]>();
+                foreach (var kv in block.FloatArrays) arrays[kv.Key] = (float[])kv.Value.Clone();
+            }
+            Calls.Add(new DrawCall { Kind = "instanced", Count = count, Layer = layer, Mesh = mesh, Material = material, First = count > 0 ? matrices[0] : default(Matrix4x4), Source = matrices, Snapshot = (Matrix4x4[])matrices.Clone(), FloatArrays = arrays });
         }
         public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer)
         {

@@ -21,6 +21,8 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             GlyphBudgetTests();
             GlyphBakerTests();
             GlyphRendererTests();
+            GlyphMoleculeTests();
+            GlyphCastingTests();
         }
 
         private static void GlyphRevealTests()
@@ -323,36 +325,92 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             Check(one.LevelIndexEnd[0] > 0 && one.LevelIndexEnd[0] < one.Triangles.Length, "level 0 is a part of the whole");
         }
 
+        // Draw calls whose mesh holds this many vertices.
+        private static List<DrawCall> GlyphCallsOf(int vertexCount)
+        {
+            List<DrawCall> found = new List<DrawCall>();
+            for (int i = 0; i < Graphics.Calls.Count; i++)
+            {
+                if (Graphics.Calls[i].Mesh != null && Graphics.Calls[i].Mesh.vertices.Length == vertexCount)
+                {
+                    found.Add(Graphics.Calls[i]);
+                }
+            }
+
+            return found;
+        }
+
         private static void GlyphRendererTests()
         {
-            Section("Glyph renderer");
+            Section("Glyph renderer, instanced path");
             Shader.Known.Add(ManagedGlyphRenderer.ShaderName);
             Graphics.Calls.Clear();
             int frame = Time.frameCount + 100;
+            int reveal = Shader.PropertyToID("_Reveal");
+            int fade = Shader.PropertyToID("_Fade");
 
             ManagedGlyphRenderer renderer = new ManagedGlyphRenderer(3, "test");
             Check(renderer.UsingCustomShader, "the glyph shader is used when it is found");
             Eq(renderer.GlyphMaterial.shader.name, ManagedGlyphRenderer.ShaderName, "the material uses it");
+            Eq(renderer.Path, ManagedGlyphDrawPath.Instanced, "instancing is the default path");
+            Check(renderer.GlyphMaterial.enableInstancing, "the material has instancing on");
 
             ManagedGlyphSpec spec = GlyphSpec(4, 3);
             Time.frameCount = frame++;
             Check(renderer.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, 0.5f, 1f), "a draw goes through");
-            Eq(Graphics.Calls.Count, 1, "one draw call per glyph");
+            Eq(Graphics.Calls.Count, 0, "Draw only queues, nothing is sent before Flush");
+            Eq(renderer.DrawsThisFrame, 1, "one glyph is queued");
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 1, "Flush sends one call");
+            Eq(renderer.LastFlushCalls, 1, "and says so");
             DrawCall call = Graphics.Calls[0];
+            Eq(call.Kind, "instanced", "it is a DrawMeshInstanced call");
+            Eq(call.Count, 1, "with one instance");
             Eq(call.Layer, 3, "the renderer's layer is used");
-            Near(call.Floats[Shader.PropertyToID("_Reveal")], 0.5f, "the reveal goes to the shader");
-            Near(call.Floats[Shader.PropertyToID("_Fade")], 1f, "and the fade");
+            Near(call.FloatArrays[reveal][0], 0.5f, "the reveal goes to the shader per instance");
+            Near(call.FloatArrays[fade][0], 1f, "and the fade");
             Eq(call.Mesh.vertices.Length, renderer.GetData(spec, ManagedGlyphLod.Near).VertexCount, "the mesh holds the whole baked glyph");
             Check(call.Mesh.UvChannels[0] != null && call.Mesh.UvChannels[1] != null && call.Mesh.UvChannels[2] != null, "uv channels 0 to 2 are set");
             Eq(call.Mesh.triangles.Length, renderer.GetData(spec, ManagedGlyphLod.Near).Triangles.Length, "every triangle is drawn");
 
-            // Same spec again is cached, and nothing draws at reveal 0 or fade 0.
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 1, "a second Flush with nothing queued sends nothing");
+            Eq(renderer.LastFlushCalls, 0, "and says so");
+
+            // Glyphs that share a mesh go out in one call, in the order they were drawn.
+            Graphics.Calls.Clear();
             Time.frameCount = frame++;
-            renderer.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, 1f, 0.4f);
-            Eq(renderer.CachedCount, 1, "the same spec is baked once");
+            Matrix4x4 m1 = Matrix4x4.TRS(new Vector3(1f, 0f, 0f), Quaternion.identity, Vector3.one);
+            Matrix4x4 m2 = Matrix4x4.TRS(new Vector3(2f, 0f, 0f), Quaternion.identity, Vector3.one);
+            renderer.Draw(spec, ManagedGlyphLod.Near, m1, 0.25f, 1f);
+            renderer.Draw(spec, ManagedGlyphLod.Near, m2, 0.75f, 0.5f);
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 1, "two glyphs with the same mesh are one call");
+            Eq(Graphics.Calls[0].Count, 2, "with two instances");
+            Check(Graphics.Calls[0].Snapshot[0] == m1 && Graphics.Calls[0].Snapshot[1] == m2, "the matrices keep their draw order");
+            Near(Graphics.Calls[0].FloatArrays[reveal][0], 0.25f, "each instance has its own reveal (first)");
+            Near(Graphics.Calls[0].FloatArrays[reveal][1], 0.75f, "each instance has its own reveal (second)");
+            Near(Graphics.Calls[0].FloatArrays[fade][1], 0.5f, "and its own fade");
+
+            // Different meshes are different calls.
+            Graphics.Calls.Clear();
+            Time.frameCount = frame++;
+            ManagedGlyphSpec other = GlyphSpec(5, 3);
+            renderer.Draw(spec, ManagedGlyphLod.Near, m1, 1f, 1f);
+            renderer.Draw(other, ManagedGlyphLod.Near, m2, 1f, 1f);
+            renderer.Draw(spec, ManagedGlyphLod.Near, m2, 1f, 1f);
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 2, "two different glyphs are two calls");
+            Eq(Graphics.Calls[0].Count + Graphics.Calls[1].Count, 3, "carrying three instances");
+
+            // Nothing is queued at reveal 0 or fade 0.
+            Graphics.Calls.Clear();
+            Time.frameCount = frame++;
             Check(renderer.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, 0f, 1f), "reveal 0 is not a refusal");
             Check(renderer.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, 1f, 0f), "fade 0 is not a refusal");
-            Eq(Graphics.Calls.Count, 2, "and draws nothing");
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 0, "and draws nothing");
+            Eq(renderer.CachedCount, 2, "two glyphs were baked so far");
 
             // Per frame caps.
             Graphics.Calls.Clear();
@@ -366,36 +424,131 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             Check(a && b && c, "three draws fit");
             Check(!d, "the fourth is refused");
             Eq(renderer.DrawsThisFrame, 3, "three draws this frame");
-            Eq(Graphics.Calls.Count, 3, "three calls were made");
-            Eq(Graphics.Calls[0].Mesh.vertices.Length, renderer.GetData(spec, ManagedGlyphLod.Near).VertexCount, "the first Near stays Near");
-            Eq(Graphics.Calls[1].Mesh.vertices.Length, renderer.GetData(spec, ManagedGlyphLod.Mid).VertexCount, "the second Near past the cap is drawn Mid");
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 3, "three calls: Near, Mid and Far meshes");
+            int nearVerts = renderer.GetData(spec, ManagedGlyphLod.Near).VertexCount;
+            int midVerts = renderer.GetData(spec, ManagedGlyphLod.Mid).VertexCount;
+            Eq(GlyphCallsOf(nearVerts).Count, 1, "the first Near stays Near");
+            Eq(GlyphCallsOf(midVerts).Count, 1, "the second Near past the cap is drawn Mid");
             Time.frameCount = frame++;
             Check(renderer.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, 1f, 1f), "a new frame starts the count again");
+            renderer.Flush();
 
-            // Cache eviction.
-            renderer.MaxCached = 2;
+            // More instances than one call can take.
+            Graphics.Calls.Clear();
+            renderer.MaxDrawsPerFrame = 2000;
+            renderer.MaxNearPerFrame = 3;
             Time.frameCount = frame++;
+            for (int i = 0; i < 1500; i++)
+            {
+                renderer.Draw(spec, ManagedGlyphLod.Far, Matrix4x4.identity, (i + 1) / 1500f, 1f);
+            }
+
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 2, "1500 instances need two calls");
+            Eq(Graphics.Calls[0].Count, ManagedGlyphRenderer.InstanceBatchSize, "the first holds the batch size");
+            Eq(Graphics.Calls[1].Count, 1500 - ManagedGlyphRenderer.InstanceBatchSize, "the second holds the rest");
+            Near(Graphics.Calls[0].FloatArrays[reveal][0], 1f / 1500f, "the first batch starts at the first reveal");
+            Near(Graphics.Calls[1].FloatArrays[reveal][0], (ManagedGlyphRenderer.InstanceBatchSize + 1) / 1500f, "the second batch continues where the first ended");
+            renderer.MaxDrawsPerFrame = 12;
+
+            // Draws that were never flushed are dropped when the next frame starts.
+            Graphics.Calls.Clear();
+            Debug.Warnings.Clear();
+            Time.frameCount = frame++;
+            renderer.Draw(spec, ManagedGlyphLod.Near, m1, 1f, 1f);
+            Time.frameCount = frame++;
+            renderer.Draw(spec, ManagedGlyphLod.Near, m2, 1f, 1f);
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 1, "a stale queue is dropped");
+            Eq(Graphics.Calls[0].Count, 1, "only the current frame's glyph is sent");
+            Check(Graphics.Calls[0].Snapshot[0] == m2, "and it is the current one");
+            Eq(Debug.Warnings.Count, 1, "the missing Flush is warned about once");
+
+            // Cache eviction never drops a glyph that is queued.
+            Graphics.Calls.Clear();
+            renderer.MaxCached = 1;
+            Time.frameCount = frame++;
+            renderer.Draw(GlyphSpec(31, 2), ManagedGlyphLod.Far, Matrix4x4.identity, 1f, 1f);
+            renderer.Draw(GlyphSpec(32, 2), ManagedGlyphLod.Far, Matrix4x4.identity, 1f, 1f);
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 2, "two queued glyphs both draw even past MaxCached");
+            Check(Graphics.Calls[0].Mesh != null && Graphics.Calls[1].Mesh != null, "with their meshes alive");
+            Time.frameCount = frame++;
+            renderer.MaxCached = 2;
             renderer.Draw(GlyphSpec(21, 2), ManagedGlyphLod.Far, Matrix4x4.identity, 1f, 1f);
             Time.frameCount = frame++;
             renderer.Draw(GlyphSpec(22, 2), ManagedGlyphLod.Far, Matrix4x4.identity, 1f, 1f);
+            renderer.Flush();
             Time.frameCount = frame++;
             renderer.Draw(GlyphSpec(23, 2), ManagedGlyphLod.Far, Matrix4x4.identity, 1f, 1f);
-            Eq(renderer.CachedCount, 2, "the cache keeps at most MaxCached glyphs");
+            renderer.Flush();
+            Eq(renderer.CachedCount, 2, "the cache keeps at most MaxCached glyphs once nothing is queued");
 
             renderer.Dispose();
             Eq(renderer.CachedCount, 0, "dispose empties the cache");
             Check(!renderer.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, 1f, 1f), "a disposed renderer draws nothing");
+            Graphics.Calls.Clear();
+            renderer.Flush();
+            Eq(Graphics.Calls.Count, 0, "and Flush after it sends nothing");
 
-            // Fallback: whole levels, no property block.
+            GlyphRendererFallbackTests(spec, ref frame);
+        }
+
+        private static void GlyphRendererFallbackTests(ManagedGlyphSpec spec, ref int frame)
+        {
+            Section("Glyph renderer, DrawMesh fallback");
+            int reveal = Shader.PropertyToID("_Reveal");
+            int fade = Shader.PropertyToID("_Fade");
+            Matrix4x4 m1 = Matrix4x4.TRS(new Vector3(1f, 0f, 0f), Quaternion.identity, Vector3.one);
+            Matrix4x4 m2 = Matrix4x4.TRS(new Vector3(2f, 0f, 0f), Quaternion.identity, Vector3.one);
+
+            // DrawMesh when asked: one call per glyph, with the numbers in a property block.
+            Graphics.Calls.Clear();
+            ManagedGlyphRenderer mesh = new ManagedGlyphRenderer(2, false, true, "drawmesh");
+            Eq(mesh.Path, ManagedGlyphDrawPath.DrawMesh, "forcing DrawMesh selects it");
+            Check(mesh.UsingCustomShader, "the glyph shader is still used");
+            Check(!mesh.GlyphMaterial.enableInstancing, "the material does not ask for instancing");
+            Time.frameCount = frame++;
+            mesh.Draw(spec, ManagedGlyphLod.Near, m1, 0.4f, 0.9f);
+            mesh.Draw(spec, ManagedGlyphLod.Near, m2, 0.6f, 0.7f);
+            mesh.Flush();
+            Eq(Graphics.Calls.Count, 2, "two glyphs are two DrawMesh calls");
+            Eq(Graphics.Calls[0].Kind, "mesh", "they are DrawMesh calls");
+            Near(Graphics.Calls[0].Floats[reveal], 0.4f, "the first reveal is in its property block");
+            Near(Graphics.Calls[1].Floats[reveal], 0.6f, "the second reveal is in its own");
+            Near(Graphics.Calls[1].Floats[fade], 0.7f, "so is the fade");
+            Check(Graphics.Calls[0].First == m1 && Graphics.Calls[1].First == m2, "each has its matrix, in draw order");
+            Eq(Graphics.Calls[0].Layer, 2, "the layer is used");
+            mesh.Dispose();
+
+            // No hardware instancing: the same fallback, chosen by itself.
+            Graphics.Calls.Clear();
+            bool had = SystemInfo.supportsInstancing;
+            SystemInfo.supportsInstancing = false;
+            ManagedGlyphRenderer noHw = new ManagedGlyphRenderer(0, "no hardware instancing");
+            SystemInfo.supportsInstancing = had;
+            Eq(noHw.Path, ManagedGlyphDrawPath.DrawMesh, "a machine without instancing uses DrawMesh");
+            Time.frameCount = frame++;
+            noHw.Draw(spec, ManagedGlyphLod.Near, m1, 1f, 1f);
+            noHw.Flush();
+            Eq(Graphics.Calls.Count, 1, "and still draws");
+            Eq(Graphics.Calls[0].Kind, "mesh", "with a DrawMesh call");
+            noHw.Dispose();
+
+            // Sprites/Default: whole levels, no property block.
             Graphics.Calls.Clear();
             ManagedGlyphRenderer plain = new ManagedGlyphRenderer(0, true, "fallback");
             Check(!plain.UsingCustomShader, "forced fallback does not use the glyph shader");
+            Eq(plain.Path, ManagedGlyphDrawPath.DrawMesh, "the shader fallback cannot instance");
             Eq(plain.GlyphMaterial.shader.name, "Sprites/Default", "it uses Sprites/Default");
             ManagedGlyphMeshData data = plain.GetData(spec, ManagedGlyphLod.Near);
             Time.frameCount = frame++;
             plain.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, spec.RevealForLevels(1), 1f);
-            Eq(Graphics.Calls[0].Mesh.triangles.Length, data.LevelIndexEnd[0], "reveal of one level draws level 0 only");
             plain.Draw(spec, ManagedGlyphLod.Near, Matrix4x4.identity, 1f, 1f);
+            plain.Flush();
+            Eq(Graphics.Calls.Count, 2, "two glyphs are two calls");
+            Eq(Graphics.Calls[0].Mesh.triangles.Length, data.LevelIndexEnd[0], "reveal of one level draws level 0 only");
             Eq(Graphics.Calls[1].Mesh.triangles.Length, data.Triangles.Length, "full reveal draws every level");
             Check(Graphics.Calls[0].Floats == null, "the fallback sets no shader numbers");
             plain.Dispose();

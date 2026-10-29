@@ -92,8 +92,14 @@ namespace MidManStudio.Gtg.Managed.Glyphs
             public bool IsRoot;
         }
 
+        /// <summary>The strokes of a glyph. The Molecule style is built by <see cref="ManagedGlyphMolecule"/>, every other style here.</summary>
         public static ManagedGlyphStrokeSet Generate(ManagedGlyphSpec spec, ManagedGlyphLod lod)
         {
+            if (spec.Style == ManagedGlyphStyle.Molecule)
+            {
+                return ManagedGlyphMolecule.Generate(spec, lod);
+            }
+
             ManagedGlyphLodSettings settings = ManagedGlyphLodSettings.For(lod);
             int depth = spec.Depth;
             int cap = Mathf.Min(depth, settings.DepthCap);

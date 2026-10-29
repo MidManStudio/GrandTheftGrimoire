@@ -27,7 +27,24 @@ namespace MidManStudio.Gtg.Managed.Glyphs
         Far = 2,
     }
 
-    /// <summary>The extra figures a node may carry inside or beside its rings.</summary>
+    /// <summary>The overall look of a glyph. Circle is nested rings joined by lines. Molecule is a chemistry diagram: rings of bonds, chains, element letters.</summary>
+    public enum ManagedGlyphStyle
+    {
+        Circle = 0,
+        Molecule = 1,
+    }
+
+    /// <summary>How a Molecule glyph draws its atoms: element letters as in a skeletal formula, or glowing balls as in a ball-and-stick picture.</summary>
+    public enum ManagedGlyphAtomLook
+    {
+        Letters = 0,
+        Balls = 1,
+    }
+
+    /// <summary>
+    /// The extra figures a node may carry inside or beside its rings. Rosette, Star, Nest, Curl and Drip belong to the
+    /// Circle style. Label belongs to the Molecule style. Dot is used by both.
+    /// </summary>
     [Flags]
     public enum ManagedGlyphOrnaments
     {
@@ -38,7 +55,8 @@ namespace MidManStudio.Gtg.Managed.Glyphs
         Curl = 8,
         Drip = 16,
         Dot = 32,
-        All = 63,
+        Label = 64,
+        All = 127,
     }
 
     public enum ManagedGlyphStrokeKind : byte
@@ -51,6 +69,9 @@ namespace MidManStudio.Gtg.Managed.Glyphs
         Curl,
         Drip,
         Dot,
+        Bond,
+        Letter,
+        Atom,
     }
 
     /// <summary>One to four halo colors. A line takes the color of its level, so deeper rings change color.</summary>
@@ -118,6 +139,11 @@ namespace MidManStudio.Gtg.Managed.Glyphs
 
         public ManagedGlyphOrnaments Ornaments = ManagedGlyphOrnaments.All;
 
+        public ManagedGlyphStyle Style = ManagedGlyphStyle.Circle;
+
+        /// <summary>Molecule style only: element letters or glowing balls.</summary>
+        public ManagedGlyphAtomLook AtomLook = ManagedGlyphAtomLook.Letters;
+
         [NonSerialized] public ManagedGlyphPalette Palette = ManagedGlyphPalette.Fire;
 
         public int Depth { get { return Mathf.Clamp(MaxDepth, 0, ManagedGlyphLimits.MaxDepth); } }
@@ -168,6 +194,8 @@ namespace MidManStudio.Gtg.Managed.Glyphs
                 h = Mix(h, (ulong)(uint)Mathf.RoundToInt(LineWidth * 100000f));
                 h = Mix(h, (ulong)(uint)Mathf.RoundToInt(WheelSpacing * 10000f));
                 h = Mix(h, (ulong)(uint)(int)Ornaments);
+                h = Mix(h, (ulong)(int)Style);
+                h = Mix(h, (ulong)(int)AtomLook);
                 h = Mix(h, (ulong)(int)lod);
                 ManagedGlyphPalette palette = Palette ?? ManagedGlyphPalette.Fire;
                 for (int i = 0; i < palette.Colors.Length; i++)
@@ -241,7 +269,8 @@ namespace MidManStudio.Gtg.Managed.Glyphs
             MaxPoints = 2400,
             MinRadiusFraction = 0.03f,
             OrnamentLevelCap = 1,
-            Allowed = ManagedGlyphOrnaments.Rosette | ManagedGlyphOrnaments.Star | ManagedGlyphOrnaments.Curl | ManagedGlyphOrnaments.Dot,
+            Allowed = ManagedGlyphOrnaments.Rosette | ManagedGlyphOrnaments.Star | ManagedGlyphOrnaments.Curl | ManagedGlyphOrnaments.Dot
+                | ManagedGlyphOrnaments.Label,
         };
 
         private static readonly ManagedGlyphLodSettings FarSettings = new ManagedGlyphLodSettings

@@ -408,6 +408,12 @@ chemistry recipes.
   it never turns) and does 30 damage in a 2.5 m radius. A 90 degree turn costs 15.7 SP,
   about 16 percent of a full vessel's 100. The name, the numbers and the color are
   placeholders.
+- `CastSeconds` is the wind-up: how long the press holds the cast before the shot leaves,
+  while the glyph draws on. Fireball 0.5, Ice 0.5, Seeker 0.6. A value of 0 (the default
+  for a new row) fires at once, exactly as before, so a row that does not set it behaves
+  as it always did. The cooldown starts at the press, so the next cast waits `CastSeconds`
+  plus `CooldownSeconds`. The value is a placeholder, like the other tuning numbers, and
+  moves to the mdix table.
 
 ### `ManagedSpellPayload.cs`
 
@@ -694,6 +700,46 @@ GameObject per shot.
 - `HasSelectedVessel` and `SelectedVesselFraction` read the selected belt slot for the HUD's
   SP bar: whether the slot holds a vessel, and how full it is from 0 to 1 (an orb's charge,
   or the share of bottles left). Both are read-only and change no state.
+- A spell with `CastSeconds` above 0 winds up. The press draws the vessel at once, so what
+  the player sees charge is what flies, starts a `ManagedSpellWindup` and sets the cooldown
+  to the cast time plus the spell's cooldown. `Update` ticks the wind-up, and when it ends
+  `FinishWindup` calls `Launch`, which is the old tail of `Cast`: aim at the crosshair as
+  it is at that moment, the check for a shot point inside a wall, the spawn, the seeker
+  lock and `_flight.Add`. A spell with no cast time calls `Launch` straight from `Cast`,
+  so the instant path is the same code as before.
+- While a wind-up runs, the fire button does nothing (the cooldown is still running, and
+  `Update` takes the wind-up branch first). The crystal key and spell selection still work.
+  Changing the selected spell does not cancel the wind-up: the shot that was started is the
+  one that leaves.
+- `IsWindingUp` says whether a wind-up is running. `ReadCastStatus()` returns a
+  `ManagedCastStatus`: whether a wind-up is active, the spell kind, the charge 0 to 1, the
+  length in seconds, the shot point and the aim direction. Origin and direction are
+  computed when it is called, with one aim ray, so a reader sees where the shot would go
+  now. Call it once a frame, after the character and camera have moved. It touches nothing
+  and names no glyph type. `ManagedGlyphCastView` is the reader today.
+- `OnDisable` clears the wind-up. The vessel it drew is not given back.
+
+### `ManagedSpellWindup.cs`
+
+**What it does:** Two small types for a cast that takes time. `ManagedCastStatus` is the
+plain struct the caster hands out while a wind-up runs: `Active`, `Kind`, `Charge`
+(0 at the press, 1 when the shot leaves), `Seconds`, `Origin` (the shot point) and
+`Direction` (unit vector toward where the shot will fly). With `Active` false the other
+fields are zero. `ManagedSpellWindup` is the timer of one wind-up: `Begin(spell, draw,
+seconds)`, `Tick(dt)`, `Clear()`, and read-only `Active`, `Spell`, `Draw`, `Duration`,
+`Elapsed` and `Charge`.
+
+**Decisions:**
+- It holds plain values and touches no Unity object, so the CI harness drives it frame by
+  frame. It is compiled in `building-test/` with the rest of `Magic/`.
+- `Begin` ignores a length of 0 or less and a null spell, so a spell with no cast time never
+  enters a wind-up and the caller can check `Active` after the call.
+- `Tick` returns true on the call that completes the wind-up and keeps the state until the
+  caller reads `Spell` and `Draw` and calls `Clear`. The caster does that in `FinishWindup`.
+- A negative `dt` counts as 0. `Charge` is clamped to 0 through 1.
+- The status struct lives in `Magic/` and the glyph system reads it. This keeps the
+  dependency one way: Glyphs know Magic, Magic does not know Glyphs. A HUD cast bar could read
+  the same struct.
 
 ### `ManagedSpellDamage.cs`
 
@@ -2418,6 +2464,13 @@ region around the player's position with `ManagedCrownRegion.Find` and answers w
   physics world, not against Unity Physics.
 - The shots were pooled GameObjects with a light each. They are now drawn through one
   `ManagedSphereBatch`, and the light is gone.
+- Wind-up added for the glyph casting. `Cast` used to aim, check and spawn in one go. It
+  now splits into the part that draws the vessel and decides between the two paths, and
+  `Launch`, which has the old aim, check and spawn code unchanged. With `CastSeconds` at 0
+  the behavior is the same as before. The harness compiles the real caster and checks the
+  timer and the status struct, not the caster's wind-up branch inside Unity.
+- Not verified in the Editor: the wind-up feel, and that the shot leaves toward the crosshair
+  position at the end of the wind-up and not at the press.
 
 ### SP drive flight (`ManagedSpellFlight.cs`, `ManagedSpellPayload.cs`)
 
