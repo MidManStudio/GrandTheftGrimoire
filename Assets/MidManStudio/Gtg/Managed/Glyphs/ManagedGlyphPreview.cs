@@ -27,6 +27,9 @@ namespace MidManStudio.Gtg.Managed.Glyphs
     public sealed class ManagedGlyphPreview : MonoBehaviour
     {
         [Header("Shape")]
+        [SerializeField] private ManagedGlyphStyle _style = ManagedGlyphStyle.Circle;
+        [Tooltip("Molecule style only: element letters or glowing balls.")]
+        [SerializeField] private ManagedGlyphAtomLook _atomLook = ManagedGlyphAtomLook.Letters;
         [SerializeField] private int _seed = 1;
         [Range(0, 7)] [SerializeField] private int _maxDepth = 4;
         [Range(-1, 7)] [SerializeField] private int _baseDepth = 0;
@@ -45,12 +48,27 @@ namespace MidManStudio.Gtg.Managed.Glyphs
         [SerializeField] private bool _forceLod;
         [SerializeField] private ManagedGlyphLod _lod = ManagedGlyphLod.Near;
 
+        [Header("Draw path")]
+        [Tooltip("Skips Graphics.DrawMeshInstanced and uses one Graphics.DrawMesh per glyph, to test the fallback.")]
+        [SerializeField] private bool _forceDrawMesh;
+
         private ManagedGlyphRenderer _renderer;
         private ManagedGlyphSpec _spec;
+        private bool _rendererForcedDrawMesh;
 
         public int Seed { get { return _seed; } set { _seed = value; _spec = null; } }
 
         public bool AutoCharge { get { return _autoCharge; } set { _autoCharge = value; } }
+
+        public ManagedGlyphStyle Style { get { return _style; } set { _style = value; _spec = null; } }
+
+        public ManagedGlyphAtomLook AtomLook { get { return _atomLook; } set { _atomLook = value; _spec = null; } }
+
+        /// <summary>Radius of the root ring. A Molecule glyph grows about twice as wide as a Circle glyph for the same radius.</summary>
+        public float Radius { get { return _radius; } set { _radius = Mathf.Max(0.01f, value); _spec = null; } }
+
+        /// <summary>The draw path in use, or null before the first frame.</summary>
+        public ManagedGlyphDrawPath? DrawPath { get { return _renderer != null ? _renderer.Path : (ManagedGlyphDrawPath?)null; } }
 
         /// <summary>The spec the Inspector values describe. Built again after a value changes.</summary>
         public ManagedGlyphSpec Spec
@@ -87,9 +105,17 @@ namespace MidManStudio.Gtg.Managed.Glyphs
 
         private void Update()
         {
+            // The renderer is built once. Only the draw path toggle needs a new one.
+            if (_renderer != null && _rendererForcedDrawMesh != _forceDrawMesh)
+            {
+                _renderer.Dispose();
+                _renderer = null;
+            }
+
             if (_renderer == null)
             {
-                _renderer = new ManagedGlyphRenderer(gameObject.layer, "preview");
+                _renderer = new ManagedGlyphRenderer(gameObject.layer, false, _forceDrawMesh, "preview");
+                _rendererForcedDrawMesh = _forceDrawMesh;
             }
 
             ManagedGlyphSpec spec = Spec;
@@ -111,6 +137,9 @@ namespace MidManStudio.Gtg.Managed.Glyphs
 
             Matrix4x4 matrix = Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one);
             _renderer.Draw(spec, lod, matrix, spec.RevealForCharge(charge), _fade);
+
+            // One Flush per frame sends the queue: Graphics.DrawMeshInstanced, or Graphics.DrawMesh as the fallback.
+            _renderer.Flush();
         }
 
         private ManagedGlyphSpec BuildSpec()
@@ -123,6 +152,8 @@ namespace MidManStudio.Gtg.Managed.Glyphs
                 Radius = _radius,
                 LineWidth = _lineWidth,
                 WheelCount = _wheels,
+                Style = _style,
+                AtomLook = _atomLook,
             };
 
             switch (_palette)
@@ -149,8 +180,15 @@ namespace MidManStudio.Gtg.Managed.Glyphs
         {
             ManagedGlyphSpec spec = Spec;
             StringBuilder text = new StringBuilder();
-            text.Append("Glyph seed ").Append(spec.Seed).Append(", depth ").Append(spec.Depth)
-                .Append(", wheels ").Append(spec.Wheels).Append("\n");
+            text.Append("Glyph ").Append(spec.Style).Append(" seed ").Append(spec.Seed).Append(", depth ").Append(spec.Depth)
+                .Append(", wheels ").Append(spec.Wheels);
+            if (_renderer != null)
+            {
+                text.Append(", draw path ").Append(_renderer.Path).Append(", shader ")
+                    .Append(_renderer.UsingCustomShader ? "custom" : "Sprites/Default fallback");
+            }
+
+            text.Append("\n");
             for (int i = 0; i < 3; i++)
             {
                 ManagedGlyphLod lod = (ManagedGlyphLod)i;

@@ -104,6 +104,22 @@ namespace UnityEngine
             double h = deg * Math.PI / 360.0; float s = (float)Math.Sin(h), c = (float)Math.Cos(h);
             return axis == 0 ? new Quaternion(s, 0, 0, c) : axis == 1 ? new Quaternion(0, s, 0, c) : new Quaternion(0, 0, s, c);
         }
+        public static Quaternion AngleAxis(float angle, Vector3 axis)
+        {
+            axis = axis.normalized; double h = angle * Math.PI / 360.0; float s = (float)Math.Sin(h);
+            return new Quaternion(axis.x * s, axis.y * s, axis.z * s, (float)Math.Cos(h));
+        }
+        public static Quaternion LookRotation(Vector3 forward) { return LookRotation(forward, Vector3.up); }
+        public static Quaternion LookRotation(Vector3 forward, Vector3 up)
+        {
+            Vector3 f = forward.normalized; Vector3 r = Vector3.Cross(up, f).normalized; Vector3 u = Vector3.Cross(f, r);
+            float m00 = r.x, m01 = u.x, m02 = f.x, m10 = r.y, m11 = u.y, m12 = f.y, m20 = r.z, m21 = u.z, m22 = f.z;
+            float tr = m00 + m11 + m22;
+            if (tr > 0f) { float k = (float)Math.Sqrt(tr + 1f) * 2f; return new Quaternion((m21 - m12) / k, (m02 - m20) / k, (m10 - m01) / k, 0.25f * k); }
+            if (m00 > m11 && m00 > m22) { float k = (float)Math.Sqrt(1f + m00 - m11 - m22) * 2f; return new Quaternion(0.25f * k, (m01 + m10) / k, (m02 + m20) / k, (m21 - m12) / k); }
+            if (m11 > m22) { float k = (float)Math.Sqrt(1f + m11 - m00 - m22) * 2f; return new Quaternion((m01 + m10) / k, 0.25f * k, (m12 + m21) / k, (m02 - m20) / k); }
+            { float k = (float)Math.Sqrt(1f + m22 - m00 - m11) * 2f; return new Quaternion((m02 + m20) / k, (m12 + m21) / k, 0.25f * k, (m10 - m01) / k); }
+        }
         // Unity applies z, then x, then y.
         public static Quaternion Euler(float x, float y, float z) { return Axis(y, 1) * Axis(x, 0) * Axis(z, 2); }
     }
@@ -136,6 +152,15 @@ namespace UnityEngine
             for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) { float s = 0; for (int k = 0; k < 4; k++) s += A[i * 4 + k] * B[k * 4 + j]; R[i * 4 + j] = s; }
             r.FromArray(R); return r;
         }
+        public static bool operator ==(Matrix4x4 a, Matrix4x4 b)
+        {
+            float[] A = a.ToArray(), B = b.ToArray();
+            for (int i = 0; i < 16; i++) if (A[i] != B[i]) return false;
+            return true;
+        }
+        public static bool operator !=(Matrix4x4 a, Matrix4x4 b) { return !(a == b); }
+        public override bool Equals(object obj) { return obj is Matrix4x4 && this == (Matrix4x4)obj; }
+        public override int GetHashCode() { return m00.GetHashCode() ^ (m13.GetHashCode() << 1) ^ (m23.GetHashCode() << 2); }
         public Vector3 MultiplyPoint3x4(Vector3 p)
         {
             return new Vector3(m00 * p.x + m01 * p.y + m02 * p.z + m03, m10 * p.x + m11 * p.y + m12 * p.z + m13, m20 * p.x + m21 * p.y + m22 * p.z + m23);
@@ -593,6 +618,8 @@ namespace UnityEngine
         public bool HasProperty(string p) { return LitProps.Contains(p) || p == "_Color"; }
         public void SetColor(string p, Color c) { Colors[p] = c; }
         public void SetFloat(string p, float v) { Floats[p] = v; }
+        public readonly Dictionary<string, Texture> Textures = new Dictionary<string, Texture>();
+        public void SetTexture(string p, Texture t) { Textures[p] = t; }
     }
     public class Mesh : Object
     {
@@ -615,8 +642,15 @@ namespace UnityEngine
         public void SetFloat(int nameID, float value) { Floats[nameID] = value; }
         public void SetFloat(string name, float value) { Floats[Shader.PropertyToID(name)] = value; }
         public float GetFloat(int nameID) { float v; return Floats.TryGetValue(nameID, out v) ? v : 0f; }
-        public void SetVectorArray(int nameID, Vector4[] values) { }
-        public void SetVectorArray(string name, Vector4[] values) { }
+        public readonly Dictionary<int, float[]> FloatArrays = new Dictionary<int, float[]>();
+        public void SetFloatArray(int nameID, float[] values) { FloatArrays[nameID] = values; }
+        public void SetFloatArray(string name, float[] values) { FloatArrays[Shader.PropertyToID(name)] = values; }
+        public readonly Dictionary<int, Vector4> Vectors = new Dictionary<int, Vector4>();
+        public void SetVector(int nameID, Vector4 value) { Vectors[nameID] = value; }
+        public void SetVector(string name, Vector4 value) { Vectors[Shader.PropertyToID(name)] = value; }
+        public readonly Dictionary<int, Vector4[]> VectorArrays = new Dictionary<int, Vector4[]>();
+        public void SetVectorArray(int nameID, Vector4[] values) { VectorArrays[nameID] = values; }
+        public void SetVectorArray(string name, Vector4[] values) { VectorArrays[Shader.PropertyToID(name)] = values; }
     }
     public class Camera : Component
     {
@@ -638,8 +672,10 @@ namespace UnityEngine
         public static Texture2D whiteTexture = new Texture2D();
         public Texture2D() { width = 1; height = 1; }
         public Texture2D(int width, int height, TextureFormat format, bool mipChain) { this.width = width; this.height = height; }
-        public void SetPixels32(Color32[] colors) { }
-        public void Apply() { }
+        public Color32[] Pixels;
+        public int Applied;
+        public void SetPixels32(Color32[] colors) { Pixels = (Color32[])colors.Clone(); }
+        public void Apply() { Applied++; }
     }
     public class Font : Object { public static Font CreateDynamicFontFromOSFont(string fontname, int size) { return new Font { name = fontname }; } }
     public enum FilterMode { Point, Bilinear, Trilinear }
@@ -670,7 +706,7 @@ namespace UnityEngine
         }
     }
 
-    public struct DrawCall { public Dictionary<int, float> Floats; public int Submesh; public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; }
+    public struct DrawCall { public Dictionary<int, float> Floats; public int Submesh; public string Kind; public int Count; public int Layer; public Mesh Mesh; public Material Material; public Matrix4x4 First; public Matrix4x4[] Source; public Matrix4x4[] Snapshot; public Dictionary<int, float[]> FloatArrays; public Dictionary<int, Vector4> Vectors; public Dictionary<int, Vector4[]> VectorArrays; }
     public static class Graphics
     {
         public static readonly List<DrawCall> Calls = new List<DrawCall>();
@@ -679,7 +715,17 @@ namespace UnityEngine
         {
             if (count < 0 || count > 1023) throw new ArgumentException("Instance count must be between 0 and 1023");
             if (count > matrices.Length) throw new ArgumentException("count exceeds matrices.Length");
-            Calls.Add(new DrawCall { Kind = "instanced", Count = count, Layer = layer, Mesh = mesh, Material = material, First = count > 0 ? matrices[0] : default(Matrix4x4), Source = matrices });
+            // Source is the caller's array itself, Snapshot a copy and FloatArrays copies, as Unity reads them at the call and the caller may refill them for the next batch.
+            Dictionary<int, float[]> arrays = null;
+            Dictionary<int, Vector4[]> vectorArrays = null;
+            if (block != null)
+            {
+                arrays = new Dictionary<int, float[]>();
+                foreach (var kv in block.FloatArrays) arrays[kv.Key] = (float[])kv.Value.Clone();
+                vectorArrays = new Dictionary<int, Vector4[]>();
+                foreach (var kv in block.VectorArrays) vectorArrays[kv.Key] = (Vector4[])kv.Value.Clone();
+            }
+            Calls.Add(new DrawCall { Kind = "instanced", Count = count, Layer = layer, Mesh = mesh, Material = material, First = count > 0 ? matrices[0] : default(Matrix4x4), Source = matrices, Snapshot = (Matrix4x4[])matrices.Clone(), FloatArrays = arrays, VectorArrays = vectorArrays });
         }
         public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer)
         {
@@ -691,7 +737,8 @@ namespace UnityEngine
             Calls.Add(new DrawCall
             {
                 Kind = "mesh", Count = 1, Layer = layer, Mesh = mesh, Material = material, First = matrix, Submesh = submeshIndex,
-                Floats = properties != null ? new Dictionary<int, float>(properties.Floats) : null
+                Floats = properties != null ? new Dictionary<int, float>(properties.Floats) : null,
+                Vectors = properties != null ? new Dictionary<int, Vector4>(properties.Vectors) : null
             });
         }
     }
@@ -745,6 +792,7 @@ namespace UnityEngine
 namespace UnityEngine.Rendering
 {
     public enum ShadowCastingMode { Off, On, TwoSided, ShadowsOnly }
+    public enum BlendMode { Zero = 0, One = 1, DstColor = 2, SrcColor = 3, OneMinusDstColor = 4, SrcAlpha = 5, OneMinusSrcColor = 6, DstAlpha = 7, OneMinusDstAlpha = 8, SrcAlphaSaturate = 9, OneMinusSrcAlpha = 10 }
     public enum IndexFormat { UInt16, UInt32 }
 }
 

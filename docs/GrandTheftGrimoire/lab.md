@@ -30,6 +30,8 @@ Each feature folder has an `Editor` subfolder with one lab script. The script ad
 | GTG, NPC | Spawn Merchant, Spawn Melee Enemy, Spawn Archer, Spawn Fighting Pair, Make Selected A Target, Ensure NavMesh Surface On Test Ground |
 | GTG, Crown | Ensure Region And HUD Feeder, Add 10 Heat, Remove 10 Heat, Clear Heat |
 | GTG, Favor | Ensure Region, Add Favor To Selected NPCs, Add 10 Crowd Favor, Remove 10 Crowd Favor |
+| GTG, Glyphs | Ensure Preview At Scene View, New Seed On Selected Preview, Toggle Auto Charge On Selected Preview, Toggle Style On Selected Preview (Circle or Molecule), Toggle Atom Look On Selected Preview (Letters or Balls), Ensure Cast View On Player, Print Glyph Stats, Print Cast View State (Play) |
+| GTG, Plasma | Ensure Preview At Scene View, New Seed On Selected Preview, Cycle Palette On Selected Preview (Fire, Water, Arcane), Toggle Additive Blend On Selected Preview, Print Plasma Stats |
 
 The existing `GTG, NPC Debugger` window is not part of the lab and is unchanged.
 
@@ -176,6 +178,22 @@ The Managed C# harness (`building-test`) excludes every `Managed/**/Editor/**` p
 **Decisions:**
 - `SpawnNpc` does not add `ManagedNpcFavor`. It is added only by this menu.
 
+### `ManagedGlyphLab.cs`
+
+**What it does:** Menu `GTG, Glyphs`. It sets up a glyph preview at the scene view pivot, toggles the preview's style and atom look, and adds `ManagedGlyphCastView` to the player's spell caster, which is the menu to run before pressing F or left click to see the fireball glyph. Its full description is in `glyphs.md`, section `ManagedGlyphLab.cs`.
+
+**Decisions:**
+- `Ensure Cast View On Player` calls `ManagedMagicLab.EnsureCaster`, so it adds the caster when the scene has none. `Build Test Arena` does not call it, so a scene built by the arena needs this menu once for the glyph to show.
+- The lab is not part of `Build Test Arena`, to keep the arena as it was.
+
+### `ManagedPlasmaLab.cs`
+
+**What it does:** Menu `GTG, Plasma`. It places a plasma ring preview at the scene view pivot, changes its seed and palette, switches between additive and alpha blending and prints what it is drawing. Its full description is in `plasma.md`, section `ManagedPlasmaLab.cs`.
+
+**Decisions:**
+- It does not need the player or a caster, so it works in any open scene. Press Play to see the ring animate.
+- It is not part of `Build Test Arena`, like the glyph lab.
+
 ### `ManagedLabArena.cs`
 
 **What it does:** Menu `GTG, Lab`. `Build Test Arena` calls the Ensure methods of the labs above and adds `ManagedBodyFacing`, `ManagedHealth`, `ManagedNpcThreatSource`, `ManagedPlayerItemBag` and `ManagedPlayerWallet` to the player. A first run also places three dummies: one at 1.8 m, one at 8 m and one at 14 m. A scene that already has `Melee Dummy 1` keeps what it has. `Print What The Scene Has` logs which of the main components exist and how many healths and NPC brains there are.
@@ -186,7 +204,7 @@ The Managed C# harness (`building-test`) excludes every `Managed/**/Editor/**` p
 
 ## Not verified
 
-The lab scripts compile against the repo's Managed C# and a hand-written set of `UnityEditor` stand-ins, which checks every call into game code. Unity itself has not run them. Not checked: menu placement, the URP material, the `m_LayerMask` field name on the NavMesh Surface, gizmo drawing, and how an imported model behaves under `Use Selected As Player Model`.
+The lab scripts compile against the repo's Managed C# and a hand-written set of `UnityEditor` stand-ins, which checks every call into game code. Unity itself has not run them. Not checked: menu placement, the URP material, the `m_LayerMask` field name on the NavMesh Surface, gizmo drawing, and how an imported model behaves under `Use Selected As Player Model`. `ManagedGlyphLab.cs` is left out of the harness by the `Managed/**/Editor/**` exclusion. Its first four menus ran in Unity with the first glyph drop. The style, atom look and cast view menus were checked by reading only and not compiled. `ManagedPlasmaLab.cs` is also left out of the harness and was checked by reading only.
 
 ## Fixes and Problems
 

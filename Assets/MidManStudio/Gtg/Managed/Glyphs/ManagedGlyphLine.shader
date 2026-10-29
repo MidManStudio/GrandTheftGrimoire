@@ -40,6 +40,7 @@ Shader "MidManStudio/Gtg/GlyphLine"
             #pragma target 3.0
             #pragma vertex   vert
             #pragma fragment frag
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -51,9 +52,14 @@ Shader "MidManStudio/Gtg/GlyphLine"
                 float  _HeadBoost;
                 float  _PulseSpeed;
                 float  _PulseAmount;
-                float  _Reveal;
-                float  _Fade;
             CBUFFER_END
+
+            // Per glyph values. Graphics.DrawMeshInstanced sets them per instance through a property block. When the
+            // shader is not instanced (Graphics.DrawMesh path) the macros below give plain uniforms, set the same way.
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(float, _Reveal)
+                UNITY_DEFINE_INSTANCED_PROP(float, _Fade)
+            UNITY_INSTANCING_BUFFER_END(Props)
 
             // Vertex data written by ManagedGlyphBaker:
             // uv0 = (distance along the stroke, side -1 to 1)
@@ -67,6 +73,7 @@ Shader "MidManStudio/Gtg/GlyphLine"
                 float2 uv1        : TEXCOORD1;
                 float2 uv2        : TEXCOORD2;
                 float4 color      : COLOR;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -76,16 +83,24 @@ Shader "MidManStudio/Gtg/GlyphLine"
                 float2 uv1        : TEXCOORD1;
                 float2 uv2        : TEXCOORD2;
                 float4 color      : COLOR;
+                float2 revealFade : TEXCOORD3;
             };
 
             Varyings vert(Attributes input)
             {
-                Varyings output;
+                Varyings output = (Varyings)0;
+
+                UNITY_SETUP_INSTANCE_ID(input);
+
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv0 = input.uv0;
                 output.uv1 = input.uv1;
                 output.uv2 = input.uv2;
                 output.color = input.color;
+
+                // Read here, not in the fragment stage, so the fragment stage needs no instance id.
+                output.revealFade = float2(UNITY_ACCESS_INSTANCED_PROP(Props, _Reveal),
+                                           UNITY_ACCESS_INSTANCED_PROP(Props, _Fade));
                 return output;
             }
 
@@ -99,7 +114,7 @@ Shader "MidManStudio/Gtg/GlyphLine"
                 float t1     = input.uv2.y;
 
                 // How much of this stroke is drawn, 0 to 1. The stroke grows from its start.
-                float drawn = saturate((_Reveal - t0) / max(t1 - t0, 0.0001));
+                float drawn = saturate((input.revealFade.x - t0) / max(t1 - t0, 0.0001));
                 if (drawn <= 0.0)
                 {
                     discard;
@@ -135,7 +150,7 @@ Shader "MidManStudio/Gtg/GlyphLine"
                 float3 rgb = lerp(halo, coreColor, coreMix);
 
                 float alpha = saturate(max(core, glow * 0.85) + tip * _HeadBoost * glow);
-                alpha *= _Fade * input.color.a;
+                alpha *= input.revealFade.y * input.color.a;
                 return float4(rgb, alpha);
             }
             ENDHLSL
