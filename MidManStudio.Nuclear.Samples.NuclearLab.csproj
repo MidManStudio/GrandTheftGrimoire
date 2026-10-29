@@ -464,7 +464,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="MidManStudio.Mdix.Core">
-      <HintPath>Library/PackageCache/com.midmanstudio.mdix@ab110744b8/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
+      <HintPath>Library/PackageCache/com.midmanstudio.mdix@e4351949d7/Runtime/Plugins/MidManStudio.Mdix.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.IonicZip">
