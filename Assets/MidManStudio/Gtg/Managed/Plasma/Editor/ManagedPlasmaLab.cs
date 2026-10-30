@@ -4,6 +4,7 @@
 // ============================================================================
 
 using MidManStudio.Gtg.Managed.Lab;
+using MidManStudio.Gtg.Managed.Magic;
 using UnityEditor;
 using UnityEngine;
 
@@ -11,11 +12,13 @@ namespace MidManStudio.Gtg.Managed.Plasma
 {
     /// <summary>
     /// Editor test tools for plasma rings. Places a preview ring in the open scene, changes its seed and palette, switches
-    /// between additive and alpha blending, and prints what it is drawing. Menu: GTG, Plasma.
+    /// between additive and alpha blending, and prints what it is drawing. Also places the spell burst view and fires test
+    /// bursts without casting. Menu: GTG, Plasma.
     /// </summary>
     public static class ManagedPlasmaLab
     {
         private const string PreviewName = "GTG Plasma Preview";
+        private const string BurstViewName = "GTG Plasma Bursts";
 
         [MenuItem("GTG/Plasma/Ensure Preview At Scene View", false, 1500)]
         private static void EnsurePreviewMenu()
@@ -82,6 +85,50 @@ namespace MidManStudio.Gtg.Managed.Plasma
             GtgLabKit.Log(preview.DescribeStats());
         }
 
+        [MenuItem("GTG/Plasma/Ensure Burst View (Rings At Spell Impacts)", false, 1520)]
+        private static void EnsureBurstViewMenu()
+        {
+            ManagedPlasmaBurstView view = EnsureBurstView();
+            GtgLabKit.Finish(view.gameObject, "Plasma burst view ready. In Play mode a ring bursts at every spell impact, yours and NPC mages', "
+                + "in the spell's palette. Use the Test Burst menus to see one without casting.");
+        }
+
+        [MenuItem("GTG/Plasma/Test Fireball Burst At Scene View (Play)", false, 1521)]
+        private static void TestFireballBurstMenu()
+        {
+            TestBurst(ManagedSpellKind.Fireball);
+        }
+
+        [MenuItem("GTG/Plasma/Test Ice Burst At Scene View (Play)", false, 1522)]
+        private static void TestIceBurstMenu()
+        {
+            TestBurst(ManagedSpellKind.Ice);
+        }
+
+        [MenuItem("GTG/Plasma/Test Seeker Burst At Scene View (Play)", false, 1523)]
+        private static void TestSeekerBurstMenu()
+        {
+            TestBurst(ManagedSpellKind.Seeker);
+        }
+
+        [MenuItem("GTG/Plasma/Print Burst View State (Play)", false, 1524)]
+        private static void PrintBurstStateMenu()
+        {
+            if (!GtgLabKit.RequirePlaying("Print Burst View State"))
+            {
+                return;
+            }
+
+            ManagedPlasmaBurstView view = FindBurstView();
+            if (view == null)
+            {
+                GtgLabKit.Warn("No plasma burst view in the scene. Use GTG, Plasma, Ensure Burst View first, then press Play.");
+                return;
+            }
+
+            GtgLabKit.Log(view.Describe());
+        }
+
         internal static ManagedPlasmaPreview EnsurePreview()
         {
             GameObject go = GtgLabKit.FindRoot(PreviewName);
@@ -93,6 +140,42 @@ namespace MidManStudio.Gtg.Managed.Plasma
             }
 
             return GtgLabKit.Ensure<ManagedPlasmaPreview>(go);
+        }
+
+        internal static ManagedPlasmaBurstView EnsureBurstView()
+        {
+            GameObject go = GtgLabKit.FindRoot(BurstViewName);
+            if (go == null)
+            {
+                go = GtgLabKit.NewObject(BurstViewName, null);
+            }
+
+            return GtgLabKit.Ensure<ManagedPlasmaBurstView>(go);
+        }
+
+        private static ManagedPlasmaBurstView FindBurstView()
+        {
+            GameObject go = GtgLabKit.FindRoot(BurstViewName);
+            return go != null ? go.GetComponent<ManagedPlasmaBurstView>() : null;
+        }
+
+        // Fires one burst at the point the Scene view looks at, lying flat on the ground, with no spell cast.
+        private static void TestBurst(ManagedSpellKind kind)
+        {
+            if (!GtgLabKit.RequirePlaying("Test " + kind + " Burst"))
+            {
+                return;
+            }
+
+            ManagedPlasmaBurstView view = FindBurstView();
+            if (view == null)
+            {
+                GtgLabKit.Warn("No plasma burst view in the scene. Use GTG, Plasma, Ensure Burst View first, then press Play.");
+                return;
+            }
+
+            bool started = view.Spawn(kind, GtgLabKit.ViewPivot(), Vector3.up);
+            GtgLabKit.Log(started ? kind + " burst started at the Scene view pivot. " + view.Describe() : kind + " burst was refused.");
         }
 
         private static ManagedPlasmaPreview SelectedPreview(string action)

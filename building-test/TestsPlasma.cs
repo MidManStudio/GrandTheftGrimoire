@@ -14,6 +14,7 @@ namespace MidManStudio.Gtg.Managed.Building.Tests
             PlasmaRampTests();
             PlasmaRendererTests();
             PlasmaFallbackTests();
+            PlasmaBurstTests();
         }
 
         private static void PlasmaSpecTests()

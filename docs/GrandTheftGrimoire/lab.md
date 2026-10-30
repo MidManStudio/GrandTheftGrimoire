@@ -31,7 +31,7 @@ Each feature folder has an `Editor` subfolder with one lab script. The script ad
 | GTG, Crown | Ensure Region And HUD Feeder, Add 10 Heat, Remove 10 Heat, Clear Heat |
 | GTG, Favor | Ensure Region, Add Favor To Selected NPCs, Add 10 Crowd Favor, Remove 10 Crowd Favor |
 | GTG, Glyphs | Ensure Preview At Scene View, New Seed On Selected Preview, Toggle Auto Charge On Selected Preview, Toggle Style On Selected Preview (Circle or Molecule), Toggle Atom Look On Selected Preview (Letters or Balls), Ensure Cast View On Player, Print Glyph Stats, Print Cast View State (Play) |
-| GTG, Plasma | Ensure Preview At Scene View, New Seed On Selected Preview, Cycle Palette On Selected Preview (Fire, Water, Arcane), Toggle Additive Blend On Selected Preview, Print Plasma Stats |
+| GTG, Plasma | Ensure Preview At Scene View, New Seed On Selected Preview, Cycle Palette On Selected Preview (Fire, Water, Arcane), Toggle Additive Blend On Selected Preview, Print Plasma Stats, Ensure Burst View (Rings At Spell Impacts), Test Fireball / Ice / Seeker Burst At Scene View (Play), Print Burst View State (Play) |
 
 The existing `GTG, NPC Debugger` window is not part of the lab and is unchanged.
 
@@ -188,7 +188,7 @@ The Managed C# harness (`building-test`) excludes every `Managed/**/Editor/**` p
 
 ### `ManagedPlasmaLab.cs`
 
-**What it does:** Menu `GTG, Plasma`. It places a plasma ring preview at the scene view pivot, changes its seed and palette, switches between additive and alpha blending and prints what it is drawing. Its full description is in `plasma.md`, section `ManagedPlasmaLab.cs`.
+**What it does:** Menu `GTG, Plasma`. It places a plasma ring preview at the scene view pivot, changes its seed and palette, switches between additive and alpha blending and prints what it is drawing. It also places the spell burst view (`GTG Plasma Bursts`) and, in Play mode, starts a test burst of each spell at the scene view pivot without casting. Its full description is in `plasma.md`, section `ManagedPlasmaLab.cs`.
 
 **Decisions:**
 - It does not need the player or a caster, so it works in any open scene. Press Play to see the ring animate.
@@ -204,7 +204,7 @@ The Managed C# harness (`building-test`) excludes every `Managed/**/Editor/**` p
 
 ## Not verified
 
-The lab scripts compile against the repo's Managed C# and a hand-written set of `UnityEditor` stand-ins, which checks every call into game code. Unity itself has not run them. Not checked: menu placement, the URP material, the `m_LayerMask` field name on the NavMesh Surface, gizmo drawing, and how an imported model behaves under `Use Selected As Player Model`. `ManagedGlyphLab.cs` is left out of the harness by the `Managed/**/Editor/**` exclusion. Its first four menus ran in Unity with the first glyph drop. The style, atom look and cast view menus were checked by reading only and not compiled. `ManagedPlasmaLab.cs` is also left out of the harness and was checked by reading only.
+The lab scripts compile against the repo's Managed C# and a hand-written set of `UnityEditor` stand-ins, which checks every call into game code. Unity itself has not run them. Not checked: menu placement, the URP material, the `m_LayerMask` field name on the NavMesh Surface, gizmo drawing, and how an imported model behaves under `Use Selected As Player Model`. `ManagedGlyphLab.cs` is left out of the harness by the `Managed/**/Editor/**` exclusion. Its first four menus ran in Unity with the first glyph drop. The style, atom look and cast view menus were checked by reading only and not compiled. `ManagedPlasmaLab.cs` is also left out of the harness. Its burst menus were compiled once, outside the harness, against stand-ins for the `GtgLabKit` calls it makes and the `UnityEditor` attributes and statics, and have not run.
 
 ## Fixes and Problems
 
