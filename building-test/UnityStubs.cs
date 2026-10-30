@@ -73,6 +73,11 @@ namespace UnityEngine
         public float magnitude { get { return (float)Math.Sqrt(sqrMagnitude); } }
         public override string ToString() { return "(" + x + ", " + y + ", " + z + ")"; }
         public string ToString(string f) { return "(" + x.ToString(f) + ", " + y.ToString(f) + ", " + z.ToString(f) + ")"; }
+        // Exact comparison. Unity's operator is approximate (within 1e-5), which a check of "the same value came through" does not want.
+        public static bool operator ==(Vector3 a, Vector3 b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
+        public static bool operator !=(Vector3 a, Vector3 b) { return !(a == b); }
+        public override bool Equals(object o) { return o is Vector3 && this == (Vector3)o; }
+        public override int GetHashCode() { return x.GetHashCode() ^ (y.GetHashCode() << 2) ^ (z.GetHashCode() >> 2); }
     }
 
     public struct Quaternion
@@ -620,6 +625,10 @@ namespace UnityEngine
         public void SetFloat(string p, float v) { Floats[p] = v; }
         public readonly Dictionary<string, Texture> Textures = new Dictionary<string, Texture>();
         public void SetTexture(string p, Texture t) { Textures[p] = t; }
+        public readonly HashSet<string> Keywords = new HashSet<string>();
+        public void EnableKeyword(string keyword) { Keywords.Add(keyword); }
+        public void DisableKeyword(string keyword) { Keywords.Remove(keyword); }
+        public bool IsKeywordEnabled(string keyword) { return Keywords.Contains(keyword); }
     }
     public class Mesh : Object
     {
@@ -660,7 +669,7 @@ namespace UnityEngine
         public Ray ScreenPointToRay(Vector3 p) { return RayFactory(p); }
         public Ray ViewportPointToRay(Vector3 p) { return RayFactory(new Vector3(p.x * pixelRect.width, p.y * pixelRect.height, p.z)); }
     }
-    public class Renderer : Component { public Rendering.ShadowCastingMode shadowCastingMode; }
+    public class Renderer : Component { public Rendering.ShadowCastingMode shadowCastingMode; public Material sharedMaterial; public bool receiveShadows = true; }
     public class Texture : Object
     {
         public int width, height;

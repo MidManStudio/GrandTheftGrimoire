@@ -32,6 +32,7 @@ Each feature folder has an `Editor` subfolder with one lab script. The script ad
 | GTG, Favor | Ensure Region, Add Favor To Selected NPCs, Add 10 Crowd Favor, Remove 10 Crowd Favor |
 | GTG, Glyphs | Ensure Preview At Scene View, New Seed On Selected Preview, Toggle Auto Charge On Selected Preview, Toggle Style On Selected Preview (Circle or Molecule), Toggle Atom Look On Selected Preview (Letters or Balls), Ensure Cast View On Player, Print Glyph Stats, Print Cast View State (Play) |
 | GTG, Plasma | Ensure Preview At Scene View, New Seed On Selected Preview, Cycle Palette On Selected Preview (Fire, Water, Arcane), Toggle Additive Blend On Selected Preview, Print Plasma Stats, Ensure Burst View (Rings At Spell Impacts), Test Fireball / Ice / Seeker Burst At Scene View (Play), Print Burst View State (Play) |
+| GTG, Specter | Ensure Single Butterfly Preview At Scene View, New Seed On Selected Preview, Cycle Palette On Selected (Fire, Water, Arcane), Toggle Additive Blend On Selected, Ensure Swarm At Scene View (A: Code-Moved Quads), Ensure Particles At Scene View (B: Particle System), Ensure Both Side By Side (A Left, B Right), Burst Selected Or Both If Nothing Selected (Play), Print Specter State |
 
 The existing `GTG, NPC Debugger` window is not part of the lab and is unchanged.
 
@@ -194,6 +195,16 @@ The Managed C# harness (`building-test`) excludes every `Managed/**/Editor/**` p
 - It does not need the player or a caster, so it works in any open scene. Press Play to see the ring animate.
 - It is not part of `Build Test Arena`, like the glyph lab.
 
+### `ManagedSpecterLab.cs`
+
+**What it does:** Menu `GTG, Specter`. It places a single specter butterfly preview at the scene view pivot, and the two motion variants of the effect (the code-moved swarm and the Particle System one), alone or side by side so they can be compared. It changes their palette and blend mode, releases a burst of 12 butterflies in Play mode and prints what each is drawing. Its full description is in `specter.md`, section `ManagedSpecterLab.cs`.
+
+**Decisions:**
+- It does not need the player or a caster, so it works in any open scene. Press Play to see the butterflies move.
+- The swarm and the particles are placed with an auto rate of 3 a second, so something shows in Play mode without a menu press. The auto rate is set only when the object is first created, so a value changed in the Inspector is kept.
+- Burst Selected uses every selected swarm or particles object, and the first of each in the scene when none is selected, so `Ensure Both Side By Side` followed by Burst fires both.
+- It is not part of `Build Test Arena`, like the other feature labs.
+
 ### `ManagedLabArena.cs`
 
 **What it does:** Menu `GTG, Lab`. `Build Test Arena` calls the Ensure methods of the labs above and adds `ManagedBodyFacing`, `ManagedHealth`, `ManagedNpcThreatSource`, `ManagedPlayerItemBag` and `ManagedPlayerWallet` to the player. A first run also places three dummies: one at 1.8 m, one at 8 m and one at 14 m. A scene that already has `Melee Dummy 1` keeps what it has. `Print What The Scene Has` logs which of the main components exist and how many healths and NPC brains there are.
@@ -204,7 +215,7 @@ The Managed C# harness (`building-test`) excludes every `Managed/**/Editor/**` p
 
 ## Not verified
 
-The lab scripts compile against the repo's Managed C# and a hand-written set of `UnityEditor` stand-ins, which checks every call into game code. Unity itself has not run them. Not checked: menu placement, the URP material, the `m_LayerMask` field name on the NavMesh Surface, gizmo drawing, and how an imported model behaves under `Use Selected As Player Model`. `ManagedGlyphLab.cs` is left out of the harness by the `Managed/**/Editor/**` exclusion. Its first four menus ran in Unity with the first glyph drop. The style, atom look and cast view menus were checked by reading only and not compiled. `ManagedPlasmaLab.cs` is also left out of the harness. Its burst menus were compiled once, outside the harness, against stand-ins for the `GtgLabKit` calls it makes and the `UnityEditor` attributes and statics, and have not run.
+The lab scripts compile against the repo's Managed C# and a hand-written set of `UnityEditor` stand-ins, which checks every call into game code. Unity itself has not run them. Not checked: menu placement, the URP material, the `m_LayerMask` field name on the NavMesh Surface, gizmo drawing, and how an imported model behaves under `Use Selected As Player Model`. `ManagedGlyphLab.cs` is left out of the harness by the `Managed/**/Editor/**` exclusion. Its first four menus ran in Unity with the first glyph drop. The style, atom look and cast view menus were checked by reading only and not compiled. `ManagedPlasmaLab.cs` is also left out of the harness. Its burst menus were compiled once, outside the harness, against stand-ins for the `GtgLabKit` calls it makes and the `UnityEditor` attributes and statics, and have not run. `ManagedSpecterLab.cs` is left out the same way and was compiled once the same way, and has not run.
 
 ## Fixes and Problems
 
