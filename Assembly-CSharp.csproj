@@ -248,7 +248,6 @@
     <None Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaRing.shader" />
     <None Include="Assets/MidManStudio/Gtg/Managed/Rendering/ManagedSphereUnlit.shader" />
     <None Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphLine.shader" />
-    <None Include="Assets/Models/Gtg_Male_Blocky_prep_report.txt" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
