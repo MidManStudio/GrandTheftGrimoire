@@ -2041,6 +2041,68 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1327555615
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1327555617}
+  - component: {fileID: 1327555616}
+  m_Layer: 0
+  m_Name: GTG Specter Particles (Particle System)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1327555616
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1327555615}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6143d6d631de347b6874e11a0515b82e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _palette: 2
+  _wobble: 0.3
+  _glow: 1
+  _churn: 1
+  _reach: 1
+  _intensity: 2
+  _additive: 1
+  _size: 0.7
+  _lifetime: 3
+  _spawnRadius: 0.5
+  _maxParticles: 32
+  _autoPerSecond: 3
+  _flapCycles: 7
+  _flapMin: 0.35
+  _flutter: 0.8
+  _rise: 0.25
+  _startSpeed: 0.6
+  _logBursts: 0
+--- !u!4 &1327555617
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1327555615}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -22.8, y: 1.2, z: -9.6}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1350503698
 GameObject:
   m_ObjectHideFlags: 0
@@ -2333,6 +2395,66 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Damping: 0
+--- !u!1 &1384872421
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1384872423}
+  - component: {fileID: 1384872422}
+  m_Layer: 0
+  m_Name: GTG Specter Preview
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1384872422
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1384872421}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 55ec8f7dfbfd44fd5abbe67f36244b71, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _seed: 1
+  _palette: 2
+  _wobble: 0.3
+  _glow: 1
+  _churn: 1
+  _reach: 1
+  _diameter: 1.5
+  _animate: 1
+  _loopSeconds: 4
+  _life: 0.3
+  _flap: 1
+  _fade: 1
+  _additive: 1
+  _intensity: 2
+  _faceCamera: 1
+  _forceDrawMesh: 0
+--- !u!4 &1384872423
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1384872421}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -3.8, y: 1.5, z: 10.3}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1394846366
 GameObject:
   m_ObjectHideFlags: 0
@@ -2471,6 +2593,68 @@ NavMeshObstacle:
   m_CarveOnlyStationary: 1
   m_Center: {x: 0, y: 0, z: 0}
   m_TimeToStationary: 0.5
+--- !u!1 &1426722162
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1426722164}
+  - component: {fileID: 1426722163}
+  m_Layer: 0
+  m_Name: GTG Specter Swarm (code-moved)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1426722163
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1426722162}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5ab5452aa092451484d78cb790f3003, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _palette: 2
+  _seed: 1
+  _wobble: 0.3
+  _glow: 1
+  _churn: 1
+  _reach: 1
+  _intensity: 2
+  _additive: 1
+  _size: 0.7
+  _lifetime: 3
+  _spawnRadius: 0.5
+  _maxButterflies: 32
+  _autoPerSecond: 3
+  _flapRate: 2.5
+  _wander: 2.2
+  _lift: 0.25
+  _forceDrawMesh: 0
+  _logBursts: 0
+--- !u!4 &1426722164
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1426722162}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 17.1, y: 1.2, z: -9.6}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1553898961
 GameObject:
   m_ObjectHideFlags: 0
@@ -3245,3 +3429,6 @@ SceneRoots:
   - {fileID: 996141904}
   - {fileID: 135533369}
   - {fileID: 1871719358}
+  - {fileID: 1384872423}
+  - {fileID: 1426722164}
+  - {fileID: 1327555617}
