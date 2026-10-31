@@ -385,6 +385,64 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &135533367
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 135533369}
+  - component: {fileID: 135533368}
+  m_Layer: 0
+  m_Name: GTG Plasma Preview
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &135533368
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 135533367}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c28637ea01c3e42ccacfcc61ac65f83c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _seed: 1
+  _palette: 1
+  _ringRadius: 0.55
+  _bandWidth: 0.11
+  _turbulence: 0.7
+  _streaks: 0.8
+  _diameter: 2
+  _animate: 1
+  _age: 0
+  _fade: 1
+  _additive: 1
+  _intensity: 1
+  _faceCamera: 0
+  _forceDrawMesh: 0
+--- !u!4 &135533369
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 135533367}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 12.7, y: 1.5, z: 8.3}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &161290155
 GameObject:
   m_ObjectHideFlags: 0
@@ -1037,6 +1095,7 @@ GameObject:
   - component: {fileID: 706718809}
   - component: {fileID: 706718808}
   - component: {fileID: 706718807}
+  - component: {fileID: 706718818}
   m_Layer: 7
   m_Name: Player
   m_TagString: Player
@@ -1275,6 +1334,26 @@ Transform:
   - {fileID: 1082136102}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &706718818
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 706718806}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a6f6128c1d9f4fbe997b044040340e6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _forwardDistance: 0.6
+  _sizeScale: 1
+  _spinDegreesPerSecond: 18
+  _fadeSeconds: 0.35
+  _burstGrowth: 0.25
+  _layer: 0
+  _forceDrawMesh: 0
+  _logCasts: 1
 --- !u!1 &880530685
 GameObject:
   m_ObjectHideFlags: 0
@@ -1418,6 +1497,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 186bc11b811384cbbae318537961332a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _style: 0
+  _atomLook: 0
   _seed: 1
   _maxDepth: 4
   _baseDepth: 0
@@ -1431,6 +1512,7 @@ MonoBehaviour:
   _fade: 1
   _forceLod: 0
   _lod: 0
+  _forceDrawMesh: 0
 --- !u!4 &996141904
 Transform:
   m_ObjectHideFlags: 0
@@ -2810,6 +2892,57 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1851084916}
   m_Mesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1871719356
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1871719358}
+  - component: {fileID: 1871719357}
+  m_Layer: 0
+  m_Name: GTG Plasma Bursts
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1871719357
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1871719356}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3a8d840bfe284e57a387fed4f0fe0eb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _sizeScale: 1
+  _intensity: 1.2
+  _additive: 1
+  _faceCamera: 0
+  _maxBursts: 8
+  _forceDrawMesh: 0
+  _logBursts: 0
+--- !u!4 &1871719358
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1871719356}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -11.7, y: 0, z: 6}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1916351898
 GameObject:
   m_ObjectHideFlags: 0
@@ -3110,3 +3243,5 @@ SceneRoots:
   - {fileID: 601435472}
   - {fileID: 1962103460}
   - {fileID: 996141904}
+  - {fileID: 135533369}
+  - {fileID: 1871719358}

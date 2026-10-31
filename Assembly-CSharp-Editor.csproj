@@ -72,6 +72,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/Editor/ManagedCameraLab.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Health/Editor/ManagedHealthLab.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/Editor/ManagedNpcDebuggerWindow.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/Editor/ManagedPlasmaLab.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Economy/Editor/ManagedEconomyLab.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/Editor/ManagedItemsLab.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Melee/Editor/ManagedMeleeLab.cs" />

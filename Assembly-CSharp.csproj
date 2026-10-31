@@ -113,7 +113,9 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphPreview.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHud.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacementValidator.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphMolecule.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/IManagedItemCatalog.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcBrain.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopSamples.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellDefinition.cs" />
@@ -150,6 +152,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedBuiltInCheats.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedMissionResolver.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Melee/ManagedMeleeWeapon.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphCastTracker.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildInput.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Data/NpcDialogue.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedPlayerItemBag.cs" />
@@ -169,6 +172,7 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudSprites.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Shop/ManagedShopDevPanel.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedRenderer.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaPreview.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/CharacterController/ManagedCharacter.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcBallistics.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Favor/ManagedFavorRegion.cs" />
@@ -183,14 +187,17 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Inventory/ManagedInventoryLink.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellTypes.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcThreatSource.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphFont.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/ManagedCheatManager.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Rendering/ManagedIcosphere.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedUnityBuildProbe.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Inventory/ManagedInventoryBag.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildMode.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellWindup.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBoxMesh.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/NPC/Components/NPCEnums.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudLayout.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphCastView.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Camera/ManagedCursorBlock.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Quests/ManagedQuestText.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudClickView.cs" />
@@ -205,8 +212,12 @@
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemDatabaseCatalog.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Chemistry/ManagedChemistryRecipe.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/NPC/ManagedNpcDirector.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaSpellTable.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Missions/ManagedMissionSource.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaRenderer.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedBuildableDefinition.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaBurstView.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaRamp.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Hud/ManagedHudSlotView.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Cheats/IManagedCheatHost.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Flags/ManagedWorldFlags.cs" />
@@ -215,15 +226,18 @@
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Chemistry/ChemistryRecipe.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Missions/ManagedMissionBoard.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Facing/ManagedBodyTurn.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphSpellTable.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Magic/ManagedSpellCaster.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Inventory/ManagedInventoryHost.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/Magic/Presentation/SpellVfxMaterials.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Items/ManagedItemCatalog.cs" />
+    <Compile Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaBurstTracker.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Managed/Building/ManagedPlacedColliders.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/Data/NpcArchetypeDatabase.cs" />
     <Compile Include="Assets/MidManStudio/Gtg/ECS/CharacterController/CharacterWalkSystem.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Assets/MidManStudio/Gtg/Managed/Plasma/ManagedPlasmaRing.shader" />
     <None Include="Assets/MidManStudio/Gtg/Managed/Rendering/ManagedSphereUnlit.shader" />
     <None Include="Assets/MidManStudio/Gtg/Managed/Glyphs/ManagedGlyphLine.shader" />
   </ItemGroup>
